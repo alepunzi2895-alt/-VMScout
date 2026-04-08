@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─────────────────────────────────────────────────
-// API CONFIGURATION — Inserisci qui le tue API keys
+// API CONFIGURATION
+// Le keys vengono lette dalle Environment Variables di Vercel
+// Fallback: l'utente può inserirle nel pannello API Setup in-app
 // ─────────────────────────────────────────────────
 const API_KEYS = {
-  unsplash: "",   // https://unsplash.com/developers → New Application → Access Key
-  pexels: "",     // https://www.pexels.com/api/new/ → API Key
-  pixabay: "",    // https://pixabay.com/api/docs/ → API Key
+  unsplash: import.meta.env.VITE_UNSPLASH_KEY || "",
+  pexels: import.meta.env.VITE_PEXELS_KEY || "",
+  pixabay: import.meta.env.VITE_PIXABAY_KEY || "",
 };
 
 // ─────────────────────────────────────────────────
@@ -554,10 +556,10 @@ export default function VisualMarketingScout() {
     setMessages(prev => [...prev, { role: "user", content: userMsg }]);
     setLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, system: SYSTEM_PROMPT, messages: [{ role: "user", content: userMsg }] }),
+        body: JSON.stringify({ system: SYSTEM_PROMPT, messages: [{ role: "user", content: userMsg }] }),
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
