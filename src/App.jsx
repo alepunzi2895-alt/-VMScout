@@ -112,7 +112,7 @@ VIDEO QUERY RULES:
 - 3 primary + 2 secondary
 
 POST COMPOSER RULES:
-- Generate 3-5 posts forming a coherent mini-campaign or carousel
+- Generate exactly 3 posts forming a coherent mini-campaign or carousel
 - Each post has a distinct visual and caption — they tell a story together
 - CAPTIONS: generate in ALL 3 languages (it, en, es) for each slide. Each caption must feel native, not translated. Adapt tone, expressions, and cultural references per language.
 - CTA: generate in ALL 3 languages. Vary CTAs across slides (save, share, comment, link, tag).
@@ -133,15 +133,14 @@ Facebook (hashtags_facebook):
   - Match the language of the target audience
 
 VIDEO STORYTELLING RULES:
-- 5-8 scenes forming a complete narrative arc
-- Think like a film director: opening hook (first 2s), development, emotional peak, CTA
-- Each scene has a specific footage type and search query
-- ALL text fields (concept, description, text_overlay, audio_notes) must be objects with "it", "en", "es" keys — each native-feeling, not translated
-- Text overlays punchy, max 6 words per language
-- Include music and sound design guidance in all 3 languages
+- Generate exactly 5 scenes (not more) forming a narrative arc
+- Think like a film director: hook, development, peak, CTA
+- Each scene has a footage type and search query
+- ALL text fields (concept, description, text_overlay, audio_notes) must be objects with "it", "en", "es" keys — native-feeling, not translated
+- Text overlays max 5 words per language
 - Duration matches platform (Reels: 15-30s, TikTok: 15-60s, Stories: 15s)
 
-Respond ONLY with the JSON object. No other text.`;
+CRITICAL: Generate exactly 3 slides in post_composer and exactly 5 scenes in video_storytelling. Keep captions concise (max 3 lines each language). You MUST complete the entire JSON — do not truncate. Respond ONLY with the JSON object. No other text.`;
 
 // ─────────────────────────────────────────────────
 // PHOTO & VIDEO SOURCES
