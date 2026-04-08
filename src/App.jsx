@@ -498,7 +498,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 
   const getCopyText = (post) => {
     const cap = getCaption(post);
-    const tags = getHashtags(post).map(h => `#${h}`).join(" ");
+    const tags = getHashtags(post).map(h => `#${h.replace(/^#/, "")}`).join(" ");
     const cta = getCta(post);
     return `${cap}\n\n${tags}${cta ? `\n\n${cta}` : ""}`;
   };
@@ -589,7 +589,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                       {hashtags.map((h, j) => (
-                        <span key={j} style={{ fontSize: 11, color: platform === "instagram" ? "#4A7C9B" : "#1877F2", fontWeight: 500 }}>#{h}</span>
+                        <span key={j} style={{ fontSize: 11, color: platform === "instagram" ? "#4A7C9B" : "#1877F2", fontWeight: 500 }}>#{h.replace(/^#/, "")}</span>
                       ))}
                     </div>
                   </div>
@@ -619,7 +619,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 
       {/* Copy All */}
       <div style={{ marginTop: 14 }}>
-        <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${getCaption(p)}\n\n${getHashtags(p).map(h => `#${h}`).join(" ")}\n\nCTA: ${getCta(p)}`).join("\n\n")} label={`Copia Tutte (${LANGS.find(l=>l.id===lang)?.flag} ${platform === "instagram" ? "IG" : "FB"})`} />
+        <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${getCaption(p)}\n\n${getHashtags(p).map(h => `#${h.replace(/^#/, "")}`).join(" ")}\n\nCTA: ${getCta(p)}`).join("\n\n")} label={`Copia Tutte (${LANGS.find(l=>l.id===lang)?.flag} ${platform === "instagram" ? "IG" : "FB"})`} />
       </div>
     </div>
   );
