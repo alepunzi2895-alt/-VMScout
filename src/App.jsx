@@ -129,6 +129,10 @@ const PHOTO_SOURCES = {
     headers: () => ({}),
     parse: (d) => (d.hits || []).map(h => ({ id: h.id, thumb: h.webformatURL, full: h.largeImageURL, alt: h.tags, author: h.user, link: h.pageURL })),
   },
+  pinterest: {
+    name: "Pinterest", icon: "P", color: "#E60023",
+    webUrl: (q) => `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(q)}&rs=typed`,
+  },
 };
 
 const VIDEO_SOURCES = {
@@ -143,6 +147,10 @@ const VIDEO_SOURCES = {
   pixabay_video: {
     name: "Pixabay Video", icon: "X", color: "#00AB6C",
     webUrl: (q) => `https://pixabay.com/videos/search/${encodeURIComponent(q)}/`,
+  },
+  pinterest_video: {
+    name: "Pinterest Video", icon: "P", color: "#E60023",
+    webUrl: (q) => `https://www.pinterest.com/search/videos/?q=${encodeURIComponent(q)}&rs=typed`,
   },
 };
 
@@ -378,7 +386,37 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
 // ─────────────────────────────────────────────────
 // TAB: POST COMPOSER
 // ─────────────────────────────────────────────────
-function PostsTab({ data }) {
+const REGEN_SLIDE_PROMPT = (slide, originalBrief) => `You previously generated a post_composer slide for a marketing campaign. The user wants a NEW version of this specific slide. Keep the same slide_number but generate completely different: visual_description, search_query, caption, hashtags, cta, and platform_tip. Make it fresh and creative.
+
+Original campaign brief: "${originalBrief}"
+
+Current slide to regenerate:
+${JSON.stringify(slide, null, 2)}
+
+Respond ONLY with a single JSON object (the new slide) in the same format. No markdown fences, no preamble.`;
+
+function SlideSearchLinks({ query, orientation }) {
+  if (!query) return null;
+  const allSources = { ...PHOTO_SOURCES, ...VIDEO_SOURCES };
+  const photoKeys = Object.keys(PHOTO_SOURCES);
+  const sources = photoKeys.map(k => ({ key: k, ...PHOTO_SOURCES[k] }));
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {sources.map(src => (
+        <a key={src.key} href={src.webUrl(query, orientation)} target="_blank" rel="noopener noreferrer"
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(139,115,85,0.15)", textDecoration: "none", fontSize: 9, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s", background: "transparent" }}
+          onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8B7355"; e.currentTarget.style.borderColor = "rgba(139,115,85,0.15)"; }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
+          {src.name}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function PostsTab({ data, onRegenSlide, regenLoading }) {
   const { post_composer, orientation } = data;
   if (!post_composer?.length) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun post generato.</p>;
 
@@ -391,34 +429,59 @@ function PostsTab({ data }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {post_composer.map((post, i) => (
-          <div key={i} style={{ background: "#FFFCF5", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden" }}>
+          <div key={`${i}-${post.caption?.slice(0,20)}`} style={{ background: "#FFFCF5", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
+            {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
               <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
               <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
-              {post.search_query && (
-                <a href={PHOTO_SOURCES.unsplash.webUrl(post.search_query, orientation)} target="_blank" rel="noopener noreferrer"
-                  style={{ marginLeft: "auto", fontSize: 10, color: "#8B7355", textDecoration: "none", padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(139,115,85,0.2)", fontFamily: "'JetBrains Mono', monospace" }}>
-                  Cerca foto ↗
-                </a>
-              )}
             </div>
+
+            {/* Search Links per source */}
+            {post.search_query && (
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(139,115,85,0.06)", background: "rgba(139,115,85,0.02)" }}>
+                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6, opacity: 0.7 }}>
+                  Cerca "{post.search_query}" su:
+                </div>
+                <SlideSearchLinks query={post.search_query} orientation={orientation} />
+              </div>
+            )}
+
             <div style={{ padding: "14px 16px" }}>
+              {/* Visual Description */}
               <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 8, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
                 📷 {post.visual_description}
               </div>
+
+              {/* Caption */}
               <div style={{ fontSize: 13.5, color: "#2C2418", lineHeight: 1.65, marginBottom: 12, whiteSpace: "pre-line" }}>{post.caption}</div>
+
+              {/* Hashtags */}
               {post.hashtags && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
                   {post.hashtags.map((h, j) => <span key={j} style={{ fontSize: 11, color: "#4A7C9B", fontWeight: 500 }}>#{h}</span>)}
                 </div>
               )}
+
+              {/* CTA + Tip */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                 {post.cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 6, background: "rgba(139,115,85,0.08)" }}>CTA: {post.cta}</span>}
                 {post.platform_tip && <span style={{ fontSize: 10, color: "#999", fontStyle: "italic", maxWidth: 220 }}>💡 {post.platform_tip}</span>}
               </div>
             </div>
-            <div style={{ padding: "8px 16px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)" }}>
-              <CopyButton text={`${post.caption}\n\n${(post.hashtags || []).map(h => `#${h}`).join(" ")}`} label="Copia Caption + Hashtag" />
+
+            {/* Actions Footer */}
+            <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <CopyButton text={`${post.caption}\n\n${(post.hashtags || []).map(h => `#${h}`).join(" ")}`} label="Copia Caption + Hashtag" />
+              </div>
+              <button
+                onClick={() => onRegenSlide(i, post)}
+                disabled={regenLoading === i}
+                style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.2s", whiteSpace: "nowrap" }}
+                onMouseEnter={e => { if (regenLoading !== i) { e.currentTarget.style.background = "rgba(180,100,50,0.08)"; } }}
+                onMouseLeave={e => { if (regenLoading !== i) { e.currentTarget.style.background = "transparent"; } }}>
+                {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
+              </button>
             </div>
           </div>
         ))}
@@ -497,11 +560,40 @@ function VideoTab({ data }) {
 // ─────────────────────────────────────────────────
 // STRATEGY MESSAGE (MAIN WRAPPER)
 // ─────────────────────────────────────────────────
-function StrategyMessage({ data }) {
+function StrategyMessage({ data, onUpdateData, originalBrief }) {
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedSource, setSelectedSource] = useState("unsplash");
   const [imageCache, setImageCache] = useState({});
+  const [regenLoading, setRegenLoading] = useState(null);
   const onImagesFetched = useCallback((key, imgs) => setImageCache(prev => ({ ...prev, [key]: imgs })), []);
+
+  const handleRegenSlide = async (index, slide) => {
+    setRegenLoading(index);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: "You are a creative marketing copywriter. Generate a single post_composer slide as a JSON object. Respond ONLY with the JSON object, no markdown fences.",
+          messages: [{ role: "user", content: REGEN_SLIDE_PROMPT(slide, originalBrief || "") }],
+        }),
+      });
+      const result = await res.json();
+      const raw = result.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
+      if (raw) {
+        const newSlide = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        newSlide.slide_number = slide.slide_number;
+        const updated = { ...data };
+        updated.post_composer = [...data.post_composer];
+        updated.post_composer[index] = newSlide;
+        onUpdateData(updated);
+      }
+    } catch (err) {
+      console.error("Regen failed:", err);
+    } finally {
+      setRegenLoading(null);
+    }
+  };
 
   const tabs = [
     { id: "strategy", label: "Strategia", icon: "◈" },
@@ -521,7 +613,7 @@ function StrategyMessage({ data }) {
       </div>
 
       {activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
-      {activeTab === "posts" && <PostsTab data={data} />}
+      {activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} />}
       {activeTab === "video" && <VideoTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
@@ -658,7 +750,7 @@ export default function VisualMarketingScout() {
                 <div style={{ maxWidth: "95%" }}>
                   <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
                   <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
-                    {msg.type === "strategy" ? <StrategyMessage data={msg.content} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
+                    {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
                   </div>
                 </div>
               )}
