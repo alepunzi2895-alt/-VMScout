@@ -45,31 +45,56 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
   "post_composer": [
     {
       "slide_number": 1,
-      "visual_description": "Italian description of the ideal image for this slide/post. Be very specific: subject, framing, mood, light, details.",
+      "visual_description": "Description of the ideal image for this slide/post. Be very specific: subject, framing, mood, light, details. Write in the user's language.",
       "search_query": "English search query to find this exact image",
-      "caption": "Ready-to-post Italian caption. Natural, authentic tone. Use actual newline characters for line breaks.",
-      "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
-      "cta": "Call-to-action in Italian",
-      "platform_tip": "Brief Italian tip on optimal posting"
+      "captions": {
+        "it": "Caption pronta per il post in italiano. Tono naturale, autentico, con a capo reali.",
+        "en": "Ready-to-post English caption. Natural, authentic tone. Real line breaks.",
+        "es": "Caption lista para publicar en español. Tono natural, auténtico, con saltos de línea reales."
+      },
+      "hashtags_instagram": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6", "hashtag7", "hashtag8", "hashtag9", "hashtag10"],
+      "hashtags_facebook": ["hashtag1", "hashtag2", "hashtag3"],
+      "cta": {
+        "it": "Call-to-action in italiano",
+        "en": "Call-to-action in English",
+        "es": "Call-to-action en español"
+      },
+      "platform_tip": "Brief tip on optimal posting for the platform"
     }
   ],
   "video_storytelling": {
-    "concept": "Italian creative concept — the narrative arc in 1-2 sentences",
+    "concept": {
+      "it": "Concept creativo italiano — l'arco narrativo in 1-2 frasi",
+      "en": "English creative concept — narrative arc in 1-2 sentences",
+      "es": "Concepto creativo en español — arco narrativo en 1-2 frases"
+    },
     "duration": "Recommended total duration (e.g. 15s Reel, 30s Story, 60s TikTok)",
     "aspect_ratio": "9:16 | 16:9 | 1:1 | 4:5",
-    "music_mood": "Music style suggestion in Italian",
+    "music_mood": "Music style suggestion",
     "scenes": [
       {
         "scene_number": 1,
         "duration": "3s",
         "footage_type": "establishing | detail | action | reaction | transition | closing",
-        "description": "Italian description of what we see",
+        "description": {
+          "it": "Descrizione italiana di cosa vediamo",
+          "en": "English description of what we see",
+          "es": "Descripción en español de lo que vemos"
+        },
         "search_query": "English query to find this footage",
-        "text_overlay": "Short overlay text or null",
+        "text_overlay": {
+          "it": "Testo italiano breve o null",
+          "en": "Short English text or null",
+          "es": "Texto corto en español o null"
+        },
         "transition": "cut | fade | swipe | zoom | dissolve"
       }
     ],
-    "audio_notes": "Italian notes on sound design"
+    "audio_notes": {
+      "it": "Note italiane sul sound design",
+      "en": "English notes on sound design",
+      "es": "Notas en español sobre diseño de sonido"
+    }
   },
   "orientation": "portrait | landscape | square",
   "mood_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
@@ -89,17 +114,31 @@ VIDEO QUERY RULES:
 POST COMPOSER RULES:
 - Generate 3-5 posts forming a coherent mini-campaign or carousel
 - Each post has a distinct visual and caption — they tell a story together
-- Captions in ITALIAN, authentic tone, no corporate speak
-- 5 hashtags per post (mix niche + broad)
-- Vary CTAs (save, share, comment, link, tag)
-- Platform tips should be specific
+- CAPTIONS: generate in ALL 3 languages (it, en, es) for each slide. Each caption must feel native, not translated. Adapt tone, expressions, and cultural references per language.
+- CTA: generate in ALL 3 languages. Vary CTAs across slides (save, share, comment, link, tag).
+
+HASHTAG STRATEGY — PLATFORM SPECIFIC:
+Instagram (hashtags_instagram): 
+  - Generate exactly 10 hashtags per slide
+  - Mix: 3 broad/high-volume (100K-1M posts), 4 mid-range niche (10K-100K), 3 micro-niche (<10K)
+  - Include at least 1 location-based if relevant, 1 community hashtag, 1 branded/campaign hashtag
+  - Use the language that matches the target market (Italian hashtags for Italian audience, English for global, etc.)
+  - NO banned or shadowbanned hashtags. NO generic like #love #instagood #photooftheday
+  - Prioritize discovery: think "what would my ideal follower search?"
+
+Facebook (hashtags_facebook):
+  - Generate exactly 3 hashtags per slide — Facebook penalizes more than 3-5
+  - Use ONLY broad, searchable hashtags relevant to the topic
+  - Facebook hashtags work as search terms, not discovery — so be descriptive
+  - Match the language of the target audience
 
 VIDEO STORYTELLING RULES:
 - 5-8 scenes forming a complete narrative arc
 - Think like a film director: opening hook (first 2s), development, emotional peak, CTA
 - Each scene has a specific footage type and search query
-- Text overlays punchy, max 6 words
-- Include music and sound design guidance
+- ALL text fields (concept, description, text_overlay, audio_notes) must be objects with "it", "en", "es" keys — each native-feeling, not translated
+- Text overlays punchy, max 6 words per language
+- Include music and sound design guidance in all 3 languages
 - Duration matches platform (Reels: 15-30s, TikTok: 15-60s, Stories: 15s)
 
 Respond ONLY with the JSON object. No other text.`;
@@ -386,14 +425,21 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
 // ─────────────────────────────────────────────────
 // TAB: POST COMPOSER
 // ─────────────────────────────────────────────────
-const REGEN_SLIDE_PROMPT = (slide, originalBrief) => `You previously generated a post_composer slide for a marketing campaign. The user wants a NEW version of this specific slide. Keep the same slide_number but generate completely different: visual_description, search_query, caption, hashtags, cta, and platform_tip. Make it fresh and creative.
+const REGEN_SLIDE_PROMPT = (slide, originalBrief) => `You previously generated a post_composer slide for a marketing campaign. The user wants a NEW version of this specific slide. Keep the same slide_number but generate completely different content.
+
+Generate the slide with:
+- captions: object with "it", "en", "es" keys (each a native-feeling caption, not translations)
+- hashtags_instagram: array of exactly 10 hashtags (3 broad, 4 mid-range niche, 3 micro-niche)
+- hashtags_facebook: array of exactly 3 broad hashtags
+- cta: object with "it", "en", "es" keys
+- visual_description, search_query, platform_tip
 
 Original campaign brief: "${originalBrief}"
 
 Current slide to regenerate:
 ${JSON.stringify(slide, null, 2)}
 
-Respond ONLY with a single JSON object (the new slide) in the same format. No markdown fences, no preamble.`;
+Respond ONLY with a single JSON object (the new slide). No markdown fences, no preamble.`;
 
 function SlideSearchLinks({ query, orientation }) {
   if (!query) return null;
@@ -418,77 +464,163 @@ function SlideSearchLinks({ query, orientation }) {
 
 function PostsTab({ data, onRegenSlide, regenLoading }) {
   const { post_composer, orientation } = data;
+  const [lang, setLang] = useState("it");
+  const [platform, setPlatform] = useState("instagram");
+
   if (!post_composer?.length) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun post generato.</p>;
+
+  const LANGS = [
+    { id: "it", label: "Italiano", flag: "🇮🇹" },
+    { id: "en", label: "English", flag: "🇬🇧" },
+    { id: "es", label: "Español", flag: "🇪🇸" },
+  ];
+
+  const PLATFORMS = [
+    { id: "instagram", label: "Instagram", color: "#E1306C", icon: "IG" },
+    { id: "facebook", label: "Facebook", color: "#1877F2", icon: "FB" },
+  ];
+
+  // Helper: get caption in selected lang, fallback to old format
+  const getCaption = (post) => {
+    if (post.captions && typeof post.captions === "object") return post.captions[lang] || post.captions.it || post.captions.en || "";
+    return post.caption || "";
+  };
+
+  const getCta = (post) => {
+    if (post.cta && typeof post.cta === "object") return post.cta[lang] || post.cta.it || post.cta.en || "";
+    return post.cta || "";
+  };
+
+  const getHashtags = (post) => {
+    if (platform === "instagram" && post.hashtags_instagram?.length) return post.hashtags_instagram;
+    if (platform === "facebook" && post.hashtags_facebook?.length) return post.hashtags_facebook;
+    return post.hashtags || [];
+  };
+
+  const getCopyText = (post) => {
+    const cap = getCaption(post);
+    const tags = getHashtags(post).map(h => `#${h}`).join(" ");
+    const cta = getCta(post);
+    return `${cap}\n\n${tags}${cta ? `\n\n${cta}` : ""}`;
+  };
 
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
       </div>
 
+      {/* Language + Platform selectors */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        {/* Language */}
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
+          {LANGS.map(l => (
+            <button key={l.id} onClick={() => setLang(l.id)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FFFCF5" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              {l.flag} {l.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Platform */}
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
+          {PLATFORMS.map(p => (
+            <button key={p.id} onClick={() => setPlatform(p.id)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: platform === p.id ? "#FFFCF5" : "transparent", boxShadow: platform === p.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: platform === p.id ? p.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              {p.icon} {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Hashtag info badge */}
+      <div style={{ fontSize: 10, color: "#999", marginBottom: 14, fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 6 }}>
+        {platform === "instagram" ? (
+          <span>IG: 10 hashtag per slide — 3 broad + 4 niche + 3 micro-niche</span>
+        ) : (
+          <span>FB: 3 hashtag per slide — solo broad e ricercabili</span>
+        )}
+      </div>
+
+      {/* Slides */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {post_composer.map((post, i) => (
-          <div key={`${i}-${post.caption?.slice(0,20)}`} style={{ background: "#FFFCF5", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
-              <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
-              <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
-            </div>
+        {post_composer.map((post, i) => {
+          const caption = getCaption(post);
+          const cta = getCta(post);
+          const hashtags = getHashtags(post);
 
-            {/* Search Links per source */}
-            {post.search_query && (
-              <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(139,115,85,0.06)", background: "rgba(139,115,85,0.02)" }}>
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6, opacity: 0.7 }}>
-                  Cerca "{post.search_query}" su:
-                </div>
-                <SlideSearchLinks query={post.search_query} orientation={orientation} />
-              </div>
-            )}
-
-            <div style={{ padding: "14px 16px" }}>
-              {/* Visual Description */}
-              <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 8, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
-                📷 {post.visual_description}
+          return (
+            <div key={`${i}-${lang}-${platform}`} style={{ background: "#FFFCF5", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
+                <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
+                <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
               </div>
 
-              {/* Caption */}
-              <div style={{ fontSize: 13.5, color: "#2C2418", lineHeight: 1.65, marginBottom: 12, whiteSpace: "pre-line" }}>{post.caption}</div>
-
-              {/* Hashtags */}
-              {post.hashtags && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
-                  {post.hashtags.map((h, j) => <span key={j} style={{ fontSize: 11, color: "#4A7C9B", fontWeight: 500 }}>#{h}</span>)}
+              {/* Search Links */}
+              {post.search_query && (
+                <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(139,115,85,0.06)", background: "rgba(139,115,85,0.02)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6, opacity: 0.7 }}>
+                    Cerca "{post.search_query}" su:
+                  </div>
+                  <SlideSearchLinks query={post.search_query} orientation={orientation} />
                 </div>
               )}
 
-              {/* CTA + Tip */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {post.cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 6, background: "rgba(139,115,85,0.08)" }}>CTA: {post.cta}</span>}
-                {post.platform_tip && <span style={{ fontSize: 10, color: "#999", fontStyle: "italic", maxWidth: 220 }}>💡 {post.platform_tip}</span>}
-              </div>
-            </div>
+              <div style={{ padding: "14px 16px" }}>
+                {/* Visual Description */}
+                <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 8, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
+                  📷 {post.visual_description}
+                </div>
 
-            {/* Actions Footer */}
-            <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <CopyButton text={`${post.caption}\n\n${(post.hashtags || []).map(h => `#${h}`).join(" ")}`} label="Copia Caption + Hashtag" />
+                {/* Caption */}
+                <div style={{ fontSize: 13.5, color: "#2C2418", lineHeight: 1.65, marginBottom: 12, whiteSpace: "pre-line" }}>
+                  {caption}
+                </div>
+
+                {/* Hashtags with platform badge */}
+                {hashtags.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: platform === "instagram" ? "rgba(225,48,108,0.1)" : "rgba(24,119,242,0.1)", color: platform === "instagram" ? "#E1306C" : "#1877F2", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+                        {platform === "instagram" ? "IG" : "FB"} × {hashtags.length}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {hashtags.map((h, j) => (
+                        <span key={j} style={{ fontSize: 11, color: platform === "instagram" ? "#4A7C9B" : "#1877F2", fontWeight: 500 }}>#{h}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CTA + Tip */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+                  {cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 6, background: "rgba(139,115,85,0.08)" }}>CTA: {cta}</span>}
+                  {post.platform_tip && <span style={{ fontSize: 10, color: "#999", fontStyle: "italic", maxWidth: 220 }}>💡 {post.platform_tip}</span>}
+                </div>
               </div>
-              <button
-                onClick={() => onRegenSlide(i, post)}
-                disabled={regenLoading === i}
-                style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.2s", whiteSpace: "nowrap" }}
-                onMouseEnter={e => { if (regenLoading !== i) { e.currentTarget.style.background = "rgba(180,100,50,0.08)"; } }}
-                onMouseLeave={e => { if (regenLoading !== i) { e.currentTarget.style.background = "transparent"; } }}>
-                {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
-              </button>
+
+              {/* Actions */}
+              <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
+                </div>
+                <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                  {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
+      {/* Copy All */}
       <div style={{ marginTop: 14 }}>
-        <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${p.caption}\n\n${(p.hashtags || []).map(h => `#${h}`).join(" ")}\n\nCTA: ${p.cta || ""}`).join("\n\n")} label="Copia Tutte le Caption" />
+        <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${getCaption(p)}\n\n${getHashtags(p).map(h => `#${h}`).join(" ")}\n\nCTA: ${getCta(p)}`).join("\n\n")} label={`Copia Tutte (${LANGS.find(l=>l.id===lang)?.flag} ${platform === "instagram" ? "IG" : "FB"})`} />
       </div>
     </div>
   );
@@ -499,15 +631,57 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 // ─────────────────────────────────────────────────
 function VideoTab({ data }) {
   const vs = data.video_storytelling;
+  const [lang, setLang] = useState("it");
+  const [videoSource, setVideoSource] = useState("pexels_video");
+
   if (!vs?.scenes) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessuno storyboard generato.</p>;
+
+  const LANGS = [
+    { id: "it", label: "Italiano", flag: "🇮🇹" },
+    { id: "en", label: "English", flag: "🇬🇧" },
+    { id: "es", label: "Español", flag: "🇪🇸" },
+  ];
+
+  // Helper: get multilingual field, fallback to string
+  const ml = (field) => {
+    if (!field) return "";
+    if (typeof field === "object") return field[lang] || field.it || field.en || "";
+    return field;
+  };
+
+  const getCopyText = () => {
+    return `VIDEO STORYBOARD\n${ml(vs.concept)}\nDurata: ${vs.duration} | Aspect: ${vs.aspect_ratio}\nMusica: ${vs.music_mood}\n\n${vs.scenes.map(s => `SC.${String(s.scene_number).padStart(2, "0")} [${s.duration}] ${s.footage_type}\n${ml(s.description)}${ml(s.text_overlay) ? `\nOverlay: "${ml(s.text_overlay)}"` : ""}\nFootage: "${s.search_query}"\n→ ${s.transition}`).join("\n\n")}\n\n🎵 ${ml(vs.audio_notes)}`;
+  };
 
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #1A1A2E, #4A1942)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎬</span>
         <SectionLabel color="#1A1A2E">Video Storytelling</SectionLabel>
       </div>
 
+      {/* Language + Video Source selectors */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
+          {LANGS.map(l => (
+            <button key={l.id} onClick={() => setLang(l.id)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FFFCF5" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              {l.flag} {l.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
+          {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
+            <button key={key} onClick={() => setVideoSource(key)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: videoSource === key ? "#FFFCF5" : "transparent", boxShadow: videoSource === key ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: videoSource === key ? src.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              {src.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Meta Badges */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {[{ l: "Durata", v: vs.duration }, { l: "Aspect", v: vs.aspect_ratio }, { l: "Musica", v: vs.music_mood }].filter(m => m.v).map((m, i) => (
           <div key={i} style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(26,26,46,0.06)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 11, color: "#3D3225" }}>
@@ -516,42 +690,69 @@ function VideoTab({ data }) {
         ))}
       </div>
 
-      {vs.concept && <p style={{ fontSize: 13, lineHeight: 1.6, color: "#3D3225", margin: "0 0 18px", padding: "10px 14px", background: "rgba(26,26,46,0.04)", borderRadius: 10, borderLeft: "3px solid #1A1A2E", fontStyle: "italic" }}>{vs.concept}</p>}
+      {/* Concept */}
+      {vs.concept && <p style={{ fontSize: 13, lineHeight: 1.6, color: "#3D3225", margin: "0 0 18px", padding: "10px 14px", background: "rgba(26,26,46,0.04)", borderRadius: 10, borderLeft: "3px solid #1A1A2E", fontStyle: "italic" }}>{ml(vs.concept)}</p>}
 
+      {/* Scenes Timeline */}
       <div style={{ position: "relative", paddingLeft: 22 }}>
         <div style={{ position: "absolute", left: 8, top: 0, bottom: 0, width: 2, background: "linear-gradient(to bottom, #1A1A2E, rgba(26,26,46,0.1))", borderRadius: 1 }} />
         {vs.scenes.map((s, i) => (
           <div key={i} style={{ position: "relative", marginBottom: i < vs.scenes.length - 1 ? 16 : 0, paddingLeft: 18 }}>
             <div style={{ position: "absolute", left: -6, top: 12, width: 10, height: 10, borderRadius: "50%", background: i === 0 ? "#E1306C" : i === vs.scenes.length - 1 ? "#1A1A2E" : "#8B7355", border: "2px solid #F5F0E8" }} />
             <div style={{ background: "#FFFCF5", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 12, padding: "12px 14px" }}>
+              {/* Scene Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#1A1A2E", fontFamily: "'JetBrains Mono', monospace" }}>SC.{String(s.scene_number).padStart(2, "0")}</span>
                 <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(26,26,46,0.06)", color: "#666", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{s.duration}</span>
                 <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(139,115,85,0.08)", color: "#8B7355", textTransform: "uppercase", fontWeight: 600 }}>{s.footage_type}</span>
                 {s.transition && <span style={{ marginLeft: "auto", fontSize: 9, color: "#999", fontFamily: "'JetBrains Mono', monospace" }}>→ {s.transition}</span>}
               </div>
-              <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 8px" }}>{s.description}</p>
-              {s.text_overlay && <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 6, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{s.text_overlay}</div>}
+
+              {/* Description */}
+              <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 8px" }}>{ml(s.description)}</p>
+
+              {/* Text Overlay */}
+              {ml(s.text_overlay) && (
+                <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 6, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>
+                  {ml(s.text_overlay)}
+                </div>
+              )}
+
+              {/* Multi-source search links for this scene */}
               {s.search_query && (
-                <a href={VIDEO_SOURCES.pexels_video.webUrl(s.search_query)} target="_blank" rel="noopener noreferrer"
-                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#8B7355", textDecoration: "none", fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>
-                  🔍 "{s.search_query}" ↗
-                </a>
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1A1A2E", marginBottom: 5, opacity: 0.5 }}>
+                    Cerca footage: "{s.search_query}"
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
+                      <a key={key} href={src.webUrl(s.search_query)} target="_blank" rel="noopener noreferrer"
+                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(26,26,46,0.12)", textDecoration: "none", fontSize: 9, color: videoSource === key ? "#fff" : "#666", background: videoSource === key ? src.color : "transparent", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
+                        onMouseLeave={e => { if (videoSource !== key) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "rgba(26,26,46,0.12)"; } }}>
+                        <span style={{ width: 14, height: 14, borderRadius: 3, background: videoSource === key ? "rgba(255,255,255,0.2)" : src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
+                        {src.name}
+                      </a>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
         ))}
       </div>
 
+      {/* Audio Notes */}
       {vs.audio_notes && (
         <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(26,26,46,0.04)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 12, color: "#3D3225", lineHeight: 1.55 }}>
           <span style={{ fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1A1A2E", display: "block", marginBottom: 4 }}>🎵 Sound Design</span>
-          {vs.audio_notes}
+          {ml(vs.audio_notes)}
         </div>
       )}
 
+      {/* Copy */}
       <div style={{ marginTop: 14 }}>
-        <CopyButton text={`VIDEO STORYBOARD\n${vs.concept}\nDurata: ${vs.duration} | Aspect: ${vs.aspect_ratio}\nMusica: ${vs.music_mood}\n\n${vs.scenes.map(s => `SC.${String(s.scene_number).padStart(2, "0")} [${s.duration}] ${s.footage_type}\n${s.description}${s.text_overlay ? `\nOverlay: "${s.text_overlay}"` : ""}\nFootage: "${s.search_query}"\n→ ${s.transition}`).join("\n\n")}\n\n🎵 ${vs.audio_notes}`} label="Copia Storyboard Completo" />
+        <CopyButton text={getCopyText()} label={`Copia Storyboard (${LANGS.find(l=>l.id===lang)?.flag})`} />
       </div>
     </div>
   );
