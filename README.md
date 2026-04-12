@@ -73,7 +73,9 @@ vms-vercel/
 1. Utente scrive brief marketing
 2. Frontend chiama `/api/chat` (serverless function)
 3. Serverless function chiama Anthropic con la key sicura server-side
-4. Risposta JSON parsata e renderizzata in 3 tab: Strategia / Post / Video
+4. Risposta JSON parsata e renderizzata in 4 tab: Strategia / Piano / Post / Video
+5. Restyling "Aesthetic Beige" (#EFE6D5) applicato a tutto il layout.
+6. Nuovo modulo "Piano Editoriale": distribuzione contenuti settimanale (7 giorni) con suggerimenti cross-posting per Facebook.
 
 ## Development Locale
 

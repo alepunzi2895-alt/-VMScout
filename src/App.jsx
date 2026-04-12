@@ -62,6 +62,19 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
       "platform_tip": "Brief tip on optimal posting for the platform"
     }
   ],
+  "editorial_plan": {
+    "weekly_focus": "Tematica strategica della settimana",
+    "days": [
+      {
+        "day": "Giorno (es. Lunedì)",
+        "content_type": "Post | Story | Reel | Carousel",
+        "topic": "Titolo breve dell'argomento",
+        "goal": "Awareness | Engagement | Conversion | Community",
+        "best_time": "Orario consigliato (es. 18:30)",
+        "fb_cross_post_tip": "Suggerimento specifico per Facebook"
+      }
+    ]
+  },
   "video_storytelling": {
     "concept": {
       "it": "Concept creativo italiano — l'arco narrativo in 1-2 frasi",
@@ -132,6 +145,11 @@ Facebook (hashtags_facebook):
   - Facebook hashtags work as search terms, not discovery — so be descriptive
   - Match the language of the target audience
 
+EDITORIAL PLAN RULES:
+  - Generate exactly 7 days for the editorial plan (Lunedì to Domenica)
+  - Balance the content types (at least 2 Reels, 2 Stories, 3 Posts/Carousels)
+  - Ensure the "fb_cross_post_tip" explains HOW to adapt the IG content for a Facebook audience (e.g. "Focus on community discussion in comments", "Post in local groups", "More descriptive title")
+
 VIDEO STORYTELLING RULES:
 - Generate exactly 5 scenes (not more) forming a narrative arc
 - Think like a film director: hook, development, peak, CTA
@@ -140,7 +158,7 @@ VIDEO STORYTELLING RULES:
 - Text overlays max 5 words per language
 - Duration matches platform (Reels: 15-30s, TikTok: 15-60s, Stories: 15s)
 
-CRITICAL: Generate exactly 3 slides in post_composer and exactly 5 scenes in video_storytelling. Keep captions concise (max 3 lines each language). You MUST complete the entire JSON — do not truncate. Respond ONLY with the JSON object. No other text.`;
+CRITICAL: Generate exactly 3 slides in post_composer, 7 days in editorial_plan, and exactly 5 scenes in video_storytelling. Keep captions concise (max 3 lines each language). You MUST complete the entire JSON — do not truncate. Respond ONLY with the JSON object. No other text.`;
 
 // ─────────────────────────────────────────────────
 // PHOTO & VIDEO SOURCES
@@ -517,7 +535,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
           {LANGS.map(l => (
             <button key={l.id} onClick={() => setLang(l.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FFFCF5" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
               {l.flag} {l.label}
             </button>
           ))}
@@ -527,7 +545,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
           {PLATFORMS.map(p => (
             <button key={p.id} onClick={() => setPlatform(p.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: platform === p.id ? "#FFFCF5" : "transparent", boxShadow: platform === p.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: platform === p.id ? p.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: platform === p.id ? "#FBF8F3" : "transparent", boxShadow: platform === p.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: platform === p.id ? p.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
               {p.icon} {p.label}
             </button>
           ))}
@@ -551,7 +569,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
           const hashtags = getHashtags(post);
 
           return (
-            <div key={`${i}-${lang}-${platform}`} style={{ background: "#FFFCF5", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
+            <div key={`${i}-${lang}-${platform}`} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
                 <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
@@ -664,7 +682,7 @@ function VideoTab({ data }) {
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
           {LANGS.map(l => (
             <button key={l.id} onClick={() => setLang(l.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FFFCF5" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               {l.flag} {l.label}
             </button>
           ))}
@@ -673,7 +691,7 @@ function VideoTab({ data }) {
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
           {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
             <button key={key} onClick={() => setVideoSource(key)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: videoSource === key ? "#FFFCF5" : "transparent", boxShadow: videoSource === key ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: videoSource === key ? src.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: videoSource === key ? "#FBF8F3" : "transparent", boxShadow: videoSource === key ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: videoSource === key ? src.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               {src.name}
             </button>
           ))}
@@ -698,7 +716,7 @@ function VideoTab({ data }) {
         {vs.scenes.map((s, i) => (
           <div key={i} style={{ position: "relative", marginBottom: i < vs.scenes.length - 1 ? 16 : 0, paddingLeft: 18 }}>
             <div style={{ position: "absolute", left: -6, top: 12, width: 10, height: 10, borderRadius: "50%", background: i === 0 ? "#E1306C" : i === vs.scenes.length - 1 ? "#1A1A2E" : "#8B7355", border: "2px solid #F5F0E8" }} />
-            <div style={{ background: "#FFFCF5", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ background: "#FBF8F3", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 12, padding: "12px 14px" }}>
               {/* Scene Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#1A1A2E", fontFamily: "'JetBrains Mono', monospace" }}>SC.{String(s.scene_number).padStart(2, "0")}</span>
@@ -758,6 +776,50 @@ function VideoTab({ data }) {
 }
 
 // ─────────────────────────────────────────────────
+// TAB: PIANO EDITORIALE
+// ─────────────────────────────────────────────────
+function EditorialTab({ data }) {
+  const plan = data.editorial_plan;
+  if (!plan?.days) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessuna pianificazione generata.</p>;
+
+  return (
+    <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #8B7355, #6B5B45)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📅</span>
+        <SectionLabel>Piano Editoriale Settimanale</SectionLabel>
+      </div>
+
+      <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 4 }}>Focus Settimanale</div>
+        <div style={{ fontSize: 13.5, color: "#3D3225", fontWeight: 500 }}>{plan.weekly_focus}</div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {plan.days.map((d, i) => (
+          <div key={i} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 14 }}>
+            <div style={{ width: 45, textAlign: "center", borderRight: "1px solid rgba(139,115,85,0.1)", paddingRight: 10, flexShrink: 0 }}>
+              <div style={{ fontSize: 10, color: "#8B7355", fontWeight: 700, textTransform: "uppercase" }}>{d.day?.substring(0, 3)}</div>
+              <div style={{ fontSize: 18, fontWeight: 400, color: "#2C2418", fontFamily: "'Instrument Serif', serif" }}>{i + 1}</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(139,115,85,0.1)", color: "#8B7355", fontWeight: 700 }}>{d.content_type}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(60,100,180,0.1)", color: "#3C64B4", fontWeight: 700 }}>{d.best_time}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(180,60,60,0.1)", color: "#B43C3C", fontWeight: 700, marginLeft: "auto" }}>{d.goal}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2418", marginBottom: 4 }}>{d.topic}</div>
+              <div style={{ fontSize: 11, color: "#8B7355", fontStyle: "italic", borderTop: "1px solid rgba(139,115,85,0.05)", paddingTop: 6, marginTop: 4 }}>
+                <span style={{ fontWeight: 700, marginRight: 4 }}>FB Tip:</span>{d.fb_cross_post_tip}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
 // STRATEGY MESSAGE (MAIN WRAPPER)
 // ─────────────────────────────────────────────────
 function StrategyMessage({ data, onUpdateData, originalBrief }) {
@@ -797,6 +859,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief }) {
 
   const tabs = [
     { id: "strategy", label: "Strategia", icon: "◈" },
+    { id: "piano", label: "Piano", icon: "📅", show: !!data.editorial_plan },
     { id: "posts", label: "Post", icon: "◻", show: data.post_composer?.length > 0 },
     { id: "video", label: "Video", icon: "▶", show: !!data.video_storytelling?.scenes },
   ].filter(t => t.show !== false);
@@ -806,15 +869,16 @@ function StrategyMessage({ data, onUpdateData, originalBrief }) {
       <div style={{ display: "flex", gap: 4, marginBottom: 18, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 12 }}>
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{ flex: 1, padding: "8px 12px", borderRadius: 9, border: "none", background: activeTab === tab.id ? "#FFFCF5" : "transparent", boxShadow: activeTab === tab.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", color: activeTab === tab.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+            style={{ flex: 1, padding: "8px 12px", borderRadius: 9, border: "none", background: activeTab === tab.id ? "#FBF8F3" : "transparent", boxShadow: activeTab === tab.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", color: activeTab === tab.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
             {tab.icon} {tab.label}
           </button>
         ))}
       </div>
 
-      {activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
-      {activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} />}
-      {activeTab === "video" && <VideoTab data={data} />}
+      { activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
+      { activeTab === "piano" && <EditorialTab data={data} />}
+      { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} />}
+      { activeTab === "video" && <VideoTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
         <summary style={{ fontSize: 11, color: "#8B7355", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" }}>{"{ }"} Mostra JSON per API</summary>
@@ -869,7 +933,7 @@ export default function VisualMarketingScout() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F5F0E8", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#EFE6D5", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
         @keyframes typingBounce { 0%,80%,100% { transform:translateY(0);opacity:.4 } 40% { transform:translateY(-6px);opacity:1 } }
@@ -902,7 +966,7 @@ export default function VisualMarketingScout() {
 
         {/* API Setup */}
         {showApiSetup && (
-          <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FFFCF5", borderRadius: 14, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'DM Sans', sans-serif" }}>
+          <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 14, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'DM Sans', sans-serif" }}>
             <SectionLabel>🔑 API Keys — Anteprima Immagini</SectionLabel>
             <p style={{ fontSize: 12, color: "#6B5B45", marginBottom: 14, lineHeight: 1.5, marginTop: 0 }}>
               Senza keys l'app funziona comunque — i link aprono le ricerche sui siti. Con le keys attivi le anteprime inline delle foto.
@@ -970,7 +1034,7 @@ export default function VisualMarketingScout() {
         </div>
 
         {/* Input */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px 20px 24px", background: "linear-gradient(to top, #F5F0E8 70%, transparent)", zIndex: 10 }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px 20px 24px", background: "linear-gradient(to top, #EFE6D5 70%, transparent)", zIndex: 10 }}>
           <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea className="vms-input" value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
