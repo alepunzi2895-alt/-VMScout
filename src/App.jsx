@@ -12,9 +12,12 @@ const API_KEYS = {
 };
 
 // ─────────────────────────────────────────────────
-// SYSTEM PROMPT — Il cervello strategico dell'app
+// SYSTEM PROMPT GENERATOR
 // ─────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are Visual Marketing Scout — a Senior Marketing Strategist, Visual Director & Content Architect. You analyze business/campaign objectives and return complete visual strategies with search queries, ready-to-post social captions, and video storytelling storyboards.
+const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }) => {
+  const { duration, frequency } = config;
+
+  return `You are Visual Marketing Scout — a Senior Marketing Strategist, Visual Director & Content Architect. You analyze business/campaign objectives and return complete visual strategies with search queries, ready-to-post social captions, and video storytelling storyboards.
 
 GOLDEN RULE: "Anti-AI Aesthetic" — Only recommend authentic, real, imperfect visuals. No plastic stock photos or corporate B-roll. Think Pinterest aesthetic: lifestyle, documentary, POV, natural light, film grain, candid moments.
 
@@ -45,120 +48,65 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
   "post_composer": [
     {
       "slide_number": 1,
-      "visual_description": "Description of the ideal image for this slide/post. Be very specific: subject, framing, mood, light, details. Write in the user's language.",
+      "visual_description": "Description of the ideal image for this slide/post. Write in the user's language.",
       "search_query": "English search query to find this exact image",
-      "captions": {
-        "it": "Caption pronta per il post in italiano. Tono naturale, autentico, con a capo reali.",
-        "en": "Ready-to-post English caption. Natural, authentic tone. Real line breaks.",
-        "es": "Caption lista para publicar en español. Tono natural, auténtico, con saltos de línea reales."
-      },
-      "hashtags_instagram": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6", "hashtag7", "hashtag8", "hashtag9", "hashtag10"],
-      "hashtags_facebook": ["hashtag1", "hashtag2", "hashtag3"],
-      "cta": {
-        "it": "Call-to-action in italiano",
-        "en": "Call-to-action in English",
-        "es": "Call-to-action en español"
-      },
-      "platform_tip": "Brief tip on optimal posting for the platform"
+      "captions": { "it": "...", "en": "...", "es": "..." },
+      "hashtags_instagram": ["tag1", "..."],
+      "hashtags_facebook": ["tag1", "..."],
+      "cta": { "it": "...", "en": "...", "es": "..." },
+      "platform_tip": "Tip"
     }
   ],
   "editorial_plan": {
-    "weekly_focus": "Tematica strategica della settimana",
+    "duration_context": "${duration}",
+    "weekly_focus": "Tematica strategica principale",
     "days": [
       {
         "day": "Giorno (es. Lunedì)",
         "content_type": "Post | Story | Reel | Carousel",
         "topic": "Titolo breve dell'argomento",
         "goal": "Awareness | Engagement | Conversion | Community",
-        "best_time": "Orario consigliato (es. 18:30)",
-        "fb_cross_post_tip": "Suggerimento specifico per Facebook"
+        "best_time": "Orario (es. 18:30)",
+        "fb_cross_post_tip": "Suggerimento specifico per Facebook",
+        "story_reel_hint": "Suggerimento extra per una Storia o un Reel collegato a questo post"
       }
     ]
   },
   "video_storytelling": {
-    "concept": {
-      "it": "Concept creativo italiano — l'arco narrativo in 1-2 frasi",
-      "en": "English creative concept — narrative arc in 1-2 sentences",
-      "es": "Concepto creativo en español — arco narrativo en 1-2 frases"
-    },
-    "duration": "Recommended total duration (e.g. 15s Reel, 30s Story, 60s TikTok)",
-    "aspect_ratio": "9:16 | 16:9 | 1:1 | 4:5",
-    "music_mood": "Music style suggestion",
+    "concept": { "it": "...", "en": "...", "es": "..." },
+    "duration": "15s",
+    "aspect_ratio": "9:16",
+    "music_mood": "Mood",
     "scenes": [
-      {
-        "scene_number": 1,
-        "duration": "3s",
-        "footage_type": "establishing | detail | action | reaction | transition | closing",
-        "description": {
-          "it": "Descrizione italiana di cosa vediamo",
-          "en": "English description of what we see",
-          "es": "Descripción en español de lo que vemos"
-        },
-        "search_query": "English query to find this footage",
-        "text_overlay": {
-          "it": "Testo italiano breve o null",
-          "en": "Short English text or null",
-          "es": "Texto corto en español o null"
-        },
-        "transition": "cut | fade | swipe | zoom | dissolve"
-      }
+      { "scene_number": 1, "duration": "3s", "footage_type": "type", "description": { "it": "...", "en": "...", "es": "..." }, "search_query": "query", "text_overlay": { "it": "...", "en": "...", "es": "..." }, "transition": "cut" }
     ],
-    "audio_notes": {
-      "it": "Note italiane sul sound design",
-      "en": "English notes on sound design",
-      "es": "Notas en español sobre diseño de sonido"
-    }
+    "audio_notes": { "it": "...", "en": "...", "es": "..." }
   },
   "orientation": "portrait | landscape | square",
-  "mood_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "mood_tags": ["tag1", "..."]
 }
 
 PHOTO QUERY RULES:
-- All queries in ENGLISH
-- Use aesthetic keywords: "authentic", "candid", "film grain", "natural light", "raw", "documentary"
-- NEVER generic stock: "happy business people", "looking at camera", "thumbs up"
-- 3 primary + 2 secondary + 2 avoid
+- ENGLISH. Aesthetic keywords. No plastic stock.
 
 VIDEO QUERY RULES:
-- English. Use: "slow motion", "handheld", "aerial", "POV", "timelapse", "cinematic"
-- NEVER: "corporate video", "business meeting footage"
-- 3 primary + 2 secondary
+- ENGLISH. POV, handheld, cinematic.
 
 POST COMPOSER RULES:
-- Generate exactly 3 posts forming a coherent mini-campaign or carousel
-- Each post has a distinct visual and caption — they tell a story together
-- CAPTIONS: generate in ALL 3 languages (it, en, es) for each slide. Each caption must feel native, not translated. Adapt tone, expressions, and cultural references per language.
-- CTA: generate in ALL 3 languages. Vary CTAs across slides (save, share, comment, link, tag).
-
-HASHTAG STRATEGY — PLATFORM SPECIFIC:
-Instagram (hashtags_instagram): 
-  - Generate exactly 10 hashtags per slide
-  - Mix: 3 broad/high-volume (100K-1M posts), 4 mid-range niche (10K-100K), 3 micro-niche (<10K)
-  - Include at least 1 location-based if relevant, 1 community hashtag, 1 branded/campaign hashtag
-  - Use the language that matches the target market (Italian hashtags for Italian audience, English for global, etc.)
-  - NO banned or shadowbanned hashtags. NO generic like #love #instagood #photooftheday
-  - Prioritize discovery: think "what would my ideal follower search?"
-
-Facebook (hashtags_facebook):
-  - Generate exactly 3 hashtags per slide — Facebook penalizes more than 3-5
-  - Use ONLY broad, searchable hashtags relevant to the topic
-  - Facebook hashtags work as search terms, not discovery — so be descriptive
-  - Match the language of the target audience
+- Generate exactly 3 slides for the core campaign.
 
 EDITORIAL PLAN RULES:
-  - Generate exactly 7 days for the editorial plan (Lunedì to Domenica)
-  - Balance the content types (at least 2 Reels, 2 Stories, 3 Posts/Carousels)
-  - Ensure the "fb_cross_post_tip" explains HOW to adapt the IG content for a Facebook audience (e.g. "Focus on community discussion in comments", "Post in local groups", "More descriptive title")
+- DURATION: ${duration}
+- FREQUENCY: ${frequency} post principali a settimana su IG+FB.
+- If duration is "1 settimana", generate all 7 days.
+- If duration is longer (1 month+), generate a Strategic Roadmap: 
+  - Week 1: Detailed daily plan (7 items).
+  - Subsequent weeks/months: High-level weekly strategic themes and primary post ideas.
+- Include "story_reel_hint" for every content item to create an ecosystem, not just isolated posts.
+- Ensure the "fb_cross_post_tip" explains adaptation for Facebook.
 
-VIDEO STORYTELLING RULES:
-- Generate exactly 5 scenes (not more) forming a narrative arc
-- Think like a film director: hook, development, peak, CTA
-- Each scene has a footage type and search query
-- ALL text fields (concept, description, text_overlay, audio_notes) must be objects with "it", "en", "es" keys — native-feeling, not translated
-- Text overlays max 5 words per language
-- Duration matches platform (Reels: 15-30s, TikTok: 15-60s, Stories: 15s)
-
-CRITICAL: Generate exactly 3 slides in post_composer, 7 days in editorial_plan, and exactly 5 scenes in video_storytelling. Keep captions concise (max 3 lines each language). You MUST complete the entire JSON — do not truncate. Respond ONLY with the JSON object. No other text.`;
+CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.`;
+};
 
 // ─────────────────────────────────────────────────
 // PHOTO & VIDEO SOURCES
@@ -497,7 +445,6 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
     { id: "facebook", label: "Facebook", color: "#1877F2", icon: "FB" },
   ];
 
-  // Helper: get caption in selected lang, fallback to old format
   const getCaption = (post) => {
     if (post.captions && typeof post.captions === "object") return post.captions[lang] || post.captions.it || post.captions.en || "";
     return post.caption || "";
@@ -523,15 +470,12 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
       </div>
 
-      {/* Language + Platform selectors */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        {/* Language */}
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
           {LANGS.map(l => (
             <button key={l.id} onClick={() => setLang(l.id)}
@@ -541,7 +485,6 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
           ))}
         </div>
 
-        {/* Platform */}
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
           {PLATFORMS.map(p => (
             <button key={p.id} onClick={() => setPlatform(p.id)}
@@ -552,7 +495,6 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
         </div>
       </div>
 
-      {/* Hashtag info badge */}
       <div style={{ fontSize: 10, color: "#999", marginBottom: 14, fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 6 }}>
         {platform === "instagram" ? (
           <span>IG: 10 hashtag per slide — 3 broad + 4 niche + 3 micro-niche</span>
@@ -561,7 +503,6 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
         )}
       </div>
 
-      {/* Slides */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {post_composer.map((post, i) => {
           const caption = getCaption(post);
@@ -570,13 +511,11 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 
           return (
             <div key={`${i}-${lang}-${platform}`} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
-              {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
                 <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
                 <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
               </div>
 
-              {/* Search Links */}
               {post.search_query && (
                 <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(139,115,85,0.06)", background: "rgba(139,115,85,0.02)" }}>
                   <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6, opacity: 0.7 }}>
@@ -587,17 +526,14 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
               )}
 
               <div style={{ padding: "14px 16px" }}>
-                {/* Visual Description */}
                 <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 8, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
                   📷 {post.visual_description}
                 </div>
 
-                {/* Caption */}
                 <div style={{ fontSize: 13.5, color: "#2C2418", lineHeight: 1.65, marginBottom: 12, whiteSpace: "pre-line" }}>
                   {caption}
                 </div>
 
-                {/* Hashtags with platform badge */}
                 {hashtags.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
@@ -613,14 +549,12 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
                   </div>
                 )}
 
-                {/* CTA + Tip */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
                   {cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 6, background: "rgba(139,115,85,0.08)" }}>CTA: {cta}</span>}
                   {post.platform_tip && <span style={{ fontSize: 10, color: "#999", fontStyle: "italic", maxWidth: 220 }}>💡 {post.platform_tip}</span>}
                 </div>
               </div>
 
-              {/* Actions */}
               <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
@@ -635,7 +569,6 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
         })}
       </div>
 
-      {/* Copy All */}
       <div style={{ marginTop: 14 }}>
         <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${getCaption(p)}\n\n${getHashtags(p).map(h => `#${h.replace(/^#/, "")}`).join(" ")}\n\nCTA: ${getCta(p)}`).join("\n\n")} label={`Copia Tutte (${LANGS.find(l=>l.id===lang)?.flag} ${platform === "instagram" ? "IG" : "FB"})`} />
       </div>
@@ -659,7 +592,6 @@ function VideoTab({ data }) {
     { id: "es", label: "Español", flag: "🇪🇸" },
   ];
 
-  // Helper: get multilingual field, fallback to string
   const ml = (field) => {
     if (!field) return "";
     if (typeof field === "object") return field[lang] || field.it || field.en || "";
@@ -677,7 +609,6 @@ function VideoTab({ data }) {
         <SectionLabel color="#1A1A2E">Video Storytelling</SectionLabel>
       </div>
 
-      {/* Language + Video Source selectors */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
           {LANGS.map(l => (
@@ -698,7 +629,6 @@ function VideoTab({ data }) {
         </div>
       </div>
 
-      {/* Meta Badges */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {[{ l: "Durata", v: vs.duration }, { l: "Aspect", v: vs.aspect_ratio }, { l: "Musica", v: vs.music_mood }].filter(m => m.v).map((m, i) => (
           <div key={i} style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(26,26,46,0.06)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 11, color: "#3D3225" }}>
@@ -707,17 +637,14 @@ function VideoTab({ data }) {
         ))}
       </div>
 
-      {/* Concept */}
       {vs.concept && <p style={{ fontSize: 13, lineHeight: 1.6, color: "#3D3225", margin: "0 0 18px", padding: "10px 14px", background: "rgba(26,26,46,0.04)", borderRadius: 10, borderLeft: "3px solid #1A1A2E", fontStyle: "italic" }}>{ml(vs.concept)}</p>}
 
-      {/* Scenes Timeline */}
       <div style={{ position: "relative", paddingLeft: 22 }}>
         <div style={{ position: "absolute", left: 8, top: 0, bottom: 0, width: 2, background: "linear-gradient(to bottom, #1A1A2E, rgba(26,26,46,0.1))", borderRadius: 1 }} />
         {vs.scenes.map((s, i) => (
           <div key={i} style={{ position: "relative", marginBottom: i < vs.scenes.length - 1 ? 16 : 0, paddingLeft: 18 }}>
             <div style={{ position: "absolute", left: -6, top: 12, width: 10, height: 10, borderRadius: "50%", background: i === 0 ? "#E1306C" : i === vs.scenes.length - 1 ? "#1A1A2E" : "#8B7355", border: "2px solid #F5F0E8" }} />
             <div style={{ background: "#FBF8F3", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 12, padding: "12px 14px" }}>
-              {/* Scene Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#1A1A2E", fontFamily: "'JetBrains Mono', monospace" }}>SC.{String(s.scene_number).padStart(2, "0")}</span>
                 <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(26,26,46,0.06)", color: "#666", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{s.duration}</span>
@@ -725,17 +652,14 @@ function VideoTab({ data }) {
                 {s.transition && <span style={{ marginLeft: "auto", fontSize: 9, color: "#999", fontFamily: "'JetBrains Mono', monospace" }}>→ {s.transition}</span>}
               </div>
 
-              {/* Description */}
               <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 8px" }}>{ml(s.description)}</p>
 
-              {/* Text Overlay */}
               {ml(s.text_overlay) && (
                 <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 6, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>
                   {ml(s.text_overlay)}
                 </div>
               )}
 
-              {/* Multi-source search links for this scene */}
               {s.search_query && (
                 <div style={{ marginTop: 4 }}>
                   <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1A1A2E", marginBottom: 5, opacity: 0.5 }}>
@@ -759,7 +683,6 @@ function VideoTab({ data }) {
         ))}
       </div>
 
-      {/* Audio Notes */}
       {vs.audio_notes && (
         <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(26,26,46,0.04)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 12, color: "#3D3225", lineHeight: 1.55 }}>
           <span style={{ fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1A1A2E", display: "block", marginBottom: 4 }}>🎵 Sound Design</span>
@@ -767,7 +690,6 @@ function VideoTab({ data }) {
         </div>
       )}
 
-      {/* Copy */}
       <div style={{ marginTop: 14 }}>
         <CopyButton text={getCopyText()} label={`Copia Storyboard (${LANGS.find(l=>l.id===lang)?.flag})`} />
       </div>
@@ -790,24 +712,37 @@ function EditorialTab({ data }) {
       </div>
 
       <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 4 }}>Focus Settimanale</div>
-        <div style={{ fontSize: 13.5, color: "#3D3225", fontWeight: 500 }}>{plan.weekly_focus}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 4 }}>Focus Strategico</div>
+            <div style={{ fontSize: 13.5, color: "#3D3225", fontWeight: 500 }}>{plan.weekly_focus}</div>
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 700, background: "rgba(139,115,85,0.1)", padding: "3px 8px", borderRadius: 4, color: "#8B7355" }}>
+            DURATA: {plan.duration_context || "1 Settimana"}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {plan.days.map((d, i) => (
           <div key={i} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 14 }}>
             <div style={{ width: 45, textAlign: "center", borderRight: "1px solid rgba(139,115,85,0.1)", paddingRight: 10, flexShrink: 0 }}>
-              <div style={{ fontSize: 10, color: "#8B7355", fontWeight: 700, textTransform: "uppercase" }}>{d.day?.substring(0, 3)}</div>
-              <div style={{ fontSize: 18, fontWeight: 400, color: "#2C2418", fontFamily: "'Instrument Serif', serif" }}>{i + 1}</div>
+              <div style={{ fontSize: 9, color: "#8B7355", fontWeight: 700, textTransform: "uppercase" }}>{d.day?.includes("Settimana") ? "WP" : d.day?.substring(0, 3)}</div>
+              <div style={{ fontSize: 16, fontWeight: 400, color: "#2C2418", fontFamily: "'Instrument Serif', serif" }}>{i + 1}</div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(139,115,85,0.1)", color: "#8B7355", fontWeight: 700 }}>{d.content_type}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: d.content_type?.toLowerCase().includes("reel") ? "rgba(225,48,108,0.1)" : "rgba(139,115,85,0.1)", color: d.content_type?.toLowerCase().includes("reel") ? "#E1306C" : "#8B7355", fontWeight: 700 }}>{d.content_type}</span>
                 <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(60,100,180,0.1)", color: "#3C64B4", fontWeight: 700 }}>{d.best_time}</span>
-                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(180,60,60,0.1)", color: "#B43C3C", fontWeight: 700, marginLeft: "auto" }}>{d.goal}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(180,60,60,0.1)", color: "#B43C3C", fontWeight: 700 }}>{d.goal}</span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2418", marginBottom: 4 }}>{d.topic}</div>
+              {d.story_reel_hint && (
+                <div style={{ fontSize: 11, background: "rgba(0,0,0,0.03)", padding: "6px 10px", borderRadius: 8, margin: "6px 0", color: "#6B5B45", borderLeft: "2px solid #E1306C" }}>
+                  <span style={{ fontWeight: 700, fontSize: 9, display: "block", marginBottom: 2 }}>⚡ SUGGERIMENTO ECOISTEMA (Reel/Story):</span>
+                  {d.story_reel_hint}
+                </div>
+              )}
               <div style={{ fontSize: 11, color: "#8B7355", fontStyle: "italic", borderTop: "1px solid rgba(139,115,85,0.05)", paddingTop: 6, marginTop: 4 }}>
                 <span style={{ fontWeight: 700, marginRight: 4 }}>FB Tip:</span>{d.fb_cross_post_tip}
               </div>
@@ -898,7 +833,7 @@ export default function VisualMarketingScout() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showApiSetup, setShowApiSetup] = useState(false);
-  const [keysState, setKeysState] = useState({ ...API_KEYS });
+  const [planConfig, setPlanConfig] = useState({ duration: "1 settimana", frequency: 3 });
   const chatEndRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -915,7 +850,7 @@ export default function VisualMarketingScout() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: SYSTEM_PROMPT, messages: [{ role: "user", content: userMsg }] }),
+        body: JSON.stringify({ system: getSystemPrompt(planConfig), messages: [{ role: "user", content: userMsg }] }),
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
@@ -947,7 +882,6 @@ export default function VisualMarketingScout() {
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px", position: "relative", zIndex: 2, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
 
-        {/* Header */}
         <header style={{ paddingTop: 40, paddingBottom: messages.length ? 20 : 50, textAlign: "center" }}>
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>◈ Visual Marketing Scout</div>
@@ -964,7 +898,6 @@ export default function VisualMarketingScout() {
           </p>}
         </header>
 
-        {/* API Setup */}
         {showApiSetup && (
           <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 14, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'DM Sans', sans-serif" }}>
             <SectionLabel>🔑 API Keys — Anteprima Immagini</SectionLabel>
@@ -982,7 +915,7 @@ export default function VisualMarketingScout() {
                   <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#8B7355" }}>Ottieni key ↗</a>
                 </div>
                 <input type="password" placeholder={`Incolla ${label}...`} defaultValue={API_KEYS[key]}
-                  onChange={e => { API_KEYS[key] = e.target.value; setKeysState({ ...API_KEYS }); }}
+                  onChange={e => { API_KEYS[key] = e.target.value; }}
                   style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,.2)", background: "#F5F0E8", fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#3D3225" }} />
               </div>
             ))}
@@ -990,7 +923,6 @@ export default function VisualMarketingScout() {
           </div>
         )}
 
-        {/* Examples */}
         {!messages.length && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 32, animation: "fadeSlideUp .6s ease-out .2s both" }}>
             {EXAMPLES.map((ex, i) => (
@@ -1002,7 +934,6 @@ export default function VisualMarketingScout() {
           </div>
         )}
 
-        {/* Chat */}
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
           {messages.map((msg, i) => (
             <div key={i} style={{ marginBottom: 20, animation: "fadeSlideUp .4s ease-out" }}>
