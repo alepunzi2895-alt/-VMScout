@@ -19,10 +19,52 @@ const LUXY_SERVICES = [
   { id: "concierge", label: "Concierge H24", icon: "💎", color: "#4A4A2A" },
 ];
 
+const API_KEYS = {
+  pexels: import.meta.env.VITE_PEXELS_KEY || "",
+  pixabay: import.meta.env.VITE_PIXABAY_KEY || "",
+};
+
+const VIDEO_SOURCES = {
+  pexels_video: {
+    name: "Pexels Video", icon: "▶", color: "#05A081",
+    webUrl: (q) => `https://www.pexels.com/search/videos/${encodeURIComponent(q)}/`,
+    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3`,
+    headers: () => ({ Authorization: API_KEYS.pexels }),
+    parse: (d) => (d.videos || []).map(v => ({ id: v.id, videoUrl: v.video_files?.[0]?.link, image: v.image, author: v.user?.name, link: v.url })),
+  },
+  coverr: {
+    name: "Coverr", icon: "C", color: "#1A1A2E",
+    webUrl: (q) => `https://coverr.co/s?q=${encodeURIComponent(q)}`,
+  },
+  pixabay_video: {
+    name: "Pixabay Video", icon: "X", color: "#00AB6C",
+    webUrl: (q) => `https://pixabay.com/videos/search/${encodeURIComponent(q)}/`,
+    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3`,
+    headers: () => ({}),
+    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.tiny?.url || h.videos?.medium?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
+  },
+  pinterest_video: {
+    name: "Pinterest Video", icon: "P", color: "#E60023",
+    webUrl: (q) => `https://www.pinterest.com/search/videos/?q=${encodeURIComponent(q)}&rs=typed`,
+  },
+};
+
+async function fetchVideos(query, sourceKey) {
+  const src = VIDEO_SOURCES[sourceKey];
+  if (!src?.apiUrl || !API_KEYS[sourceKey.split("_")[0]]) return null;
+  try {
+    const res = await fetch(src.apiUrl(query), { headers: src.headers() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return src.parse(data);
+  } catch { return null; }
+}
+
 const CONTENT_TYPES = [
   { id: "post_instagram", label: "Post Instagram", icon: "📸", platform: "instagram" },
   { id: "post_facebook", label: "Post Facebook", icon: "📘", platform: "facebook" },
   { id: "story", label: "Story / Reel", icon: "🎬", platform: "instagram" },
+  { id: "video_storyboard", label: "Video Storyboard", icon: "🎞", platform: "multi" },
   { id: "caption_pack", label: "Pack Caption (3)", icon: "✍️", platform: "multi" },
   { id: "piano_settimanale", label: "Piano 7 giorni", icon: "📅", platform: "multi" },
   { id: "hashtag_strategy", label: "Strategia Hashtag", icon: "#️⃣", platform: "multi" },
@@ -60,6 +102,10 @@ const getLuxySystemPrompt = (memory, contentType, language) => {
     : language === "en" ? "Genera contenuti in INGLESE."
     : "Genera contenuti in SPAGNOLO.";
 
+  const overrideRules = contentType === "video_storyboard" 
+    ? "LUXY STORYTELLING: Genera uno storyboard video. L'array 'outputs' DEVE rappresentare le SCENE del video (id: 1 = Scena 1). Per ogni scena: 'visual_description' (azione chiara), 'search_query' (massimo 3 parole in inglese esattissime per trovare il footage), 'caption' (il voiceover o testo in overlay)."
+    : "Per piano editoriale, ogni output è un giorno. Per hashtag strategy, outputs = gruppi hashtag. Per bio profilo, outputs = 3 bio.";
+
   return `Sei il Senior Marketing Strategist di Luxy Experience, un servizio concierge di lusso con base a Ibiza.
 ${memoryContext}
 
@@ -80,7 +126,7 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "id": 1,
       "title": "Titolo breve",
       "platform": "instagram|facebook|multi",
-      "format": "post|story|reel|bio|piano",
+      "format": "post|story|reel|bio|piano|scene",
       "caption": { "it": "...", "en": "...", "es": "..." },
       "hashtags_instagram": ["tag1", "tag2"],
       "hashtags_facebook": ["tag1", "tag2"],
@@ -97,9 +143,7 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
   "save_to_memory": []
 }
 
-Per piano editoriale, ogni output è un giorno con tutti i campi sopra.
-Per hashtag strategy, outputs = array di gruppi hashtag per tema.
-Per bio profilo, outputs = 3 varianti bio.
+${overrideRules}
 CRITICAL: Rispondi SOLO con il JSON. Zero testo extra.`;
 };
 
@@ -191,6 +235,46 @@ function TypingDots() {
   );
 }
 
+function SceneVideoPlayer({ query, sourceKey = "pexels_video" }) {
+  const [videos, setVideos] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const src = VIDEO_SOURCES[sourceKey];
+  const apiKeyKey = sourceKey.split("_")[0];
+  const canFetch = src?.apiUrl && API_KEYS[apiKeyKey];
+
+  useEffect(() => {
+    if (!query || !canFetch) { setVideos(null); return; }
+    let active = true;
+    setLoading(true);
+    fetchVideos(query, sourceKey).then(res => {
+      if (active) { setVideos(res); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [query, sourceKey, canFetch]);
+
+  if (!canFetch) return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      {loading ? (
+        <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic" }}>Cerco footage "{query}" su {src.name}...</div>
+      ) : videos && videos.length > 0 ? (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {videos.slice(0,3).map(v => (
+            <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16", border: `1px solid ${GOLD}20` }}>
+              <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: OFF_WHITE, fontFamily: "'Montserrat', sans-serif" }}>{v.author || "Creator"}</div>
+              <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: OFF_WHITE, textDecoration: "none", fontSize: 12 }}>↗</a>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 10, color: WARM_GREY }}>Nessun video trovato per "{query}"</div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────
 // OUTPUT CARD
 // ─────────────────────────────────────────────────
@@ -254,17 +338,20 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved }) {
               <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>📷 Visual</div>
               <div style={{ fontSize: 12, color: "#BBB", lineHeight: 1.6, fontStyle: "italic" }}>{output.visual_description}</div>
               {output.search_query && (
-                <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {["unsplash.com/s/photos/", "pexels.com/search/", "pinterest.com/search/pins/?q="].map((base, i) => {
-                    const sites = ["Unsplash", "Pexels", "Pinterest"];
-                    const colors = ["#111", "#05A081", "#E60023"];
-                    return (
-                      <a key={i} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${colors[i]}20`, color: colors[i], textDecoration: "none", fontWeight: 600 }}>
-                        {sites[i]} ↗
-                      </a>
-                    );
-                  })}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                    {["unsplash.com/s/photos/", "pexels.com/search/", "pinterest.com/search/pins/?q="].map((base, i) => {
+                      const sites = ["Unsplash", "Pexels", "Pinterest"];
+                      const colors = ["#111", "#05A081", "#E60023"];
+                      return (
+                        <a key={i} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${colors[i]}20`, color: colors[i], textDecoration: "none", fontWeight: 600 }}>
+                          {sites[i]} ↗
+                        </a>
+                      );
+                    })}
+                  </div>
+                  <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
                 </div>
               )}
             </div>
