@@ -397,7 +397,7 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved }) {
           )}
 
           {/* Actions */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <CopyBtn text={copyText} />
             <CopyBtn text={caption} small />
             {!isSaved ? (
@@ -408,6 +408,19 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved }) {
             ) : (
               <span style={{ fontSize: 11, color: "#5A9A5A", fontWeight: 600, padding: "7px 0" }}>✓ Salvato nel DB</span>
             )}
+            
+            <button onClick={async () => {
+              const res = await fetch("/api/canva-export", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ caption: caption, imageUrl: output.search_query, templateId: "METTI_IL_TUO_TEMPLATE_ID_QUI" })
+              });
+              const data = await res.json();
+              if (data.ok) window.open(data.url, "_blank");
+              else alert(data.error || data.message || "Errore Canva. Hai effettuato il login e inserito il Template ID?");
+            }} 
+            style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid #00C4CC50`, background: `#00C4CC15`, color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", marginLeft: "auto" }}>
+              💎 Invia a Canva
+            </button>
           </div>
         </div>
       )}
@@ -826,6 +839,12 @@ export default function LuxyExperience() {
         <p style={{ fontSize: 11, color: WARM_GREY, marginTop: 8, letterSpacing: "0.3em", textTransform: "uppercase" }}>
           Concierge di Lusso · Ibiza · Mondo
         </p>
+        
+        <div style={{ marginTop: 16 }}>
+          <a href="/api/canva-auth?action=login" style={{ fontSize: 9, padding: "5px 12px", borderRadius: 20, border: `1px solid #00C4CC40`, background: "#00C4CC10", color: "#00C4CC", textDecoration: "none", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            🔗 Connetti Canva
+          </a>
+        </div>
 
         {/* Divider ornament */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 300, margin: "16px auto 0" }}>

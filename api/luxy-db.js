@@ -61,6 +61,14 @@ export default async function handler(req, res) {
           end_date TEXT,
           status TEXT DEFAULT 'active',
           notes TEXT
+        )`,
+        // Canva Auth
+        `CREATE TABLE IF NOT EXISTS luxy_canva_auth (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          access_token TEXT NOT NULL,
+          refresh_token TEXT NOT NULL,
+          expires_in INTEGER NOT NULL,
+          created_at TEXT DEFAULT (datetime('now'))
         )`
       ], "write");
 
