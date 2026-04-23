@@ -90,7 +90,8 @@ PHOTO QUERY RULES:
 - ENGLISH. Aesthetic keywords. No plastic stock.
 
 VIDEO QUERY RULES:
-- ENGLISH. POV, handheld, cinematic.
+- ENGLISH. POV, handheld, cinematic. Max 3 words for query (e.g., "woman luxury spa").
+- LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic (e.g. "Scene 1: The Hook/Detail", "Scene 2: Over the shoulder interaction"). Compose a deeply connected cinematic storyboard.
 
 POST COMPOSER RULES:
 - Generate exactly 3 slides for the core campaign.
@@ -143,6 +144,9 @@ const VIDEO_SOURCES = {
   pexels_video: {
     name: "Pexels Video", icon: "▶", color: "#05A081",
     webUrl: (q) => `https://www.pexels.com/search/videos/${encodeURIComponent(q)}/`,
+    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3`,
+    headers: () => ({ Authorization: API_KEYS.pexels }),
+    parse: (d) => (d.videos || []).map(v => ({ id: v.id, videoUrl: v.video_files?.[0]?.link, image: v.image, author: v.user?.name, link: v.url })),
   },
   coverr: {
     name: "Coverr", icon: "C", color: "#1A1A2E",
@@ -151,12 +155,29 @@ const VIDEO_SOURCES = {
   pixabay_video: {
     name: "Pixabay Video", icon: "X", color: "#00AB6C",
     webUrl: (q) => `https://pixabay.com/videos/search/${encodeURIComponent(q)}/`,
+    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3`,
+    headers: () => ({}),
+    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.tiny?.url || h.videos?.medium?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
   },
   pinterest_video: {
     name: "Pinterest Video", icon: "P", color: "#E60023",
     webUrl: (q) => `https://www.pinterest.com/search/videos/?q=${encodeURIComponent(q)}&rs=typed`,
   },
 };
+
+// ─────────────────────────────────────────────────
+// API VIDEO FETCHER
+// ─────────────────────────────────────────────────
+async function fetchVideos(query, sourceKey) {
+  const src = VIDEO_SOURCES[sourceKey];
+  if (!src?.apiUrl || !API_KEYS[sourceKey.split("_")[0]]) return null;
+  try {
+    const res = await fetch(src.apiUrl(query), { headers: src.headers() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return src.parse(data);
+  } catch { return null; }
+}
 
 const EXAMPLES = [
   "Lancio campagna Instagram per brand di skincare naturale. Target: donne 25-35, tono soft e autentico.",
@@ -579,6 +600,54 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
 // ─────────────────────────────────────────────────
 // TAB: VIDEO STORYTELLING
 // ─────────────────────────────────────────────────
+function SceneVideoPlayer({ query, sourceKey }) {
+  const [videos, setVideos] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const src = VIDEO_SOURCES[sourceKey];
+  const apiKeyKey = sourceKey.split("_")[0];
+  const canFetch = src?.apiUrl && API_KEYS[apiKeyKey];
+
+  useEffect(() => {
+    if (!query || !canFetch) { setVideos(null); return; }
+    let active = true;
+    setLoading(true);
+    fetchVideos(query, sourceKey).then(res => {
+      if (active) { setVideos(res); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [query, sourceKey, canFetch]);
+
+  if (!canFetch) {
+    return (
+      <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {Object.entries(VIDEO_SOURCES).map(([key, s]) => (
+          <a key={key} href={s.webUrl(query)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(26,26,46,0.12)", textDecoration: "none", fontSize: 9, color: sourceKey === key ? "#fff" : "#666", background: sourceKey === key ? s.color : "transparent", fontFamily: "'JetBrains Mono', monospace" }}>{s.name}</a>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {loading ? (
+        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Cerco footage "{query}" su {src.name}...</div>
+      ) : videos && videos.length > 0 ? (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {videos.slice(0,3).map(v => (
+            <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
+              <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace" }}>{v.author || "Creator"}</div>
+              <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 12 }}>↗</a>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 10, color: "#999" }}>Nessun video trovato per "{query}"</div>
+      )}
+    </div>
+  );
+}
+
 function VideoTab({ data }) {
   const vs = data.video_storytelling;
   const [lang, setLang] = useState("it");
@@ -663,19 +732,9 @@ function VideoTab({ data }) {
               {s.search_query && (
                 <div style={{ marginTop: 4 }}>
                   <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1A1A2E", marginBottom: 5, opacity: 0.5 }}>
-                    Cerca footage: "{s.search_query}"
+                    Footage: "{s.search_query}"
                   </div>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
-                      <a key={key} href={src.webUrl(s.search_query)} target="_blank" rel="noopener noreferrer"
-                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(26,26,46,0.12)", textDecoration: "none", fontSize: 9, color: videoSource === key ? "#fff" : "#666", background: videoSource === key ? src.color : "transparent", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s" }}
-                        onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
-                        onMouseLeave={e => { if (videoSource !== key) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "rgba(26,26,46,0.12)"; } }}>
-                        <span style={{ width: 14, height: 14, borderRadius: 3, background: videoSource === key ? "rgba(255,255,255,0.2)" : src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
-                        {src.name}
-                      </a>
-                    ))}
-                  </div>
+                  <SceneVideoPlayer query={s.search_query} sourceKey={videoSource} />
                 </div>
               )}
             </div>
