@@ -4,6 +4,7 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/canva-upload.js": { "maxDuration": 60 }
+    "api/canva-upload.js": { "maxDuration": 60 },
+    "api/canva-test.js":   { "maxDuration": 30 }
   }
 }
