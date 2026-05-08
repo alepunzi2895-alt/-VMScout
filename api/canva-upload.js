@@ -68,24 +68,23 @@ export default async function handler(req, res) {
     const isVideo  = mimeType.startsWith("video/");
     const ext      = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
 
-    // Per la spec Canva Connect API:
-    // Asset-Upload-Metadata = base64url( JSON.stringify({ name_base64: base64url(filename) }) )
-    const nameB64  = Buffer.from(name + ext).toString("base64url");
+    // Canva Connect API spec:
+    // - name_base64 : regular base64 (with + / = padding), NOT base64url
+    // - Asset-Upload-Metadata header: base64url of the full JSON object
+    const nameB64  = Buffer.from(name + ext).toString("base64");
     const nameMeta = Buffer.from(JSON.stringify({ name_base64: nameB64 })).toString("base64url");
 
-    const buf  = await mediaRes.arrayBuffer();
-    // Use Blob so fetch sets Content-Type automatically from blob.type —
-    // avoids any conflict from manually setting the header.
-    const blob = new Blob([buf], { type: mimeType });
+    const bodyBuf = Buffer.from(await mediaRes.arrayBuffer());
 
     const r = await fetch(`${CANVA_API}/asset-uploads`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        "Authorization":         `Bearer ${token}`,
+        "Content-Type":          mimeType,
+        "Content-Length":        String(bodyBuf.length),
         "Asset-Upload-Metadata": nameMeta,
-        // Content-Type intentionally omitted: fetch derives it from the Blob
       },
-      body: blob,
+      body: bodyBuf,
     });
 
     const text = await r.text();
@@ -93,10 +92,11 @@ export default async function handler(req, res) {
     try { d = JSON.parse(text); } catch { d = { raw: text }; }
 
     if (!r.ok) {
-      console.error("[canva-upload] Canva error", r.status, d);
+      console.error("[canva-upload] error", r.status, "mime:", mimeType, "len:", bodyBuf.length, "body:", text.slice(0, 400));
       return res.status(r.status).json({
         error: true,
-        message: d.message || d.code || text.slice(0, 200),
+        message: d.message || d.code || text.slice(0, 300),
+        _debug: { mimeType, contentLength: bodyBuf.length },
       });
     }
 
