@@ -108,6 +108,21 @@ export default async function handler(req, res) {
     }
 
     const assetId = job.asset?.id;
+
+    // ── 3. Move to Uploads folder so it appears in Canva's Upload tab ─
+    if (assetId) {
+      try {
+        await fetch(`${CANVA_API_BASE}/folders/move`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ to_folder_id: "uploads", item_id: assetId }),
+        });
+        console.log("[canva-upload] moved to uploads folder", assetId);
+      } catch (moveErr) {
+        console.warn("[canva-upload] move failed (non-fatal)", moveErr.message);
+      }
+    }
+
     return res.status(200).json({ ok: true, jobId, status: job.status, assetId });
 
   } catch (err) {
