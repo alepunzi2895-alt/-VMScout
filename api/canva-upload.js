@@ -73,16 +73,19 @@ export default async function handler(req, res) {
     const nameB64  = Buffer.from(name + ext).toString("base64url");
     const nameMeta = Buffer.from(JSON.stringify({ name_base64: nameB64 })).toString("base64url");
 
-    const buf = await mediaRes.arrayBuffer();
+    const buf  = await mediaRes.arrayBuffer();
+    // Use Blob so fetch sets Content-Type automatically from blob.type —
+    // avoids any conflict from manually setting the header.
+    const blob = new Blob([buf], { type: mimeType });
 
     const r = await fetch(`${CANVA_API}/asset-uploads`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": mimeType,
         "Asset-Upload-Metadata": nameMeta,
+        // Content-Type intentionally omitted: fetch derives it from the Blob
       },
-      body: buf,
+      body: blob,
     });
 
     const text = await r.text();

@@ -248,12 +248,14 @@ function StatusBadge({ status }) {
 // CANVA UPLOAD BUTTON — riutilizzabile per foto e video
 // ─────────────────────────────────────────────────
 function CanvaUploadBtn({ url }) {
-  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [status, setStatus]   = useState("idle"); // idle | loading | done | error
+  const [errMsg, setErrMsg]   = useState("");
 
   async function handleUpload() {
     setStatus("loading");
+    setErrMsg("");
     try {
-      const res = await fetch("/api/canva-upload", {
+      const res  = await fetch("/api/canva-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, name: "luxy-media" }),
@@ -265,12 +267,14 @@ function CanvaUploadBtn({ url }) {
         window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
         setStatus("idle");
       } else {
+        setErrMsg(data.message || `HTTP ${res.status}`);
         setStatus("error");
-        setTimeout(() => setStatus("idle"), 3000);
+        setTimeout(() => setStatus("idle"), 6000);
       }
-    } catch {
+    } catch (e) {
+      setErrMsg(e.message || "network error");
       setStatus("error");
-      setTimeout(() => setStatus("idle"), 3000);
+      setTimeout(() => setStatus("idle"), 6000);
     }
   }
 
@@ -283,7 +287,11 @@ function CanvaUploadBtn({ url }) {
   if (status === "done")
     return <span style={{ ...base, background: "#3A7A3A", color: "#9EE49E" }}>✓ In Canva</span>;
   if (status === "error")
-    return <span style={{ ...base, background: "#7A3A3A", color: "#E49E9E" }}>⚠ Errore</span>;
+    return (
+      <span title={errMsg} style={{ ...base, background: "#7A3A3A", color: "#E49E9E", cursor: "help", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        ⚠ {errMsg || "Errore"}
+      </span>
+    );
 
   return (
     <button onClick={handleUpload} disabled={status === "loading"}
