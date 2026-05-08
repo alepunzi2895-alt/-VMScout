@@ -47,7 +47,12 @@ const VIDEO_SOURCES = {
     webUrl: (q) => `https://www.pexels.com/search/videos/${encodeURIComponent(q)}/`,
     apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3`,
     headers: () => ({ Authorization: API_KEYS.pexels }),
-    parse: (d) => (d.videos || []).map(v => ({ id: v.id, videoUrl: v.video_files?.[0]?.link, image: v.image, author: v.user?.name, link: v.url })),
+    parse: (d) => (d.videos || []).map(v => {
+      const files = (v.video_files || []).filter(f => f.file_type === "video/mp4");
+      const preview = files.find(f => f.quality === "hd") || files[0];
+      const upload  = [...files].sort((a, b) => (a.width || 9999) - (b.width || 9999))[0] || files[0];
+      return { id: v.id, videoUrl: preview?.link, uploadUrl: upload?.link, image: v.image, author: v.user?.name, link: v.url };
+    }),
   },
   coverr: {
     name: "Coverr", icon: "C", color: "#1A1A2E",
@@ -245,6 +250,120 @@ function StatusBadge({ status }) {
   );
 }
 
+// ─────────────────────────────────────────────────
+// CANVA UPLOAD BUTTON — riutilizzabile per foto e video
+// ─────────────────────────────────────────────────
+function CanvaUploadBtn({ url }) {
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+
+  async function handleUpload() {
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/canva-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, name: "luxy-media" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setStatus("done");
+      } else if (data.error === "CANVA_NOT_CONNECTED") {
+        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+        setStatus("idle");
+      } else {
+        setStatus("error");
+        setTimeout(() => setStatus("idle"), 3000);
+      }
+    } catch {
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
+    }
+  }
+
+  const base = {
+    padding: "4px 8px", borderRadius: 5, fontSize: 9, fontWeight: 700,
+    fontFamily: "'Montserrat', sans-serif", cursor: "pointer", border: "none",
+    display: "flex", alignItems: "center", gap: 3,
+  };
+
+  if (status === "done")
+    return <span style={{ ...base, background: "#3A7A3A", color: "#9EE49E" }}>✓ In Canva</span>;
+  if (status === "error")
+    return <span style={{ ...base, background: "#7A3A3A", color: "#E49E9E" }}>⚠ Errore</span>;
+
+  return (
+    <button onClick={handleUpload} disabled={status === "loading"}
+      style={{ ...base, background: `${CANVA_TEAL}CC`, color: "#fff", opacity: status === "loading" ? 0.6 : 1 }}>
+      {status === "loading" ? "⏳" : "⬆"} Canva
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// PEXELS PHOTO STRIP — foto reali con upload a Canva
+// ─────────────────────────────────────────────────
+function PexelsPhotoStrip({ query, vertical = false }) {
+  const [photos, setPhotos]   = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!query || !API_KEYS.pexels) { setPhotos(null); return; }
+    let active = true;
+    setLoading(true);
+    fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=4&orientation=${vertical ? "portrait" : "landscape"}`,
+      { headers: { Authorization: API_KEYS.pexels } }
+    )
+      .then(r => r.json())
+      .then(d => { if (active) { setPhotos(d.photos || []); setLoading(false); } })
+      .catch(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [query, vertical]);
+
+  if (!API_KEYS.pexels) return null;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 6 }}>
+        📸 Foto Pexels
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic" }}>Cerco foto...</div>
+      ) : photos && photos.length > 0 ? (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {photos.slice(0, 4).map(p => (
+            <div key={p.id} style={{
+              width: vertical ? 90 : 120, flexShrink: 0, borderRadius: 8, overflow: "hidden",
+              background: "#000", position: "relative",
+              aspectRatio: vertical ? "9/16" : "4/3",
+              border: `1px solid ${GOLD}20`,
+            }}>
+              <img src={p.src.medium} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "18px 4px 5px",
+                background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
+                display: "flex", justifyContent: "center",
+              }}>
+                <CanvaUploadBtn url={p.src.large2x || p.src.large} />
+              </div>
+              <a href={p.url} target="_blank" rel="noopener noreferrer"
+                style={{
+                  position: "absolute", top: 4, right: 4,
+                  width: 18, height: 18, background: "rgba(0,0,0,0.55)", borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: OFF_WHITE, textDecoration: "none", fontSize: 10,
+                }}>↗</a>
+            </div>
+          ))}
+        </div>
+      ) : photos !== null ? (
+        <div style={{ fontSize: 10, color: WARM_GREY }}>Nessuna foto per "{query}"</div>
+      ) : null}
+    </div>
+  );
+}
+
 function TypingDots() {
   return (
     <div style={{ display: "flex", gap: 5, padding: "6px 0", alignItems: "center" }}>
@@ -283,7 +402,10 @@ function SceneVideoPlayer({ query, sourceKey = "pexels_video" }) {
           {videos.slice(0,3).map(v => (
             <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16", border: `1px solid ${GOLD}20` }}>
               <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: OFF_WHITE, fontFamily: "'Montserrat', sans-serif" }}>{v.author || "Creator"}</div>
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "20px 6px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.85))", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 8, color: OFF_WHITE, fontFamily: "'Montserrat', sans-serif" }}>{v.author || "Creator"}</span>
+                {v.uploadUrl && <CanvaUploadBtn url={v.uploadUrl} />}
+              </div>
               <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: OFF_WHITE, textDecoration: "none", fontSize: 12 }}>↗</a>
             </div>
           ))}
@@ -519,6 +641,7 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                       );
                     })}
                   </div>
+                  <PexelsPhotoStrip query={output.search_query} vertical={canvaType !== "post"} />
                   <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
                 </div>
               )}
