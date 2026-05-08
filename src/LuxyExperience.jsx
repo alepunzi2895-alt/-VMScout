@@ -446,6 +446,7 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
     output.format === "scene" ? "reel" : output.format === "story" ? "story" : "post"
   );
   const [canvaLoading, setCanvaLoading] = useState(false);
+  const [canvaUrl, setCanvaUrl] = useState(null);
 
   const getCaption = () => {
     if (!output.caption) return "";
@@ -575,62 +576,79 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
               <span style={{ fontSize: 11, color: "#5A9A5A", fontWeight: 600, padding: "7px 0" }}>✓ Salvato nel DB</span>
             )}
 
-            {/* Canva export — template selector + button */}
+            {/* Canva — auto-create design with Pexels background */}
             <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
+              {/* Format selector */}
               {[
-                { id: "post",  label: "1:1",  icon: "📸" },
-                { id: "story", label: "9:16", icon: "📱" },
-                { id: "reel",  label: "Reel", icon: "🎬" },
+                { id: "post",  icon: "📸", label: "1:1"   },
+                { id: "story", icon: "📱", label: "Story" },
+                { id: "reel",  icon: "🎬", label: "Reel"  },
               ].map(t => (
-                <button key={t.id} onClick={() => setCanvaType(t.id)}
+                <button key={t.id} onClick={() => { setCanvaType(t.id); setCanvaUrl(null); }}
+                  title={t.label}
                   style={{
-                    padding: "4px 8px", fontSize: 9, borderRadius: 5, cursor: "pointer",
-                    border: `1px solid ${canvaType === t.id ? CANVA_TEAL : CANVA_TEAL + "30"}`,
-                    background: canvaType === t.id ? `${CANVA_TEAL}20` : "transparent",
+                    padding: "4px 7px", fontSize: 8, borderRadius: 4, cursor: "pointer",
+                    border: `1px solid ${canvaType === t.id ? CANVA_TEAL : CANVA_TEAL + "25"}`,
+                    background: canvaType === t.id ? `${CANVA_TEAL}18` : "transparent",
                     color: canvaType === t.id ? CANVA_TEAL : WARM_GREY,
                     fontFamily: "'Montserrat', sans-serif",
                   }}>
-                  {t.icon} {t.label}
+                  {t.icon}
                 </button>
               ))}
-              <button disabled={canvaLoading} onClick={async () => {
-                const templateId = canvaTemplates?.[canvaType];
-                if (!templateId || templateId.startsWith("INSERISCI")) {
-                  alert(`Configura il Template ID Canva per "${canvaType}" nella tab Memoria → categoria Canva.`);
-                  return;
-                }
-                setCanvaLoading(true);
-                try {
-                  const res = await fetch("/api/canva-export", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      caption,
-                      hashtags,
-                      cta: getCta(),
-                      imageUrl: null,
-                      templateId,
-                    }),
-                  });
-                  const data = await res.json();
-                  if (data.ok) window.open(data.url, "_blank");
-                  else if (data.error === "CANVA_NOT_CONNECTED") {
-                    window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-                  } else {
-                    alert(data.message || "Errore Canva");
+
+              {canvaUrl ? (
+                /* Design already created → show open link */
+                <a href={canvaUrl} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    padding: "7px 14px", borderRadius: 6, textDecoration: "none",
+                    border: `1px solid #5A9A5A80`, background: "#5A9A5A18",
+                    color: "#5A9A5A", fontSize: 11, fontWeight: 600,
+                    fontFamily: "'Montserrat', sans-serif",
+                  }}>
+                  ✓ Apri Canva →
+                </a>
+              ) : (
+                /* Create button */
+                <button disabled={canvaLoading} onClick={async () => {
+                    setCanvaLoading(true);
+                    try {
+                      const res = await fetch("/api/canva-create", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          caption,
+                          cta:          getCta(),
+                          search_query: output.search_query || "",
+                          format:       canvaType,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (data.ok) {
+                        setCanvaUrl(data.url);
+                      } else if (data.error === "CANVA_NOT_CONNECTED") {
+                        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+                      } else {
+                        alert(data.message || "Errore creazione design Canva");
+                      }
+                    } finally {
+                      setCanvaLoading(false);
+                    }
+                  }}
+                  style={{
+                    padding: "7px 14px", borderRadius: 6,
+                    cursor: canvaLoading ? "wait" : "pointer",
+                    border: `1px solid ${CANVA_TEAL}50`, background: `${CANVA_TEAL}15`,
+                    color: CANVA_TEAL, fontSize: 11, fontWeight: 600,
+                    fontFamily: "'Montserrat', sans-serif", opacity: canvaLoading ? 0.6 : 1,
+                    display: "flex", alignItems: "center", gap: 5,
+                  }}>
+                  {canvaLoading
+                    ? <><span style={{ fontSize: 9 }}>⏳</span> Creo...</>
+                    : <><span style={{ fontSize: 9 }}>✦</span> Crea Design</>
                   }
-                } finally {
-                  setCanvaLoading(false);
-                }
-              }}
-                style={{
-                  padding: "7px 14px", borderRadius: 6, cursor: canvaLoading ? "wait" : "pointer",
-                  border: `1px solid ${CANVA_TEAL}50`, background: `${CANVA_TEAL}15`,
-                  color: CANVA_TEAL, fontSize: 11, fontWeight: 600,
-                  fontFamily: "'Montserrat', sans-serif", opacity: canvaLoading ? 0.6 : 1,
-                }}>
-                {canvaLoading ? "..." : "✦ Canva"}
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
