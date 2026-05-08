@@ -74,20 +74,6 @@ async function uploadToCanva(imageUrl, token) {
   } catch { return null; }
 }
 
-async function copyTemplate(templateId, title, token) {
-  // Try /copy first, then /copies
-  for (const path of [`${CANVA_API}/designs/${templateId}/copy`, `${CANVA_API}/designs/${templateId}/copies`]) {
-    const r = await fetch(path, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    });
-    const d = await r.json();
-    if (d.design?.id) return d.design.id;
-  }
-  throw new Error("Copia template fallita — verifica che il design ID sia corretto.");
-}
-
 async function startSession(designId, token) {
   const r = await fetch(`${CANVA_API}/designs/${designId}/editing-sessions`, {
     method: "POST",
@@ -210,12 +196,10 @@ export default async function handler(req, res) {
     // 2. Upload to Canva assets
     const assetId = imageUrl ? await uploadToCanva(imageUrl, token) : null;
 
-    // 3. Copy template
-    const templateId = TEMPLATE_IDS[format] || TEMPLATE_IDS.post;
-    const title      = `luxy.exp — ${new Date().toISOString().slice(0, 10)}`;
-    const designId   = await copyTemplate(templateId, title, token);
+    // 3. Resolve template ID (edit directly — Connect API has no public copy endpoint)
+    const designId = TEMPLATE_IDS[format] || TEMPLATE_IDS.post;
 
-    // 4. Start editing session (returns element structure of the copy)
+    // 4. Start editing session (returns element structure)
     const sessData = await startSession(designId, token);
     const sessionId = sessData.session_id
       || sessData.editing_session?.id
