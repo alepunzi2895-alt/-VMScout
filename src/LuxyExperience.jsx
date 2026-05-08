@@ -296,7 +296,7 @@ function CanvaUploadBtn({ url }) {
 // ─────────────────────────────────────────────────
 // PEXELS PHOTO STRIP — foto reali con upload a Canva
 // ─────────────────────────────────────────────────
-function PexelsPhotoStrip({ query, vertical = false }) {
+function PexelsPhotoStrip({ query, vertical = false, count = 4 }) {
   const [photos, setPhotos]   = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -305,14 +305,14 @@ function PexelsPhotoStrip({ query, vertical = false }) {
     let active = true;
     setLoading(true);
     fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=4&orientation=${vertical ? "portrait" : "landscape"}`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=${vertical ? "portrait" : "landscape"}`,
       { headers: { Authorization: API_KEYS.pexels } }
     )
       .then(r => r.json())
       .then(d => { if (active) { setPhotos(d.photos || []); setLoading(false); } })
       .catch(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [query, vertical]);
+  }, [query, vertical, count]);
 
   if (!API_KEYS.pexels) return null;
 
@@ -325,7 +325,7 @@ function PexelsPhotoStrip({ query, vertical = false }) {
         <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic" }}>Cerco foto...</div>
       ) : photos && photos.length > 0 ? (
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-          {photos.slice(0, 4).map(p => (
+          {photos.slice(0, count).map(p => (
             <div key={p.id} style={{
               width: vertical ? 90 : 120, flexShrink: 0, borderRadius: 8, overflow: "hidden",
               background: "#000", position: "relative",
@@ -643,8 +643,16 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                       );
                     })}
                   </div>
-                  <PexelsPhotoStrip query={output.search_query} vertical={canvaType !== "post"} />
-                  <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
+                  {/* 1 foto per slide (carosello/post), più per altri formati */}
+                  <PexelsPhotoStrip
+                    query={output.search_query}
+                    vertical={output.format === "story" || output.format === "reel" || output.format === "scene"}
+                    count={1}
+                  />
+                  {/* Video solo per reel, story, scene — non per post/carosello */}
+                  {(output.format === "reel" || output.format === "story" || output.format === "scene") && (
+                    <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
+                  )}
                 </div>
               )}
             </div>
@@ -1122,7 +1130,7 @@ export default function LuxyExperience() {
           type: contentType.includes("piano") ? "strategy" : contentType.includes("campagna") ? "campaign" : "content",
           prompt: finalPrompt,
           result_json: parsed,
-          language,
+          language: "all",
           tags
         });
         await Promise.all([loadStats(), loadHistory()]);

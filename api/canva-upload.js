@@ -68,11 +68,10 @@ export default async function handler(req, res) {
     const isVideo  = mimeType.startsWith("video/");
     const ext      = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
 
-    // Asset-Upload-Metadata must be plain JSON (NOT base64 of JSON),
-    // with only the filename value base64-encoded.
-    const nameMeta = JSON.stringify({
-      name_base64: Buffer.from(name + ext).toString("base64"),
-    });
+    // Per la spec Canva Connect API:
+    // Asset-Upload-Metadata = base64url( JSON.stringify({ name_base64: base64url(filename) }) )
+    const nameB64  = Buffer.from(name + ext).toString("base64url");
+    const nameMeta = Buffer.from(JSON.stringify({ name_base64: nameB64 })).toString("base64url");
 
     const buf = await mediaRes.arrayBuffer();
 
