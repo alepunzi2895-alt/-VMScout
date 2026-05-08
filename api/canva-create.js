@@ -77,9 +77,13 @@ async function uploadToCanva(imageUrl, token) {
 async function startSession(designId, token) {
   const r = await fetch(`${CANVA_API}/designs/${designId}/editing-sessions`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({}),
   });
-  if (!r.ok) throw new Error(`Editing session non avviata: ${r.status}`);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(`Editing session non avviata: ${r.status} — ${body.message || body.code || JSON.stringify(body)}`);
+  }
   return r.json();
 }
 
