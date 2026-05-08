@@ -121,7 +121,8 @@ const getLuxySystemPrompt = (memory, contentType) => {
 
   const overrideRules = contentType === "video_storyboard"
     ? "LUXY STORYTELLING: Genera uno storyboard video. L'array 'outputs' DEVE rappresentare le SCENE del video (id: 1 = Scena 1). Per ogni scena: 'visual_description' (azione chiara), 'search_query' (massimo 3 parole in inglese esattissime per trovare il footage), 'caption' (il voiceover o testo in overlay)."
-    : "Per piano editoriale, ogni output è un giorno. Per hashtag strategy, outputs = gruppi hashtag. Per bio profilo, outputs = 3 bio.";
+    : `Per piano editoriale, ogni output è un giorno. Per hashtag strategy, outputs = gruppi hashtag. Per bio profilo, outputs = 3 bio.
+CAROSELLO: Se l'output è un carosello (title contiene "carosello" o descrivi slide multiple), DEVI includere il campo "slides" con un oggetto per ogni slide: { "n": numero, "title": "Titolo overlay (max 5 parole IT)", "overlay": "Sottotitolo breve (max 8 parole IT)", "search_query": "2-3 parole EN specifiche e DIVERSE per questa slide" }. Le search_query DEVONO essere uniche per ogni slide (es: S1="infinity pool sunset ibiza", S2="luxury black car villa entrance", S3="private yacht turquoise sea", ecc.).`;
 
   return `Sei il Senior Marketing Strategist di Luxy Experience, un servizio concierge di lusso con base a Ibiza.
 ${memoryContext}
@@ -151,6 +152,9 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "cta": { "en": "...", "es": "...", "it": "..." },
       "visual_description": "Descrizione dell'immagine ideale",
       "search_query": "english search query for stock photos",
+      "slides": [
+        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "specific EN query slide 1" }
+      ],
       "best_time": "18:30",
       "platform_tip": "Suggerimento specifico piattaforma",
       "mood": "aspirational|authentic|exclusive|playful"
@@ -362,6 +366,186 @@ function PexelsPhotoStrip({ query, vertical = false, count = 4 }) {
       ) : photos !== null ? (
         <div style={{ fontSize: 10, color: WARM_GREY }}>Nessuna foto per "{query}"</div>
       ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// PHOTO THUMB — miniatura con badge sorgente + upload + link
+// ─────────────────────────────────────────────────
+function PhotoThumb({ imgUrl, uploadUrl, linkUrl, source, sourceColor, vertical }) {
+  return (
+    <div style={{
+      width: vertical ? 80 : 110, flexShrink: 0, borderRadius: 8, overflow: "hidden",
+      background: "#000", position: "relative",
+      aspectRatio: vertical ? "9/16" : "4/3",
+      border: `1px solid ${GOLD}20`,
+    }}>
+      <img src={imgUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+      <div style={{
+        position: "absolute", top: 4, left: 4, fontSize: 7,
+        padding: "1px 5px", borderRadius: 3,
+        background: `${sourceColor || "#333"}CC`, color: "#fff",
+        fontFamily: "'Montserrat', sans-serif", fontWeight: 700,
+      }}>
+        {source}
+      </div>
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        padding: "18px 4px 5px",
+        background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+      }}>
+        <CanvaUploadBtn url={uploadUrl} />
+        <a href={linkUrl} target="_blank" rel="noopener noreferrer"
+          style={{
+            width: 16, height: 16, background: "rgba(0,0,0,0.55)", borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: OFF_WHITE, textDecoration: "none", fontSize: 9,
+          }}>↗</a>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// SLIDE PHOTO ROW — singola slide del carosello
+// ─────────────────────────────────────────────────
+function SlidePhotoRow({ slide, vertical = false }) {
+  const [pexels,  setPexels]  = useState(null);
+  const [pixabay, setPixabay] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!slide.search_query) { setLoading(false); return; }
+    const orientation = vertical ? "portrait" : "landscape";
+    let done = 0;
+    const finish = () => { if (++done === 2) setLoading(false); };
+
+    if (API_KEYS.pexels) {
+      fetch(
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(slide.search_query)}&per_page=1&orientation=${orientation}`,
+        { headers: { Authorization: API_KEYS.pexels } }
+      )
+        .then(r => r.json())
+        .then(d => { setPexels(d.photos?.[0] || null); finish(); })
+        .catch(finish);
+    } else finish();
+
+    if (API_KEYS.pixabay) {
+      fetch(
+        `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(slide.search_query)}&per_page=3&image_type=photo&orientation=${vertical ? "vertical" : "horizontal"}&safesearch=true`
+      )
+        .then(r => r.json())
+        .then(d => {
+          const hits = d.hits || [];
+          // pick the second result to avoid overlap with Pexels' first result
+          setPixabay(hits[1] || hits[0] || null);
+          finish();
+        })
+        .catch(finish);
+    } else finish();
+  }, [slide.search_query, vertical]);
+
+  return (
+    <div style={{
+      display: "flex", gap: 10, alignItems: "flex-start",
+      padding: "10px 0", borderBottom: `1px solid ${GOLD}08`,
+    }}>
+      {/* Numero slide */}
+      <div style={{
+        width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+        background: `${GOLD}15`, border: `1px solid ${GOLD}40`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 10, fontWeight: 700, color: GOLD,
+        fontFamily: "'Montserrat', sans-serif", marginTop: 2,
+      }}>
+        {slide.n}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Titolo + overlay testo suggerito */}
+        {(slide.title || slide.overlay) && (
+          <div style={{ marginBottom: 8 }}>
+            {slide.title && (
+              <div style={{ fontSize: 12, color: OFF_WHITE, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif" }}>
+                {slide.title}
+              </div>
+            )}
+            {slide.overlay && (
+              <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic" }}>
+                {slide.overlay}
+              </div>
+            )}
+            {slide.title && (
+              <div style={{ marginTop: 4 }}>
+                <CopyBtn text={slide.title + (slide.overlay ? "\n" + slide.overlay : "")} small />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Foto */}
+        {loading ? (
+          <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic" }}>Cerco foto...</div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {pexels && (
+              <PhotoThumb
+                imgUrl={pexels.src.medium}
+                uploadUrl={pexels.src.large2x || pexels.src.large}
+                linkUrl={pexels.url}
+                source="Pexels"
+                sourceColor="#05A081"
+                vertical={vertical}
+              />
+            )}
+            {pixabay && (
+              <PhotoThumb
+                imgUrl={pixabay.webformatURL}
+                uploadUrl={pixabay.webformatURL}
+                linkUrl={pixabay.pageURL}
+                source="Pixabay"
+                sourceColor="#00AB6C"
+                vertical={vertical}
+              />
+            )}
+            {/* Pinterest — link diretto con query specifica della slide */}
+            <a href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(slide.search_query + " luxury")}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                width: vertical ? 80 : 110, flexShrink: 0,
+                aspectRatio: vertical ? "9/16" : "4/3",
+                borderRadius: 8, border: `1px dashed #E6002350`,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                textDecoration: "none", gap: 5, background: "#E6002308",
+              }}>
+              <span style={{ fontSize: 20, color: "#E60023" }}>P</span>
+              <span style={{ fontSize: 8, color: "#E60023", fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>Pinterest</span>
+              <span style={{ fontSize: 7, color: WARM_GREY, textAlign: "center", padding: "0 6px", lineHeight: 1.4 }}>
+                "{slide.search_query}" ↗
+              </span>
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// CAROUSEL SLIDE STRIP — tutte le slide con foto
+// ─────────────────────────────────────────────────
+function CarouselSlideStrip({ slides, vertical = false }) {
+  if (!slides?.length) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 4 }}>
+        📋 Slide — Pexels · Pixabay · Pinterest
+      </div>
+      {slides.map(slide => (
+        <SlidePhotoRow key={slide.n} slide={slide} vertical={vertical} />
+      ))}
     </div>
   );
 }
@@ -663,15 +847,23 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                       );
                     })}
                   </div>
-                  {/* N foto per carosello (1 per slide), 1 per post singolo */}
-                  <PexelsPhotoStrip
-                    query={output.search_query}
-                    vertical={output.format === "story" || output.format === "reel" || output.format === "scene"}
-                    count={detectSlideCount(output) || 1}
-                  />
-                  {/* Video solo per reel, story, scene — non per post/carosello */}
-                  {(output.format === "reel" || output.format === "story" || output.format === "scene") && (
-                    <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
+                  {/* Carosello: per-slide con Pexels + Pixabay + Pinterest */}
+                  {output.slides?.length > 0 ? (
+                    <CarouselSlideStrip
+                      slides={output.slides}
+                      vertical={output.format === "story" || output.format === "reel"}
+                    />
+                  ) : (
+                    <>
+                      <PexelsPhotoStrip
+                        query={output.search_query}
+                        vertical={output.format === "story" || output.format === "reel" || output.format === "scene"}
+                        count={detectSlideCount(output) || 1}
+                      />
+                      {(output.format === "reel" || output.format === "story" || output.format === "scene") && (
+                        <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
+                      )}
+                    </>
                   )}
                 </div>
               )}
