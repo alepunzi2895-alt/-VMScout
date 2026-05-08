@@ -188,6 +188,20 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ─── DELETE POST ─────────────────────────────────────────
+    if (action === "delete_post" && req.method === "DELETE") {
+      const { id } = req.body;
+      await db.execute({ sql: "DELETE FROM luxy_posts WHERE id=?", args: [id] });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ─── DELETE REQUEST ───────────────────────────────────────
+    if (action === "delete_request" && req.method === "DELETE") {
+      const { id } = req.body;
+      await db.execute({ sql: "DELETE FROM luxy_requests WHERE id=?", args: [id] });
+      return res.status(200).json({ ok: true });
+    }
+
     // ─── STATS ───────────────────────────────────────────────
     if (action === "stats") {
       const [req_count, post_count, approved] = await Promise.all([

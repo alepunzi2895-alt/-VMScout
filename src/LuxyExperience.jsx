@@ -868,8 +868,15 @@ function MemoryPanel({ memory, onUpdate }) {
 // ─────────────────────────────────────────────────
 // HISTORY PANEL
 // ─────────────────────────────────────────────────
-function HistoryPanel({ history }) {
+function HistoryPanel({ history, onDelete }) {
   const typeColors = { content: GOLD, strategy: "#5A9A9A", post: "#9A5A9A", campaign: "#9A7A5A" };
+  const [deleting, setDeleting] = useState(null);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    await onDelete(id);
+    setDeleting(null);
+  };
 
   return (
     <div>
@@ -893,6 +900,16 @@ function HistoryPanel({ history }) {
             <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${typeColors[h.type] || GOLD}20`, color: typeColors[h.type] || GOLD, fontWeight: 700, textTransform: "uppercase" }}>{h.type}</span>
             {h.language && <LuxyTag>{h.language}</LuxyTag>}
             <span style={{ fontSize: 10, color: "#555", marginLeft: "auto" }}>{h.created_at?.replace("T", " ").slice(0, 16)}</span>
+            <button
+              onClick={() => handleDelete(h.id)}
+              disabled={deleting === h.id}
+              title="Elimina"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#664", fontSize: 14, padding: "0 2px", opacity: deleting === h.id ? 0.4 : 0.6, lineHeight: 1 }}
+              onMouseEnter={e => e.currentTarget.style.color = "#E44"}
+              onMouseLeave={e => e.currentTarget.style.color = "#664"}
+            >
+              {deleting === h.id ? "…" : "✕"}
+            </button>
           </div>
           <div style={{ fontSize: 12, color: "#CCC", lineHeight: 1.5 }}>{h.prompt?.slice(0, 120)}{h.prompt?.length > 120 ? "..." : ""}</div>
           {h.tags && (
@@ -911,9 +928,16 @@ function HistoryPanel({ history }) {
 // ─────────────────────────────────────────────────
 // SAVED POSTS PANEL
 // ─────────────────────────────────────────────────
-function SavedPostsPanel({ posts, onStatusChange }) {
+function SavedPostsPanel({ posts, onStatusChange, onDelete }) {
   const [filterPlatform, setFilterPlatform] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [deleting, setDeleting] = useState(null);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    await onDelete(id);
+    setDeleting(null);
+  };
 
   const filtered = posts.filter(p =>
     (filterPlatform === "all" || p.platform === filterPlatform) &&
@@ -961,6 +985,16 @@ function SavedPostsPanel({ posts, onStatusChange }) {
             <LuxyTag>{post.platform}</LuxyTag>
             {post.language && <LuxyTag>{post.language}</LuxyTag>}
             <span style={{ fontSize: 10, color: "#444", marginLeft: "auto" }}>{post.created_at?.slice(0, 10)}</span>
+            <button
+              onClick={() => handleDelete(post.id)}
+              disabled={deleting === post.id}
+              title="Elimina"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#664", fontSize: 14, padding: "0 2px", opacity: deleting === post.id ? 0.4 : 0.6, lineHeight: 1 }}
+              onMouseEnter={e => e.currentTarget.style.color = "#E44"}
+              onMouseLeave={e => e.currentTarget.style.color = "#664"}
+            >
+              {deleting === post.id ? "…" : "✕"}
+            </button>
           </div>
           <div style={{ fontSize: 13, color: "#CCC", lineHeight: 1.6, marginBottom: 10, fontFamily: "'Cormorant Garamond', serif" }}>
             {post.caption?.slice(0, 150)}{post.caption?.length > 150 ? "..." : ""}
@@ -1187,6 +1221,16 @@ export default function LuxyExperience() {
     await dbCall("update_post", "PUT", { id, status });
     await loadPosts();
     await loadStats();
+  };
+
+  const handleDeletePost = async (id) => {
+    await dbCall("delete_post", "DELETE", { id });
+    await Promise.all([loadPosts(), loadStats()]);
+  };
+
+  const handleDeleteRequest = async (id) => {
+    await dbCall("delete_request", "DELETE", { id });
+    await Promise.all([loadHistory(), loadStats()]);
   };
 
   // Canva template IDs derived from brand memory
@@ -1504,14 +1548,14 @@ export default function LuxyExperience() {
         {/* ═══ TAB: STORICO ═══ */}
         {activeTab === "storico" && (
           <div style={{ animation: "luxyFade 0.3s ease-out" }}>
-            <HistoryPanel history={history} />
+            <HistoryPanel history={history} onDelete={handleDeleteRequest} />
           </div>
         )}
 
         {/* ═══ TAB: POST SALVATI ═══ */}
         {activeTab === "post" && (
           <div style={{ animation: "luxyFade 0.3s ease-out" }}>
-            <SavedPostsPanel posts={savedPosts} onStatusChange={handleStatusChange} />
+            <SavedPostsPanel posts={savedPosts} onStatusChange={handleStatusChange} onDelete={handleDeletePost} />
           </div>
         )}
 
