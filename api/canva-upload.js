@@ -34,6 +34,24 @@ async function getToken(db) {
   return row.access_token;
 }
 
+// Canva accepts only clean MIME types without parameters.
+// Pexels/CDNs sometimes return "application/octet-stream" or "image/jpeg; charset=utf-8".
+function normalizeContentType(raw, url = "") {
+  const base = (raw || "").split(";")[0].trim().toLowerCase();
+  if (base === "image/jpeg" || base === "image/jpg") return "image/jpeg";
+  if (base === "image/png")     return "image/png";
+  if (base === "image/webp")    return "image/webp";
+  if (base === "image/gif")     return "image/gif";
+  if (base === "video/mp4" || base === "video/mpeg" || base === "video/quicktime") return "video/mp4";
+  // Fallback: infer from URL path
+  const u = url.split("?")[0].toLowerCase();
+  if (u.endsWith(".mp4") || u.includes("/videos/")) return "video/mp4";
+  if (u.endsWith(".png"))  return "image/png";
+  if (u.endsWith(".webp")) return "image/webp";
+  if (u.endsWith(".gif"))  return "image/gif";
+  return "image/jpeg"; // safe default for Pexels photos
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
@@ -54,12 +72,15 @@ export default async function handler(req, res) {
     });
     if (!mediaRes.ok) throw new Error(`Download media fallito: ${mediaRes.status}`);
 
-    const contentType = mediaRes.headers.get("content-type") || "image/jpeg";
-    const isVideo     = contentType.startsWith("video/");
-    const ext         = isVideo ? ".mp4" : ".jpg";
-    const nameMeta    = JSON.stringify({
-      name_base64: Buffer.from(name + ext).toString("base64"),
-    });
+    const rawType    = mediaRes.headers.get("content-type") || "";
+    const mimeType   = normalizeContentType(rawType, url);
+    const isVideo    = mimeType.startsWith("video/");
+    const ext        = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
+
+    // Asset-Upload-Metadata: base64-encoded JSON with base64-encoded filename
+    const nameMeta = Buffer.from(
+      JSON.stringify({ name_base64: Buffer.from(name + ext).toString("base64") })
+    ).toString("base64");
 
     const buf = await mediaRes.arrayBuffer();
 
@@ -67,7 +88,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": contentType,
+        "Content-Type": mimeType,
         "Asset-Upload-Metadata": nameMeta,
       },
       body: buf,
