@@ -1,6 +1,11 @@
 import { getDb } from "./db.js";
+import https from "https";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
-const CANVA_API = "https://api.canva.com/rest/v1";
+const CANVA_API_HOST = "api.canva.com";
+const CANVA_API_PATH = "/rest/v1/asset-uploads";
 
 async function getToken(db) {
   const r = await db.execute(
@@ -17,7 +22,7 @@ async function getToken(db) {
     const creds = Buffer.from(
       `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`
     ).toString("base64");
-    const tr = await fetch(`${CANVA_API}/oauth/token`, {
+    const tr = await fetch(`https://${CANVA_API_HOST}/rest/v1/oauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": `Basic ${creds}` },
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
@@ -34,16 +39,22 @@ async function getToken(db) {
   return row.access_token;
 }
 
-// Derive MIME type from the URL path — more reliable than response headers
-// because Pexels/CDNs can return "application/octet-stream" or add params.
+// Primary: derive MIME from URL path (more reliable for Pexels CDN)
 function mimeFromUrl(url) {
-  const path = (url || "").split("?")[0].toLowerCase();
-  if (path.endsWith(".mp4") || path.endsWith(".mov") || path.includes("video-files"))
-    return "video/mp4";
-  if (path.endsWith(".png"))  return "image/png";
-  if (path.endsWith(".webp")) return "image/webp";
-  if (path.endsWith(".gif"))  return "image/gif";
-  return "image/jpeg"; // Pexels photo default
+  const p = (url || "").split("?")[0].toLowerCase();
+  if (p.endsWith(".mp4") || p.endsWith(".mov") || p.includes("video-files")) return "video/mp4";
+  if (p.endsWith(".png"))  return "image/png";
+  if (p.endsWith(".webp")) return "image/webp";
+  if (p.endsWith(".gif"))  return "image/gif";
+  return "image/jpeg";
+}
+
+// Fallback: parse Content-Type response header
+function mimeFromHeader(ct) {
+  if (!ct) return null;
+  const base = ct.split(";")[0].trim().toLowerCase();
+  const known = ["image/jpeg","image/png","image/webp","image/gif","video/mp4","video/quicktime"];
+  return known.includes(base) ? base : null;
 }
 
 export default async function handler(req, res) {
@@ -60,49 +71,76 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso." });
   }
 
-  try {
-    const mediaRes = await fetch(url, { headers: { "User-Agent": "VMScout/1.0" } });
-    if (!mediaRes.ok) throw new Error(`Download media fallito: ${mediaRes.status}`);
+  const tmpFile = path.join(os.tmpdir(), `luxy-${Date.now()}.tmp`);
 
-    const mimeType = mimeFromUrl(url);
+  try {
+    // ── 1. Download media from Pexels/CDN ─────────────────────
+    const mediaRes = await fetch(url, { headers: { "User-Agent": "VMScout/1.0" } });
+    if (!mediaRes.ok) throw new Error(`Download fallito: ${mediaRes.status}`);
+
+    // ── 2. Determine MIME type ─────────────────────────────────
+    const respCT   = mediaRes.headers.get("content-type");
+    const mimeType = mimeFromHeader(respCT) || mimeFromUrl(url);
     const isVideo  = mimeType.startsWith("video/");
     const ext      = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
 
-    // Canva Connect API spec:
-    // - name_base64 : regular base64 (with + / = padding), NOT base64url
-    // - Asset-Upload-Metadata header: base64url of the full JSON object
+    // ── 3. Write to /tmp ───────────────────────────────────────
+    const buf = Buffer.from(await mediaRes.arrayBuffer());
+    fs.writeFileSync(tmpFile, buf);
+    const fileSize = fs.statSync(tmpFile).size;
+
+    // ── 4. Build Asset-Upload-Metadata header ──────────────────
+    // Canva spec: name_base64 = regular base64 (with padding);
+    //             outer header = base64url of the JSON object
     const nameB64  = Buffer.from(name + ext).toString("base64");
     const nameMeta = Buffer.from(JSON.stringify({ name_base64: nameB64 })).toString("base64url");
 
-    const bodyBuf = Buffer.from(await mediaRes.arrayBuffer());
+    console.log("[canva-upload] uploading", { mimeType, fileSize, ext });
 
-    const r = await fetch(`${CANVA_API}/asset-uploads`, {
-      method: "POST",
-      headers: {
-        "Authorization":         `Bearer ${token}`,
-        "Content-Type":          mimeType,
-        "Content-Length":        String(bodyBuf.length),
-        "Asset-Upload-Metadata": nameMeta,
-      },
-      body: bodyBuf,
+    // ── 5. Upload via native https.request (no fetch/undici) ───
+    const canvaResult = await new Promise((resolve, reject) => {
+      const canvaReq = https.request(
+        {
+          hostname: CANVA_API_HOST,
+          path:     CANVA_API_PATH,
+          method:   "POST",
+          headers: {
+            "Authorization":         `Bearer ${token}`,
+            "Content-Type":          mimeType,
+            "Content-Length":        fileSize,
+            "Asset-Upload-Metadata": nameMeta,
+          },
+        },
+        (canvaRes) => {
+          let body = "";
+          canvaRes.on("data", chunk => { body += chunk; });
+          canvaRes.on("end", () => resolve({ status: canvaRes.statusCode, body }));
+        }
+      );
+      canvaReq.on("error", reject);
+      fs.createReadStream(tmpFile).pipe(canvaReq);
     });
 
-    const text = await r.text();
-    let d = {};
-    try { d = JSON.parse(text); } catch { d = { raw: text }; }
+    // ── 6. Cleanup temp file ───────────────────────────────────
+    try { fs.unlinkSync(tmpFile); } catch {}
 
-    if (!r.ok) {
-      console.error("[canva-upload] error", r.status, "mime:", mimeType, "len:", bodyBuf.length, "body:", text.slice(0, 400));
-      return res.status(r.status).json({
+    let d = {};
+    try { d = JSON.parse(canvaResult.body); } catch { d = { raw: canvaResult.body }; }
+
+    if (canvaResult.status >= 400) {
+      console.error("[canva-upload] Canva error", canvaResult.status, canvaResult.body.slice(0, 400));
+      return res.status(canvaResult.status).json({
         error: true,
-        message: d.message || d.code || text.slice(0, 300),
-        _debug: { mimeType, contentLength: bodyBuf.length },
+        message: d.message || d.code || canvaResult.body.slice(0, 300),
+        _debug: { mimeType, fileSize, respCT },
       });
     }
 
     return res.status(200).json({ ok: true, jobId: d.job?.id });
+
   } catch (err) {
-    console.error("[canva-upload]", err);
+    try { fs.unlinkSync(tmpFile); } catch {}
+    console.error("[canva-upload] exception", err);
     return res.status(500).json({ error: true, message: err.message });
   }
 }
