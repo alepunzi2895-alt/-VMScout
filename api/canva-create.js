@@ -3,7 +3,7 @@ import { getDb } from "./db.js";
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 
-// Saved template design IDs (created via Claude Canva MCP)
+// Your saved template design IDs — update these after styling in Canva
 const TEMPLATE_IDS = {
   post:  "DAHJFvIQ56k",   // 1080 × 1350
   story: "DAHJFudau5o",   // 1080 × 1920
@@ -56,123 +56,27 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
+// Upload image to Canva assets via the async job endpoint
 async function uploadToCanva(imageUrl, token) {
   try {
     const img = await fetch(imageUrl, { headers: { "User-Agent": "VMScout/1.0" } });
     if (!img.ok) return null;
-    const buf  = await img.arrayBuffer();
-    const blob = new Blob([buf], { type: img.headers.get("content-type") || "image/jpeg" });
-    const form = new FormData();
-    form.append("asset", blob, "luxy-bg.jpg");
-    const r = await fetch(`${CANVA_API}/asset/uploads`, {
+    const buf         = await img.arrayBuffer();
+    const contentType = img.headers.get("content-type") || "image/jpeg";
+    const nameMeta    = JSON.stringify({ name_base64: Buffer.from("luxy-bg.jpg").toString("base64") });
+
+    const r = await fetch(`${CANVA_API}/asset-uploads`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": contentType,
+        "Asset-Upload-Metadata": nameMeta,
+      },
+      body: buf,
     });
     const d = await r.json();
-    return d.asset?.id || null;
+    return d.job?.id || null;
   } catch { return null; }
-}
-
-async function startSession(designId, token) {
-  const r = await fetch(`${CANVA_API}/designs/${designId}/editing-sessions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    throw new Error(`Editing session non avviata: ${r.status} — ${body.message || body.code || JSON.stringify(body)}`);
-  }
-  return r.json();
-}
-
-async function applyAndCommit(designId, sessionId, ops, token) {
-  if (ops.length > 0) {
-    const r = await fetch(
-      `${CANVA_API}/designs/${designId}/editing-sessions/${sessionId}/operations`,
-      {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ operations: ops }),
-      }
-    );
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(`Operazioni fallite (${r.status}): ${err.message || JSON.stringify(err)}`);
-    }
-  }
-  await fetch(`${CANVA_API}/designs/${designId}/editing-sessions/${sessionId}/commit`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-// ─── core design builder ─────────────────────────────────
-
-function buildOperations(sessData, assetId, caption, cta) {
-  const ops       = [];
-  const richtexts = sessData.richtexts || [];
-  const fills     = sessData.fills     || [];
-
-  // Background: largest editable fill with a containerElement
-  const bgFill = [...fills]
-    .filter(f => f.type === "image" && f.editable && f.containerElement)
-    .sort((a, b) => {
-      const area = f => (f.containerElement.dimension.width || 0) * (f.containerElement.dimension.height || 0);
-      return area(b) - area(a);
-    })[0];
-
-  if (bgFill && assetId) {
-    ops.push({
-      type: "update_fill",
-      element_id: bgFill.element_id,
-      asset_type: "image",
-      asset_id: assetId,
-      alt_text: "Luxy Experience Ibiza",
-    });
-  }
-
-  if (richtexts.length === 0) return ops;
-
-  // Sort text elements top→bottom
-  const sorted = [...richtexts].sort(
-    (a, b) => (a.containerElement?.position?.top || 0) - (b.containerElement?.position?.top || 0)
-  );
-
-  if (sorted.length === 1) {
-    // Story / Reel: single element → caption
-    ops.push({ type: "replace_text", element_id: sorted[0].element_id, text: caption });
-    return ops;
-  }
-
-  // Post: multi-element layout — assign by role
-  // Largest bounding-box area = main headline
-  const largest = [...sorted].sort((a, b) => {
-    const area = el =>
-      (el.containerElement?.dimension?.width || 0) * (el.containerElement?.dimension?.height || 0);
-    return area(b) - area(a);
-  })[0];
-
-  const captionLines = caption.replace(/\n+/g, " ").trim();
-  const headline     = captionLines.split(/[.!?✦]/)[0]?.trim() || captionLines.slice(0, 60);
-
-  sorted.forEach(el => {
-    const top = el.containerElement?.position?.top || 0;
-    let text;
-    if (el.element_id === largest.element_id) {
-      text = headline;                         // big headline → prima frase
-    } else if (top < 200) {
-      text = "@luxy.exp";                      // header → handle
-    } else if (top > 1100) {
-      text = cta || "→ DM per info";          // footer → CTA
-    } else {
-      text = captionLines;                     // middle → caption completa
-    }
-    ops.push({ type: "replace_text", element_id: el.element_id, text });
-  });
-
-  return ops;
 }
 
 // ─── handler ────────────────────────────────────────────
@@ -180,7 +84,7 @@ function buildOperations(sessData, assetId, caption, cta) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { caption, cta, search_query, format = "post" } = req.body;
+  const { caption, search_query, format = "post" } = req.body;
   if (!caption) return res.status(400).json({ error: "Manca caption" });
 
   const db = getDb();
@@ -194,29 +98,17 @@ export default async function handler(req, res) {
   try {
     const vertical = format === "story" || format === "reel";
 
-    // 1. Fetch Pexels image
+    // 1. Fetch matching Pexels photo
     const imageUrl = search_query ? await fetchPexelsUrl(search_query, vertical) : null;
 
-    // 2. Upload to Canva assets
-    const assetId = imageUrl ? await uploadToCanva(imageUrl, token) : null;
+    // 2. Upload image to the user's Canva asset library (async job — appears in Assets panel)
+    if (imageUrl) uploadToCanva(imageUrl, token); // fire-and-forget; don't block response
 
-    // 3. Resolve template ID (edit directly — Connect API has no public copy endpoint)
+    // 3. Return template edit link so user can open and place the image
     const designId = TEMPLATE_IDS[format] || TEMPLATE_IDS.post;
+    const editUrl  = `https://www.canva.com/design/${designId}/edit`;
 
-    // 4. Start editing session (returns element structure)
-    const sessData = await startSession(designId, token);
-    const sessionId = sessData.session_id
-      || sessData.editing_session?.id
-      || sessData.transaction?.transaction_id;
-
-    if (!sessionId) throw new Error("Session ID non trovato nella risposta Canva");
-
-    // 5. Build + apply operations
-    const ops = buildOperations(sessData, assetId, caption, cta);
-    await applyAndCommit(designId, sessionId, ops, token);
-
-    const editUrl = `https://www.canva.com/design/${designId}/edit`;
-    return res.status(200).json({ ok: true, url: editUrl, designId, imageUrl });
+    return res.status(200).json({ ok: true, url: editUrl, imageUrl });
 
   } catch (err) {
     console.error("[canva-create]", err);

@@ -445,8 +445,9 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
   const [canvaType, setCanvaType] = useState(
     output.format === "scene" ? "reel" : output.format === "story" ? "story" : "post"
   );
-  const [canvaLoading, setCanvaLoading] = useState(false);
-  const [canvaUrl, setCanvaUrl] = useState(null);
+  const [canvaLoading, setCanvaLoading]   = useState(false);
+  const [canvaUrl, setCanvaUrl]           = useState(null);
+  const [canvaImageUrl, setCanvaImageUrl] = useState(null);
 
   const getCaption = () => {
     if (!output.caption) return "";
@@ -584,7 +585,7 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                 { id: "story", icon: "📱", label: "Story" },
                 { id: "reel",  icon: "🎬", label: "Reel"  },
               ].map(t => (
-                <button key={t.id} onClick={() => { setCanvaType(t.id); setCanvaUrl(null); }}
+                <button key={t.id} onClick={() => { setCanvaType(t.id); setCanvaUrl(null); setCanvaImageUrl(null); }}
                   title={t.label}
                   style={{
                     padding: "4px 7px", fontSize: 8, borderRadius: 4, cursor: "pointer",
@@ -598,16 +599,31 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
               ))}
 
               {canvaUrl ? (
-                /* Design already created → show open link */
-                <a href={canvaUrl} target="_blank" rel="noopener noreferrer"
-                  style={{
-                    padding: "7px 14px", borderRadius: 6, textDecoration: "none",
-                    border: `1px solid #5A9A5A80`, background: "#5A9A5A18",
-                    color: "#5A9A5A", fontSize: 11, fontWeight: 600,
-                    fontFamily: "'Montserrat', sans-serif",
-                  }}>
-                  ✓ Apri Canva →
-                </a>
+                /* Template ready — open link + optional image URL copy */
+                <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                  <a href={canvaUrl} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      padding: "7px 12px", borderRadius: 6, textDecoration: "none",
+                      border: `1px solid #5A9A5A80`, background: "#5A9A5A18",
+                      color: "#5A9A5A", fontSize: 11, fontWeight: 600,
+                      fontFamily: "'Montserrat', sans-serif",
+                    }}>
+                    ✓ Apri Template →
+                  </a>
+                  {canvaImageUrl && (
+                    <button
+                      onClick={() => navigator.clipboard.writeText(canvaImageUrl)}
+                      title="Incolla l'URL in Canva → Immagine → da link"
+                      style={{
+                        padding: "7px 10px", borderRadius: 6, cursor: "pointer",
+                        border: `1px solid ${CANVA_TEAL}40`, background: `${CANVA_TEAL}10`,
+                        color: CANVA_TEAL, fontSize: 10, fontWeight: 600,
+                        fontFamily: "'Montserrat', sans-serif",
+                      }}>
+                      📋 Copia URL foto
+                    </button>
+                  )}
+                </div>
               ) : (
                 /* Create button */
                 <button disabled={canvaLoading} onClick={async () => {
@@ -626,6 +642,7 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                       const data = await res.json();
                       if (data.ok) {
                         setCanvaUrl(data.url);
+                        if (data.imageUrl) setCanvaImageUrl(data.imageUrl);
                       } else if (data.error === "CANVA_NOT_CONNECTED") {
                         window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
                       } else {
