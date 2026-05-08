@@ -34,22 +34,16 @@ async function getToken(db) {
   return row.access_token;
 }
 
-// Canva accepts only clean MIME types without parameters.
-// Pexels/CDNs sometimes return "application/octet-stream" or "image/jpeg; charset=utf-8".
-function normalizeContentType(raw, url = "") {
-  const base = (raw || "").split(";")[0].trim().toLowerCase();
-  if (base === "image/jpeg" || base === "image/jpg") return "image/jpeg";
-  if (base === "image/png")     return "image/png";
-  if (base === "image/webp")    return "image/webp";
-  if (base === "image/gif")     return "image/gif";
-  if (base === "video/mp4" || base === "video/mpeg" || base === "video/quicktime") return "video/mp4";
-  // Fallback: infer from URL path
-  const u = url.split("?")[0].toLowerCase();
-  if (u.endsWith(".mp4") || u.includes("/videos/")) return "video/mp4";
-  if (u.endsWith(".png"))  return "image/png";
-  if (u.endsWith(".webp")) return "image/webp";
-  if (u.endsWith(".gif"))  return "image/gif";
-  return "image/jpeg"; // safe default for Pexels photos
+// Derive MIME type from the URL path — more reliable than response headers
+// because Pexels/CDNs can return "application/octet-stream" or add params.
+function mimeFromUrl(url) {
+  const path = (url || "").split("?")[0].toLowerCase();
+  if (path.endsWith(".mp4") || path.endsWith(".mov") || path.includes("video-files"))
+    return "video/mp4";
+  if (path.endsWith(".png"))  return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".gif"))  return "image/gif";
+  return "image/jpeg"; // Pexels photo default
 }
 
 export default async function handler(req, res) {
@@ -67,20 +61,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const mediaRes = await fetch(url, {
-      headers: { "User-Agent": "VMScout/1.0" },
-    });
+    const mediaRes = await fetch(url, { headers: { "User-Agent": "VMScout/1.0" } });
     if (!mediaRes.ok) throw new Error(`Download media fallito: ${mediaRes.status}`);
 
-    const rawType    = mediaRes.headers.get("content-type") || "";
-    const mimeType   = normalizeContentType(rawType, url);
-    const isVideo    = mimeType.startsWith("video/");
-    const ext        = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
+    const mimeType = mimeFromUrl(url);
+    const isVideo  = mimeType.startsWith("video/");
+    const ext      = isVideo ? ".mp4" : mimeType === "image/png" ? ".png" : ".jpg";
 
-    // Asset-Upload-Metadata: base64-encoded JSON with base64-encoded filename
-    const nameMeta = Buffer.from(
-      JSON.stringify({ name_base64: Buffer.from(name + ext).toString("base64") })
-    ).toString("base64");
+    // Asset-Upload-Metadata must be plain JSON (NOT base64 of JSON),
+    // with only the filename value base64-encoded.
+    const nameMeta = JSON.stringify({
+      name_base64: Buffer.from(name + ext).toString("base64"),
+    });
 
     const buf = await mediaRes.arrayBuffer();
 
@@ -94,11 +86,15 @@ export default async function handler(req, res) {
       body: buf,
     });
 
-    const d = await r.json();
+    const text = await r.text();
+    let d = {};
+    try { d = JSON.parse(text); } catch { d = { raw: text }; }
+
     if (!r.ok) {
+      console.error("[canva-upload] Canva error", r.status, d);
       return res.status(r.status).json({
         error: true,
-        message: d.message || d.code || JSON.stringify(d),
+        message: d.message || d.code || text.slice(0, 200),
       });
     }
 
