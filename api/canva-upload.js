@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     const assetName = nameWithExt(name, url);
     console.log("[canva-upload] url-import", { assetName, url: url.slice(0, 80) });
 
+    // ── 1. Create upload job ───────────────────────────────────────
     const r = await fetch(`${CANVA_API_BASE}/url-asset-uploads`, {
       method: "POST",
       headers: {
@@ -75,14 +76,39 @@ export default async function handler(req, res) {
     const d = await r.json();
 
     if (!r.ok) {
-      console.error("[canva-upload] error", r.status, JSON.stringify(d).slice(0, 300));
+      console.error("[canva-upload] create error", r.status, JSON.stringify(d).slice(0, 300));
       return res.status(r.status).json({
         error:   true,
         message: d.message || d.code || JSON.stringify(d).slice(0, 300),
       });
     }
 
-    return res.status(200).json({ ok: true, jobId: d.job?.id, status: d.job?.status });
+    const jobId = d.job?.id;
+    if (!jobId) {
+      return res.status(500).json({ error: true, message: "No jobId returned by Canva" });
+    }
+
+    // ── 2. Poll until success / failed (max ~20s) ─────────────────
+    const deadline = Date.now() + 20_000;
+    let job = d.job;
+    while (job.status === "in_progress" && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 1500));
+      const poll = await fetch(`${CANVA_API_BASE}/url-asset-uploads/${jobId}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const pd = await poll.json();
+      job = pd.job ?? job;
+      console.log("[canva-upload] poll", job.status);
+    }
+
+    if (job.status === "failed") {
+      const msg = job.error?.message || job.error?.code || "Import failed";
+      console.error("[canva-upload] job failed", msg);
+      return res.status(500).json({ error: true, message: msg });
+    }
+
+    const assetId = job.asset?.id;
+    return res.status(200).json({ ok: true, jobId, status: job.status, assetId });
 
   } catch (err) {
     console.error("[canva-upload] exception", err);
