@@ -113,19 +113,13 @@ const LUXY_QUICK_PROMPTS = [
 // ─────────────────────────────────────────────────
 // LUXY SYSTEM PROMPT (specializzato)
 // ─────────────────────────────────────────────────
-const getLuxySystemPrompt = (memory, contentType, language) => {
+const getLuxySystemPrompt = (memory, contentType) => {
   const memoryContext = memory.length > 0
     ? "\n\nBRAND MEMORY (usa sempre queste info):\n" + memory.map(m => `- ${m.key}: ${m.value}`).join("\n")
     : "";
   const igMemory = memory.filter(m => m.category === "instagram").map(m => `- ${m.key}: ${m.value}`).join("\n");
 
-  const langInstruction = language === "all"
-    ? "Genera contenuti in ITALIANO, INGLESE e SPAGNOLO."
-    : language === "it" ? "Genera contenuti in ITALIANO."
-    : language === "en" ? "Genera contenuti in INGLESE."
-    : "Genera contenuti in SPAGNOLO.";
-
-  const overrideRules = contentType === "video_storyboard" 
+  const overrideRules = contentType === "video_storyboard"
     ? "LUXY STORYTELLING: Genera uno storyboard video. L'array 'outputs' DEVE rappresentare le SCENE del video (id: 1 = Scena 1). Per ogni scena: 'visual_description' (azione chiara), 'search_query' (massimo 3 parole in inglese esattissime per trovare il footage), 'caption' (il voiceover o testo in overlay)."
     : "Per piano editoriale, ogni output è un giorno. Per hashtag strategy, outputs = gruppi hashtag. Per bio profilo, outputs = 3 bio.";
 
@@ -138,13 +132,12 @@ REGOLA D'ORO: Contenuti autentici, mai plastic luxury. Foto reali, lifestyle doc
 Stile visivo: minimal luxury. Nero, oro, bianco avorio. Mai pacchiano.
 Tone: Elegante e diretto. Il cliente si sente capito e coccolato. Non "economico", non "conveniente" — sempre "esclusivo", "su misura", "irripetibile".
 
-${langInstruction}
+LINGUA: Genera SEMPRE caption in INGLESE, SPAGNOLO e ITALIANO (in questo ordine). Il campo caption è un oggetto con chiavi "en", "es", "it".
 
 Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Struttura:
 
 {
   "content_type": "${contentType}",
-  "language": "${language}",
   "strategy_note": "Nota strategica breve in italiano",
   "outputs": [
     {
@@ -152,10 +145,10 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "title": "Titolo breve",
       "platform": "instagram|facebook|multi",
       "format": "post|story|reel|bio|piano|scene",
-      "caption": { "it": "...", "en": "...", "es": "..." },
-      "hashtags_instagram": ["tag1", "tag2"],
+      "caption": { "en": "...", "es": "...", "it": "..." },
+      "hashtags_instagram": ["tag1","tag2","tag3","tag4","tag5"],
       "hashtags_facebook": ["tag1", "tag2"],
-      "cta": { "it": "...", "en": "...", "es": "..." },
+      "cta": { "en": "...", "es": "...", "it": "..." },
       "visual_description": "Descrizione dell'immagine ideale",
       "search_query": "english search query for stock photos",
       "best_time": "18:30",
@@ -168,6 +161,7 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
   "save_to_memory": []
 }
 
+IMPORTANTE: hashtags_instagram DEVE avere ESATTAMENTE 5 hashtag significativi (non di più, non di meno).
 ${overrideRules}
 CRITICAL: Rispondi SOLO con il JSON. Zero testo extra.`;
 };
@@ -175,12 +169,12 @@ CRITICAL: Rispondi SOLO con il JSON. Zero testo extra.`;
 // ─────────────────────────────────────────────────
 // API CALLS
 // ─────────────────────────────────────────────────
-async function callLuxyAI(prompt, memory, contentType, language) {
+async function callLuxyAI(prompt, memory, contentType) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      system: getLuxySystemPrompt(memory, contentType, language),
+      system: getLuxySystemPrompt(memory, contentType),
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -571,27 +565,35 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
   const [canvaUrl, setCanvaUrl]           = useState(null);
   const [canvaImageUrl, setCanvaImageUrl] = useState(null);
 
-  const getCaption = () => {
-    if (!output.caption) return "";
-    if (typeof output.caption === "string") return output.caption;
-    return output.caption[lang] || output.caption.it || output.caption.en || "";
-  };
-
-  const getCta = () => {
+  const getCta = (langKey) => {
     if (!output.cta) return "";
     if (typeof output.cta === "string") return output.cta;
-    return output.cta[lang] || output.cta.it || "";
+    return output.cta[langKey] || "";
   };
 
-  const getHashtags = () => {
-    const tags = platform === "facebook" ? output.hashtags_facebook : output.hashtags_instagram;
-    return (tags || []).map(h => `#${h.replace(/^#/, "")}`).join(" ");
+  // Build single Instagram-ready caption block: EN → ES → IT + 5 hashtags
+  const buildIGCaption = () => {
+    const cap = output.caption || {};
+    const en  = typeof cap === "string" ? cap : (cap.en || "");
+    const es  = typeof cap === "string" ? "" : (cap.es || "");
+    const it  = typeof cap === "string" ? "" : (cap.it || "");
+    const tags = (output.hashtags_instagram || []).slice(0, 5).map(h => `#${h.replace(/^#/, "")}`).join(" ");
+
+    const lines = [];
+    if (en) lines.push(`🇬🇧 ${en}${getCta("en") ? `\n${getCta("en")}` : ""}`);
+    if (es) lines.push(`🇪🇸 ${es}${getCta("es") ? `\n${getCta("es")}` : ""}`);
+    if (it) lines.push(`🇮🇹 ${it}${getCta("it") ? `\n${getCta("it")}` : ""}`);
+    if (tags) lines.push(tags);
+    return lines.join("\n\n");
   };
 
-  const caption = getCaption();
-  const cta = getCta();
-  const hashtags = getHashtags();
-  const copyText = `${caption}\n\n${hashtags}${cta ? `\n\n${cta}` : ""}`;
+  const igCaption = buildIGCaption();
+  // Fallback single-language caption for preview / save
+  const caption = (() => {
+    if (!output.caption) return "";
+    if (typeof output.caption === "string") return output.caption;
+    return output.caption.en || output.caption.it || "";
+  })();
 
   const moodColors = {
     aspirational: "#7B6A4A", authentic: "#4A6B7B",
@@ -648,35 +650,23 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
             </div>
           )}
 
-          {/* Caption */}
-          {caption && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 6 }}>Caption</div>
-              <div style={{ fontSize: 13.5, color: OFF_WHITE, lineHeight: 1.75, whiteSpace: "pre-line", fontFamily: "'Cormorant Garamond', serif" }}>
-                {caption}
+          {/* Instagram Caption — blocco unico copiabile EN → ES → IT + hashtag */}
+          {igCaption && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                Caption Instagram
               </div>
-            </div>
-          )}
-
-          {/* Hashtags */}
-          {hashtags && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 6 }}>
-                Hashtag {platform === "facebook" ? "(FB)" : "(IG)"}
+              <div style={{
+                background: "#0A0A0A", border: `1px solid ${GOLD}20`, borderRadius: 10,
+                padding: "14px 16px", fontSize: 13, color: OFF_WHITE,
+                lineHeight: 1.8, whiteSpace: "pre-line", fontFamily: "'Cormorant Garamond', serif",
+                userSelect: "all",
+              }}>
+                {igCaption}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                {(platform === "facebook" ? output.hashtags_facebook : output.hashtags_instagram || []).map((h, i) => (
-                  <span key={i} style={{ fontSize: 11, color: `${GOLD}CC`, fontWeight: 500 }}>#{h.replace(/^#/, "")}</span>
-                ))}
+              <div style={{ marginTop: 8 }}>
+                <CopyBtn text={igCaption} label="📋 Copia Caption IG" />
               </div>
-            </div>
-          )}
-
-          {/* CTA */}
-          {cta && (
-            <div style={{ padding: "8px 12px", background: `${GOLD}10`, borderRadius: 8, marginBottom: 14, display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase" }}>CTA:</span>
-              <span style={{ fontSize: 12, color: GOLD, fontWeight: 600 }}>{cta}</span>
             </div>
           )}
 
@@ -689,8 +679,6 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <CopyBtn text={copyText} />
-            <CopyBtn text={caption} small />
             {!isSaved ? (
               <button onClick={() => onSave(output)} disabled={isSaving}
                 style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid ${GOLD}50`, background: isSaving ? `${GOLD}10` : `${GOLD}18`, color: GOLD, fontSize: 11, fontWeight: 600, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "'Montserrat', sans-serif" }}>
@@ -1052,8 +1040,6 @@ export default function LuxyExperience() {
   const [prompt, setPrompt] = useState("");
   const [selectedService, setSelectedService] = useState(null);
   const [contentType, setContentType] = useState("post_instagram");
-  const [language, setLanguage] = useState("it");
-  const [displayLang, setDisplayLang] = useState("it");
   const [displayPlatform, setDisplayPlatform] = useState("instagram");
 
   const promptRef = useRef(null);
@@ -1127,7 +1113,7 @@ export default function LuxyExperience() {
       ].filter(Boolean);
 
       // Call AI
-      const parsed = await callLuxyAI(finalPrompt, memory, contentType, language);
+      const parsed = await callLuxyAI(finalPrompt, memory, contentType);
       setResult(parsed);
 
       // Save request to DB
@@ -1154,13 +1140,26 @@ export default function LuxyExperience() {
   const handleSavePost = async (output) => {
     setSavingOutput(output.id);
     try {
-      const caption = typeof output.caption === "object" ? output.caption[displayLang] || output.caption.it : output.caption;
-      const cta = typeof output.cta === "object" ? output.cta[displayLang] || output.cta.it : output.cta;
+      const cap = output.caption || {};
+      const en  = typeof cap === "string" ? cap : (cap.en || "");
+      const es  = typeof cap === "string" ? "" : (cap.es || "");
+      const it  = typeof cap === "string" ? "" : (cap.it || "");
+      const ctaEn = typeof output.cta === "object" ? output.cta.en || "" : output.cta || "";
+      const ctaEs = typeof output.cta === "object" ? output.cta.es || "" : "";
+      const ctaIt = typeof output.cta === "object" ? output.cta.it || "" : "";
+      const tags = (output.hashtags_instagram || []).slice(0, 5).map(h => `#${h.replace(/^#/, "")}`).join(" ");
+      const lines = [];
+      if (en) lines.push(`🇬🇧 ${en}${ctaEn ? `\n${ctaEn}` : ""}`);
+      if (es) lines.push(`🇪🇸 ${es}${ctaEs ? `\n${ctaEs}` : ""}`);
+      if (it) lines.push(`🇮🇹 ${it}${ctaIt ? `\n${ctaIt}` : ""}`);
+      if (tags) lines.push(tags);
+      const caption = lines.join("\n\n");
+      const cta = ctaEn || ctaIt || "";
       await dbCall("save_post", "POST", {
         platform: output.platform || displayPlatform,
-        language: displayLang,
+        language: "all",
         caption,
-        hashtags: displayPlatform === "facebook" ? output.hashtags_facebook : output.hashtags_instagram,
+        hashtags: output.hashtags_instagram,
         cta,
         visual_description: output.visual_description,
         search_query: output.search_query,
@@ -1332,19 +1331,6 @@ export default function LuxyExperience() {
               </div>
             </div>
 
-            {/* Lingua */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 9, letterSpacing: "0.3em", textTransform: "uppercase", color: WARM_GREY, marginBottom: 12 }}>Lingua Output</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {LANGUAGES.map(l => (
-                  <button key={l.id} onClick={() => { setLanguage(l.id); if (l.id !== "all") setDisplayLang(l.id); }}
-                    style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${language === l.id ? GOLD : GOLD + "30"}`, background: language === l.id ? `${GOLD}18` : "transparent", color: language === l.id ? GOLD : WARM_GREY, fontSize: 11, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-                    {l.flag} {l.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Prompt input */}
             <div style={{ marginBottom: 20 }}>
               <textarea ref={promptRef} value={prompt} onChange={e => setPrompt(e.target.value)}
@@ -1424,15 +1410,8 @@ export default function LuxyExperience() {
                   </div>
                 )}
 
-                {/* Language / Platform toggles for display */}
+                {/* Platform toggle */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-                  {language === "all" && LANGUAGES.filter(l => l.id !== "all").map(l => (
-                    <button key={l.id} onClick={() => setDisplayLang(l.id)}
-                      style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${displayLang === l.id ? GOLD : GOLD + "30"}`, background: displayLang === l.id ? `${GOLD}18` : "transparent", color: displayLang === l.id ? GOLD : WARM_GREY, fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-                      {l.flag} {l.label}
-                    </button>
-                  ))}
-                  <div style={{ width: 1, background: `${GOLD}20` }} />
                   {["instagram", "facebook"].map(p => (
                     <button key={p} onClick={() => setDisplayPlatform(p)}
                       style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${displayPlatform === p ? GOLD : GOLD + "30"}`, background: displayPlatform === p ? `${GOLD}18` : "transparent", color: displayPlatform === p ? GOLD : WARM_GREY, fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", textTransform: "uppercase" }}>
@@ -1447,7 +1426,7 @@ export default function LuxyExperience() {
                     <OutputCard
                       key={output.id}
                       output={output}
-                      lang={displayLang}
+                      lang="en"
                       platform={displayPlatform}
                       onSave={handleSavePost}
                       isSaving={savingOutput === output.id}
@@ -1461,9 +1440,20 @@ export default function LuxyExperience() {
                 {result.outputs?.length > 1 && (
                   <div style={{ marginTop: 16 }}>
                     <CopyBtn text={result.outputs.map(o => {
-                      const cap = typeof o.caption === "object" ? o.caption[displayLang] || o.caption.it : o.caption;
-                      const tags = (displayPlatform === "facebook" ? o.hashtags_facebook : o.hashtags_instagram || []).map(h => `#${h.replace(/^#/, "")}`).join(" ");
-                      return `--- ${o.title} ---\n${cap}\n\n${tags}`;
+                      const cap = o.caption || {};
+                      const en = typeof cap === "string" ? cap : (cap.en || "");
+                      const es = typeof cap === "string" ? "" : (cap.es || "");
+                      const it = typeof cap === "string" ? "" : (cap.it || "");
+                      const ctaEn = typeof o.cta === "object" ? o.cta.en || "" : o.cta || "";
+                      const ctaEs = typeof o.cta === "object" ? o.cta.es || "" : "";
+                      const ctaIt = typeof o.cta === "object" ? o.cta.it || "" : "";
+                      const tags = (o.hashtags_instagram || []).slice(0, 5).map(h => `#${h.replace(/^#/, "")}`).join(" ");
+                      const parts = [];
+                      if (en) parts.push(`🇬🇧 ${en}${ctaEn ? `\n${ctaEn}` : ""}`);
+                      if (es) parts.push(`🇪🇸 ${es}${ctaEs ? `\n${ctaEs}` : ""}`);
+                      if (it) parts.push(`🇮🇹 ${it}${ctaIt ? `\n${ctaIt}` : ""}`);
+                      if (tags) parts.push(tags);
+                      return `━━━ ${o.title} ━━━\n${parts.join("\n\n")}`;
                     }).join("\n\n")} label={`Copia Tutti (${result.outputs.length} output)`} />
                   </div>
                 )}
@@ -1485,18 +1475,7 @@ export default function LuxyExperience() {
 
             {result?.outputs?.length > 0 ? (
               <>
-                {/* Language selector for preview */}
-                {result.language === "all" && (
-                  <div style={{ display: "flex", gap: 6, marginBottom: 20, justifyContent: "center" }}>
-                    {[{ id: "it", flag: "🇮🇹" }, { id: "en", flag: "🇬🇧" }, { id: "es", flag: "🇪🇸" }].map(l => (
-                      <button key={l.id} onClick={() => setDisplayLang(l.id)}
-                        style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${displayLang === l.id ? GOLD : GOLD + "30"}`, background: displayLang === l.id ? `${GOLD}18` : "transparent", color: displayLang === l.id ? GOLD : WARM_GREY, fontSize: 11, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-                        {l.flag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <InstagramPreview outputs={result.outputs} displayLang={displayLang} />
+                <InstagramPreview outputs={result.outputs} displayLang="en" />
               </>
             ) : (
               <div style={{ textAlign: "center", padding: "60px 20px", color: WARM_GREY }}>
