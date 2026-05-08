@@ -564,6 +564,18 @@ function InstagramPreview({ outputs, displayLang }) {
 // ─────────────────────────────────────────────────
 // OUTPUT CARD
 // ─────────────────────────────────────────────────
+function detectSlideCount(output) {
+  const titleMatch = (output.title || "").match(/(\d+)\s*slid/i);
+  if (titleMatch) return parseInt(titleMatch[1]);
+  const desc = output.visual_description || "";
+  const slideMatches = desc.match(/\bS(\d+)\b/g);
+  if (slideMatches) {
+    const nums = slideMatches.map(s => parseInt(s.slice(1)));
+    return Math.max(...nums);
+  }
+  return null;
+}
+
 function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTemplates }) {
   const [expanded, setExpanded] = useState(true);
   const [canvaType, setCanvaType] = useState(
@@ -651,11 +663,11 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                       );
                     })}
                   </div>
-                  {/* 1 foto per slide (carosello/post), più per altri formati */}
+                  {/* N foto per carosello (1 per slide), 1 per post singolo */}
                   <PexelsPhotoStrip
                     query={output.search_query}
                     vertical={output.format === "story" || output.format === "reel" || output.format === "scene"}
-                    count={1}
+                    count={detectSlideCount(output) || 1}
                   />
                   {/* Video solo per reel, story, scene — non per post/carosello */}
                   {(output.format === "reel" || output.format === "story" || output.format === "scene") && (
