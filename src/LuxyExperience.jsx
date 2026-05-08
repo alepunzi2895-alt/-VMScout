@@ -3,12 +3,29 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ─────────────────────────────────────────────────
 // CONSTANTS & HELPERS
 // ─────────────────────────────────────────────────
-const GOLD = "#C9A96E";
-const GOLD_DARK = "#A8813F";
-const DARK = "#0D0D0D";
-const CARD_BG = "#141414";
-const OFF_WHITE = "#F8F4EE";
-const WARM_GREY = "#8A8070";
+const GOLD       = "#C9A96E";
+const GOLD_DARK  = "#A8813F";
+const DARK       = "#0D0D0D";
+const CARD_BG    = "#141414";
+const OFF_WHITE  = "#F8F4EE";
+const WARM_GREY  = "#8A8070";
+const CANVA_TEAL = "#00C4CC";
+
+// @luxy.exp Instagram DNA — injected into every prompt
+const IG_STYLE_GUIDE = `
+STILE UFFICIALE @luxy.exp INSTAGRAM (applica SEMPRE):
+• Caption: max 3-4 righe. Mai blocchi lunghi. Prima frase = gancio evocativo (NON iniziare con "Benvenuti" o "Vi presentiamo").
+• Firma: il carattere ✦ è il signature di Luxy — usarlo come separatore o chiusura.
+• Emoji: massimo 1-2 per post. Nessuna decorazione eccessiva.
+• CTA: sempre alla fine — "→ DM per info" | "→ link in bio" | "→ info@luxy.exp"
+• Hashtag: 8-12 TAG nel PRIMO COMMENTO, mai nel caption. Core: #luxyexperience #ibiza #ibizaluxury
+• Hashtag niche: #villasibiza #yachtibiza #luxuryconcierge #ibizalifestyle #ibizasunset #luxuryvilla
+• Story: dietro-le-quinte raw, sondaggi binari ("Villa o Yacht?"), sticker DM per booking.
+• Reel: B-roll 15-30s, niente voiceover, musica ambient/house, testo overlay minimal.
+• Best timing: 18:00-20:00 CET (aperitivo), 22:00-23:00 CET (nightlife).
+• Target: IT + UK + DE + ES → bilingue IT/EN preferito, a volte ES per reach.
+• NEVER: foto stock pulite, tono corporate, prezzi nel caption, urgency forzata.
+`;
 
 const LUXY_SERVICES = [
   { id: "ville", label: "Ville & Hotel", icon: "🏛", color: "#7B6A4A" },
@@ -80,12 +97,12 @@ const LANGUAGES = [
 ];
 
 const LUXY_QUICK_PROMPTS = [
-  { label: "Post Ibiza Summer", text: "Crea 3 post Instagram per promuovere le ville di lusso a Ibiza in estate. Target: coppie affluent 35-50 anni.", icon: "🌴" },
-  { label: "Yacht Weekend", text: "Caption per un weekend su yacht a Formentera. Tone: aspirazionale ma autentico. Include CTA per prenotazione.", icon: "⛵" },
-  { label: "Nightlife Ibiza", text: "Post per promuovere accesso VIP a tavoli nei migliori club di Ibiza. Tone: esclusivo, FOMO marketing.", icon: "🎭" },
-  { label: "Piano Mensile", text: "Piano editoriale 4 settimane per Luxy Experience estate 2025. Focus: awareness e lead generation.", icon: "📅" },
-  { label: "H24 Promise", text: "Post sulla promessa H24 di Luxy: assistenza totale, nessun problema irrisolvibile. Tone: rassicurante e premium.", icon: "💎" },
-  { label: "Bio Instagram", text: "Scrivi 3 versioni della bio Instagram per Luxy Experience. Deve comunicare lusso, personalizzazione e Ibiza.", icon: "👤" },
+  { label: "Villa Golden Hour", text: "Caption @luxy.exp per villa privata con piscina a strapiombo sul mare di Ibiza. Il cliente arriva al tramonto. Stile candid, autentico. Max 3 righe + CTA DM.", icon: "🌅" },
+  { label: "Yacht Formentera", text: "Post Instagram per weekend su yacht a Formentera. Candid, no forced luxury. Hashtag core + niche. IT/EN bilingue.", icon: "⛵" },
+  { label: "Nightlife VIP", text: "Story + post per accesso VIP Pacha/Ushuaia Ibiza. Tone: FOMO autentico, mai pacchiano. Include sondaggio per story 'Dove stasera?'.", icon: "🎭" },
+  { label: "Piano 7 giorni", text: "Piano editoriale 7 giorni @luxy.exp. Mix: 3 ville, 1 yacht, 1 nightlife, 1 concierge H24, 1 destination beauty Ibiza. Estate 2025, real content style.", icon: "📅" },
+  { label: "Bio Update", text: "3 versioni bio Instagram per @luxy.exp. Max 150 char. Comunica: lusso, Ibiza, concierge H24, personalizzazione. Includi ✦ come firma Luxy.", icon: "👤" },
+  { label: "Reel Storyboard", text: "Storyboard reel 30s @luxy.exp: arrivo villa → piscina → tramonto → aperitivo. No voiceover, solo testo overlay minimal. Footage B-roll autentico.", icon: "🎬" },
 ];
 
 // ─────────────────────────────────────────────────
@@ -95,6 +112,7 @@ const getLuxySystemPrompt = (memory, contentType, language) => {
   const memoryContext = memory.length > 0
     ? "\n\nBRAND MEMORY (usa sempre queste info):\n" + memory.map(m => `- ${m.key}: ${m.value}`).join("\n")
     : "";
+  const igMemory = memory.filter(m => m.category === "instagram").map(m => `- ${m.key}: ${m.value}`).join("\n");
 
   const langInstruction = language === "all"
     ? "Genera contenuti in ITALIANO, INGLESE e SPAGNOLO."
@@ -109,7 +127,9 @@ const getLuxySystemPrompt = (memory, contentType, language) => {
   return `Sei il Senior Marketing Strategist di Luxy Experience, un servizio concierge di lusso con base a Ibiza.
 ${memoryContext}
 
-REGOLA D'ORO: Contenuti autentici, mai plastic luxury. Foto reali, lifestyle documentaristico, golden hour, mare cristallino, momenti candid. 
+${IG_STYLE_GUIDE}
+${igMemory ? `\nCONFIG INSTAGRAM DALLA BRAND MEMORY:\n${igMemory}\n` : ""}
+REGOLA D'ORO: Contenuti autentici, mai plastic luxury. Foto reali, lifestyle documentaristico, golden hour, mare cristallino, momenti candid.
 Stile visivo: minimal luxury. Nero, oro, bianco avorio. Mai pacchiano.
 Tone: Elegante e diretto. Il cliente si sente capito e coccolato. Non "economico", non "conveniente" — sempre "esclusivo", "su misura", "irripetibile".
 
@@ -276,10 +296,156 @@ function SceneVideoPlayer({ query, sourceKey = "pexels_video" }) {
 }
 
 // ─────────────────────────────────────────────────
+// INSTAGRAM PREVIEW (phone mockup)
+// ─────────────────────────────────────────────────
+function InstagramPreview({ outputs, displayLang }) {
+  const [idx, setIdx] = useState(0);
+  const output = outputs[idx];
+
+  const caption = output
+    ? typeof output.caption === "object"
+      ? output.caption[displayLang] || output.caption.it || ""
+      : output.caption || ""
+    : "";
+  const hashtags = output
+    ? (output.hashtags_instagram || []).slice(0, 6).map(h => `#${h.replace(/^#/, "")}`).join(" ")
+    : "";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "8px 0" }}>
+      {outputs.length > 1 && (
+        <div style={{ display: "flex", gap: 6 }}>
+          {outputs.map((o, i) => (
+            <button key={i} onClick={() => setIdx(i)}
+              style={{
+                width: 30, height: 30, borderRadius: 8,
+                border: `2px solid ${i === idx ? GOLD : GOLD + "30"}`,
+                background: i === idx ? `${GOLD}20` : "transparent",
+                color: i === idx ? GOLD : WARM_GREY,
+                fontSize: 10, cursor: "pointer", fontWeight: 700,
+              }}>
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Phone frame */}
+      <div style={{
+        width: 290, background: "#000", borderRadius: 36,
+        border: "6px solid #1c1c1c", overflow: "hidden",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.7), inset 0 0 0 1px #333"
+      }}>
+        {/* Status bar */}
+        <div style={{ padding: "8px 20px 0", display: "flex", justifyContent: "space-between", fontSize: 9, color: "#fff", fontFamily: "monospace" }}>
+          <span>9:41</span>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <span>▐▐▐</span><span>WiFi</span><span>🔋</span>
+          </div>
+        </div>
+
+        {/* IG top bar */}
+        <div style={{ background: "#000", padding: "8px 14px 6px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #1a1a1a" }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", fontFamily: "serif", letterSpacing: "-0.5px" }}>Instagram</span>
+          <div style={{ display: "flex", gap: 12 }}>
+            <span style={{ fontSize: 18, cursor: "pointer" }}>♡</span>
+            <span style={{ fontSize: 18, cursor: "pointer" }}>✉</span>
+          </div>
+        </div>
+
+        {/* Post header */}
+        <div style={{ background: "#000", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 34, height: 34, borderRadius: "50%", padding: 2, background: "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)", flexShrink: 0 }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#0d0d0d", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: GOLD }}>✦</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>luxy.exp</div>
+            <div style={{ fontSize: 9, color: "#666" }}>Ibiza, Spain</div>
+          </div>
+          <div style={{ marginLeft: "auto", fontSize: 18, color: "#fff" }}>⋯</div>
+        </div>
+
+        {/* Image area 1:1 */}
+        <div style={{
+          aspectRatio: "1/1",
+          background: `linear-gradient(160deg, #1a1208 0%, #2d2010 40%, #0d0a04 100%)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          position: "relative", overflow: "hidden"
+        }}>
+          {output?.visual_description ? (
+            <div style={{ padding: 18, textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: GOLD, fontStyle: "italic", lineHeight: 1.7, opacity: 0.9 }}>
+                {output.visual_description.slice(0, 110)}
+                {output.visual_description.length > 110 ? "..." : ""}
+              </div>
+              {output.search_query && (
+                <div style={{ marginTop: 10, fontSize: 8, color: WARM_GREY }}>
+                  🔍 "{output.search_query}"
+                </div>
+              )}
+            </div>
+          ) : (
+            <span style={{ fontSize: 36, opacity: 0.3 }}>📸</span>
+          )}
+          {output?.mood && (
+            <div style={{ position: "absolute", bottom: 8, left: 8, fontSize: 8, padding: "2px 7px", borderRadius: 4, background: "rgba(0,0,0,0.75)", color: GOLD, fontFamily: "'Montserrat',sans-serif", letterSpacing: "0.1em" }}>
+              {output.mood}
+            </div>
+          )}
+          {output?.best_time && (
+            <div style={{ position: "absolute", bottom: 8, right: 8, fontSize: 8, padding: "2px 7px", borderRadius: 4, background: "rgba(0,0,0,0.75)", color: "#aaa" }}>
+              ⏰ {output.best_time}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ background: "#000", padding: "8px 14px 4px", display: "flex", gap: 14, alignItems: "center" }}>
+          <span style={{ fontSize: 20 }}>🤍</span>
+          <span style={{ fontSize: 20 }}>💬</span>
+          <span style={{ fontSize: 20 }}>↗</span>
+          <span style={{ fontSize: 20, marginLeft: "auto" }}>🔖</span>
+        </div>
+
+        {/* Caption */}
+        <div style={{ background: "#000", padding: "0 14px 14px", maxHeight: 130, overflowY: "auto" }}>
+          <div style={{ fontSize: 11, color: "#fff", lineHeight: 1.55 }}>
+            <span style={{ fontWeight: 700, fontFamily: "-apple-system,sans-serif" }}>luxy.exp</span>{" "}
+            <span style={{ color: "#ddd", fontFamily: "-apple-system,sans-serif" }}>
+              {caption.slice(0, 140)}{caption.length > 140 ? "..." : ""}
+            </span>
+          </div>
+          {hashtags && (
+            <div style={{ marginTop: 5, fontSize: 10, color: "#6b8ec7", lineHeight: 1.5, fontFamily: "-apple-system,sans-serif" }}>
+              {hashtags}
+            </div>
+          )}
+          {output?.cta && (
+            <div style={{ marginTop: 6, fontSize: 10, color: GOLD, fontStyle: "italic" }}>
+              {typeof output.cta === "object" ? output.cta[displayLang] || output.cta.it : output.cta}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {output?.platform_tip && (
+        <div style={{ maxWidth: 270, fontSize: 10, color: WARM_GREY, textAlign: "center", fontStyle: "italic", lineHeight: 1.6 }}>
+          💡 {output.platform_tip}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
 // OUTPUT CARD
 // ─────────────────────────────────────────────────
-function OutputCard({ output, lang, platform, onSave, isSaving, isSaved }) {
+function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTemplates }) {
   const [expanded, setExpanded] = useState(true);
+  const [canvaType, setCanvaType] = useState(
+    output.format === "scene" ? "reel" : output.format === "story" ? "story" : "post"
+  );
+  const [canvaLoading, setCanvaLoading] = useState(false);
 
   const getCaption = () => {
     if (!output.caption) return "";
@@ -408,19 +574,64 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved }) {
             ) : (
               <span style={{ fontSize: 11, color: "#5A9A5A", fontWeight: 600, padding: "7px 0" }}>✓ Salvato nel DB</span>
             )}
-            
-            <button onClick={async () => {
-              const res = await fetch("/api/canva-export", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ caption: caption, imageUrl: output.search_query, templateId: "METTI_IL_TUO_TEMPLATE_ID_QUI" })
-              });
-              const data = await res.json();
-              if (data.ok) window.open(data.url, "_blank");
-              else alert(data.error || data.message || "Errore Canva. Hai effettuato il login e inserito il Template ID?");
-            }} 
-            style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid #00C4CC50`, background: `#00C4CC15`, color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", marginLeft: "auto" }}>
-              💎 Invia a Canva
-            </button>
+
+            {/* Canva export — template selector + button */}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
+              {[
+                { id: "post",  label: "1:1",  icon: "📸" },
+                { id: "story", label: "9:16", icon: "📱" },
+                { id: "reel",  label: "Reel", icon: "🎬" },
+              ].map(t => (
+                <button key={t.id} onClick={() => setCanvaType(t.id)}
+                  style={{
+                    padding: "4px 8px", fontSize: 9, borderRadius: 5, cursor: "pointer",
+                    border: `1px solid ${canvaType === t.id ? CANVA_TEAL : CANVA_TEAL + "30"}`,
+                    background: canvaType === t.id ? `${CANVA_TEAL}20` : "transparent",
+                    color: canvaType === t.id ? CANVA_TEAL : WARM_GREY,
+                    fontFamily: "'Montserrat', sans-serif",
+                  }}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+              <button disabled={canvaLoading} onClick={async () => {
+                const templateId = canvaTemplates?.[canvaType];
+                if (!templateId || templateId.startsWith("INSERISCI")) {
+                  alert(`Configura il Template ID Canva per "${canvaType}" nella tab Memoria → categoria Canva.`);
+                  return;
+                }
+                setCanvaLoading(true);
+                try {
+                  const res = await fetch("/api/canva-export", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      caption,
+                      hashtags,
+                      cta: getCta(),
+                      imageUrl: null,
+                      templateId,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.ok) window.open(data.url, "_blank");
+                  else if (data.error === "CANVA_NOT_CONNECTED") {
+                    window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+                  } else {
+                    alert(data.message || "Errore Canva");
+                  }
+                } finally {
+                  setCanvaLoading(false);
+                }
+              }}
+                style={{
+                  padding: "7px 14px", borderRadius: 6, cursor: canvaLoading ? "wait" : "pointer",
+                  border: `1px solid ${CANVA_TEAL}50`, background: `${CANVA_TEAL}15`,
+                  color: CANVA_TEAL, fontSize: 11, fontWeight: 600,
+                  fontFamily: "'Montserrat', sans-serif", opacity: canvaLoading ? 0.6 : 1,
+                }}>
+                {canvaLoading ? "..." : "✦ Canva"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -668,6 +879,9 @@ export default function LuxyExperience() {
   const [history, setHistory] = useState([]);
   const [savedPosts, setSavedPosts] = useState([]);
 
+  // Canva state
+  const [canvaConnected, setCanvaConnected] = useState(null); // null=checking, true, false
+
   // UI state
   const [activeTab, setActiveTab] = useState("genera");
   const [loading, setLoading] = useState(false);
@@ -691,12 +905,22 @@ export default function LuxyExperience() {
     initDB();
   }, []);
 
+  const checkCanvaStatus = async () => {
+    try {
+      const res = await fetch("/api/canva-auth?action=status");
+      const data = await res.json();
+      setCanvaConnected(data.connected);
+    } catch {
+      setCanvaConnected(false);
+    }
+  };
+
   const initDB = async () => {
     try {
       const initRes = await dbCall("init");
       if (initRes.ok) {
         setDbStatus("ok");
-        await Promise.all([loadStats(), loadMemory(), loadHistory(), loadPosts()]);
+        await Promise.all([loadStats(), loadMemory(), loadHistory(), loadPosts(), checkCanvaStatus()]);
       } else {
         setDbStatus("error");
       }
@@ -800,12 +1024,20 @@ export default function LuxyExperience() {
     await loadStats();
   };
 
+  // Canva template IDs derived from brand memory
+  const canvaTemplates = {
+    post:  memory.find(m => m.key === "canva_template_post")?.value  || "",
+    story: memory.find(m => m.key === "canva_template_story")?.value || "",
+    reel:  memory.find(m => m.key === "canva_template_reel")?.value  || "",
+  };
+
   // ── Tabs ──────────────────────────────────────
   const TABS = [
-    { id: "genera", label: "Genera", icon: "✨" },
-    { id: "memoria", label: "Memoria", icon: "🧠" },
-    { id: "storico", label: "Storico", icon: "📚" },
-    { id: "post", label: "Post Salvati", icon: "📌" },
+    { id: "genera",  label: "Genera",      icon: "✨" },
+    { id: "preview", label: "Preview IG",  icon: "📱" },
+    { id: "memoria", label: "Memoria",     icon: "🧠" },
+    { id: "storico", label: "Storico",     icon: "📚" },
+    { id: "post",    label: "Post Salvati", icon: "📌" },
   ];
 
   return (
@@ -840,10 +1072,23 @@ export default function LuxyExperience() {
           Concierge di Lusso · Ibiza · Mondo
         </p>
         
-        <div style={{ marginTop: 16 }}>
-          <a href="/api/canva-auth?action=login" style={{ fontSize: 9, padding: "5px 12px", borderRadius: 20, border: `1px solid #00C4CC40`, background: "#00C4CC10", color: "#00C4CC", textDecoration: "none", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            🔗 Connetti Canva
-          </a>
+        <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center", alignItems: "center" }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: canvaConnected === true ? "#5A9A5A" : canvaConnected === false ? "#9A5A5A" : "#666", transition: "background 0.4s" }} />
+          {canvaConnected === true ? (
+            <span style={{ fontSize: 9, color: "#5A9A5A", letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'Montserrat', sans-serif" }}>
+              Canva connesso
+              <button onClick={async () => { await fetch("/api/canva-auth?action=logout"); setCanvaConnected(false); }}
+                style={{ marginLeft: 10, fontSize: 8, color: WARM_GREY, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                disconnetti
+              </button>
+            </span>
+          ) : (
+            <a href="/api/canva-auth?action=login" target="_blank" rel="noopener noreferrer"
+              onClick={() => setTimeout(checkCanvaStatus, 4000)}
+              style={{ fontSize: 9, padding: "4px 14px", borderRadius: 20, border: `1px solid ${CANVA_TEAL}40`, background: `${CANVA_TEAL}10`, color: CANVA_TEAL, textDecoration: "none", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              🔗 Connetti Canva
+            </a>
+          )}
         </div>
 
         {/* Divider ornament */}
@@ -1049,6 +1294,7 @@ export default function LuxyExperience() {
                       onSave={handleSavePost}
                       isSaving={savingOutput === output.id}
                       isSaved={!!savedOutputs[output.id]}
+                      canvaTemplates={canvaTemplates}
                     />
                   ))}
                 </div>
@@ -1063,6 +1309,41 @@ export default function LuxyExperience() {
                     }).join("\n\n")} label={`Copia Tutti (${result.outputs.length} output)`} />
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ TAB: PREVIEW IG ═══ */}
+        {activeTab === "preview" && (
+          <div style={{ animation: "luxyFade 0.3s ease-out" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+              <span style={{ fontSize: 18 }}>📱</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: OFF_WHITE, fontFamily: "'Cormorant Garamond', serif" }}>Preview Instagram</div>
+                <div style={{ fontSize: 11, color: WARM_GREY }}>Anteprima mockup come appare su @luxy.exp</div>
+              </div>
+            </div>
+
+            {result?.outputs?.length > 0 ? (
+              <>
+                {/* Language selector for preview */}
+                {result.language === "all" && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 20, justifyContent: "center" }}>
+                    {[{ id: "it", flag: "🇮🇹" }, { id: "en", flag: "🇬🇧" }, { id: "es", flag: "🇪🇸" }].map(l => (
+                      <button key={l.id} onClick={() => setDisplayLang(l.id)}
+                        style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${displayLang === l.id ? GOLD : GOLD + "30"}`, background: displayLang === l.id ? `${GOLD}18` : "transparent", color: displayLang === l.id ? GOLD : WARM_GREY, fontSize: 11, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                        {l.flag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <InstagramPreview outputs={result.outputs} displayLang={displayLang} />
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "60px 20px", color: WARM_GREY }}>
+                <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>📱</div>
+                <div style={{ fontSize: 13 }}>Genera contenuti nella tab Genera per vedere la preview IG.</div>
               </div>
             )}
           </div>

@@ -90,8 +90,22 @@ export default async function handler(req, res) {
             ('visual_style', 'Minimal luxury. Foto reali e autentiche, mai plastic stock. Palette: nero, oro, bianco avorio. Film grain, golden hour, candid moments.', 'style')`,
           `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES 
             ('core_locations', 'Ibiza (home base), Formentera, Maiorca, Costa del Sol, Sardegna, Côte d Azur, Dubai, Maldive', 'brand')`,
-          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES 
-            ('usp', 'Esperienza 100% personalizzata. Assistenza h24. Zero stress. Il cliente non deve pensare a nulla. Accesso a esperienze normalmente inaccessibili.', 'brand')`
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('usp', 'Esperienza 100% personalizzata. Assistenza h24. Zero stress. Il cliente non deve pensare a nulla. Accesso a esperienze normalmente inaccessibili.', 'brand')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('instagram_handle', '@luxy.exp', 'instagram')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('instagram_caption_rules', 'Max 3-4 righe. Prima frase = gancio evocativo. CTA finale: "→ DM per info" o "→ link in bio". Firma: ✦. Emoji max 1-2. Hashtag nel primo commento (mai nel caption).', 'instagram')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('instagram_hashtags_core', '#luxyexperience #ibiza #ibizaluxury #villasibiza #yachtibiza #luxuryconcierge #ibizalifestyle #ibizasunset #luxuryvilla #ibizavibes', 'instagram')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('instagram_posting_times', '18:00-20:00 CET (aperitivo hour) | 22:00-23:00 CET (nightlife). Mai nei giorni feriali mattina.', 'instagram')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('canva_template_post', 'INSERISCI_TEMPLATE_ID_POST_1x1', 'canva')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('canva_template_story', 'INSERISCI_TEMPLATE_ID_STORY_9x16', 'canva')`,
+          `INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES
+            ('canva_template_reel', 'INSERISCI_TEMPLATE_ID_REEL_COVER', 'canva')`
         ], "write");
       }
 
