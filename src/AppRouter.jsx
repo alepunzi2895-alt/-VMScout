@@ -1,6 +1,7 @@
 import { useState } from "react";
 import VisualMarketingScout from "./App.jsx";
 import LuxyExperience from "./LuxyExperience.jsx";
+import InstagramAnalytics from "./InstagramAnalytics.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -25,6 +26,7 @@ export default function AppRouter() {
         {[
           { id: "vmscout", label: "Visual Marketing Scout", icon: "📸" },
           { id: "luxy", label: "Luxy Experience", icon: "✦" },
+          { id: "instagram", label: "Instagram Analytics", icon: "📱" },
         ].map(app => (
           <button key={app.id} onClick={() => setActiveApp(app.id)}
             style={{
@@ -40,7 +42,7 @@ export default function AppRouter() {
             }}>
             <span>{app.icon}</span>
             <span>{app.label}</span>
-            {app.id === "luxy" && (
+            {app.id === "instagram" && (
               <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: `${GOLD}20`, color: GOLD, marginLeft: 2 }}>NEW</span>
             )}
           </button>
@@ -51,6 +53,7 @@ export default function AppRouter() {
       <div style={{ paddingTop: 44 }}>
         {activeApp === "vmscout" && <VisualMarketingScout />}
         {activeApp === "luxy" && <LuxyExperience />}
+        {activeApp === "instagram" && <InstagramAnalytics />}
       </div>
     </div>
   );
