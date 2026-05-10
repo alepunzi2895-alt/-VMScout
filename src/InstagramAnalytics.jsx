@@ -135,7 +135,7 @@ function ConnectPanel({ onConnect }) {
         {[
           ["1", "Vai su", "developers.facebook.com/tools/explorer"],
           ["2", "Seleziona la tua app Facebook (o creane una gratuita)"],
-          ["3", "Clicca "Generate Access Token" e aggiungi i permessi:", "instagram_basic  instagram_manage_insights  pages_show_list"],
+          ["3", 'Clicca "Generate Access Token" e aggiungi i permessi:', "instagram_basic  instagram_manage_insights  pages_show_list"],
           ["4", "Copia il token e incollalo qui sotto"],
         ].map(([n, text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
