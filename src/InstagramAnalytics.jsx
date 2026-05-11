@@ -104,11 +104,17 @@ function ConnectPanel({ onConnect }) {
       if (!pages.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
 
       const page = pages.data[0];
-      const igData = await igCall(t, page.id, { fields: "instagram_business_account{id,username}" });
+      // Use Page Access Token (not User token) — required to read instagram_business_account
+      const pageToken = page.access_token || t;
+      const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username}" });
       if (igData.error) throw new Error(igData.error.message);
 
       const igUser = igData.instagram_business_account;
-      if (!igUser) throw new Error("Nessun account Instagram Business collegato a questa Page.");
+      if (!igUser) throw new Error(
+        `Nessun account Instagram Business collegato alla Page "${page.name}". ` +
+        "Controlla: (1) @luxy.exp è account Business/Creator su Instagram, " +
+        "(2) è collegato a questa Facebook Page da Impostazioni → Account collegati."
+      );
 
       onConnect({ token: t, accountId: igUser.id, username: igUser.username });
     } catch (err) {
@@ -135,8 +141,9 @@ function ConnectPanel({ onConnect }) {
         {[
           ["1", "Vai su", "developers.facebook.com/tools/explorer"],
           ["2", "Seleziona la tua app Facebook (o creane una gratuita)"],
-          ["3", 'Clicca "Generate Access Token" e aggiungi i permessi:', "instagram_basic  instagram_manage_insights  pages_show_list"],
-          ["4", "Copia il token e incollalo qui sotto"],
+          ["3", 'Clicca "Generate Access Token" e aggiungi i permessi:', "instagram_basic  instagram_manage_insights  pages_show_list  pages_read_engagement"],
+          ["4", "Assicurati che @luxy.exp sia account Business/Creator su Instagram e collegato alla tua Facebook Page (Instagram → Impostazioni → Account → Account collegati)"],
+          ["5", "Copia il token e incollalo qui sotto"],
         ].map(([n, text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
             <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${GOLD}20`, border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Montserrat', sans-serif", flexShrink: 0, marginTop: 1 }}>
