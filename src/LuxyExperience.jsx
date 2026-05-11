@@ -181,7 +181,7 @@ ANGOLI CAPTION CHE CONVERTONO:
 • "Non chiediamo se è possibile. Troviamo come farlo." → posizionamento concierge premium
 • "Ibiza non è una destinazione. È uno stato d'animo." → aspirational, alto salvataggio
 • Hook-domanda: "Hai già la tua villa per agosto?" → DM immediato
-• "Last minute accepted." → urgency senza pressione, funziona per yacht e nightlife`;
+• "Last minute accepted." → urgency senza pressione, funziona per yacht e nightlife
 
 LINGUA: Genera SEMPRE caption in INGLESE, SPAGNOLO e ITALIANO (in questo ordine). Il campo caption è un oggetto con chiavi "en", "es", "it".
 
