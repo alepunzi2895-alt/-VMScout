@@ -215,7 +215,7 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
   "save_to_memory": []
 }
 
-SEARCH QUERY RULE: Ogni search_query DEVE seguire la formula [aggettivo luxury] + [soggetto specifico] + [luogo/contesto]. Esempi ottimi: "luxury villa ibiza pool golden hour", "private yacht formentera turquoise", "elegant rooftop terrace sunset ibiza", "exclusive car transfer villa entrance", "crystal clear water mediterranean yacht". Esempi da EVITARE: "villa ibiza", "yacht sea", "sunset", "luxury travel" (troppo generico → risultati non pertinenti su Pexels/Pixabay).
+SEARCH QUERY RULE: Ogni search_query DEVE seguire la formula [aggettivo luxury] + [soggetto specifico] + [luogo ESPLICITO]. REGOLA CRITICA: Se il contenuto cita una destinazione (Ibiza, Sardegna, Mykonos, Formentera, Santorini, ecc.), il NOME DEL LUOGO deve apparire nella search_query di quella slide — non metterlo solo nel titolo. Esempi ottimi: "luxury villa ibiza pool golden hour", "sardinia crystal water yacht", "mykonos white cycladic villa pool", "formentera turquoise sea luxury", "ibiza sunset terrace cocktail", "sardinia coast luxury catamaran". Esempi da EVITARE: "villa pool", "clear water yacht", "sunset terrace" (non trovano immagini pertinenti senza il luogo).
 
 IMPORTANTE: hashtags_instagram DEVE avere ESATTAMENTE 5 hashtag significativi (non di più, non di meno).
 ${overrideRules}
@@ -461,11 +461,11 @@ function PhotoThumb({ imgUrl, uploadUrl, linkUrl, source, sourceColor, vertical 
 }
 
 // ─────────────────────────────────────────────────
-// SLIDE PHOTO ROW — singola slide del carosello
+// SLIDE PHOTO ROW — singola slide del carosello (3+3 foto griglia)
 // ─────────────────────────────────────────────────
 function SlidePhotoRow({ slide, vertical = false }) {
-  const [pexels,  setPexels]  = useState(null);
-  const [pixabay, setPixabay] = useState(null);
+  const [pexels,  setPexels]  = useState([]);
+  const [pixabay, setPixabay] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -476,11 +476,11 @@ function SlidePhotoRow({ slide, vertical = false }) {
 
     if (API_KEYS.pexels) {
       fetch(
-        `https://api.pexels.com/v1/search?query=${encodeURIComponent(slide.search_query)}&per_page=1&orientation=${orientation}`,
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(slide.search_query)}&per_page=3&orientation=${orientation}`,
         { headers: { Authorization: API_KEYS.pexels } }
       )
         .then(r => r.json())
-        .then(d => { setPexels(d.photos?.[0] || null); finish(); })
+        .then(d => { setPexels(d.photos || []); finish(); })
         .catch(finish);
     } else finish();
 
@@ -489,98 +489,76 @@ function SlidePhotoRow({ slide, vertical = false }) {
         `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(slide.search_query)}&per_page=3&image_type=photo&orientation=${vertical ? "vertical" : "horizontal"}&safesearch=true`
       )
         .then(r => r.json())
-        .then(d => {
-          const hits = d.hits || [];
-          // pick the second result to avoid overlap with Pexels' first result
-          setPixabay(hits[1] || hits[0] || null);
-          finish();
-        })
+        .then(d => { setPixabay(d.hits || []); finish(); })
         .catch(finish);
     } else finish();
   }, [slide.search_query, vertical]);
 
+  const allPhotos = [
+    ...pexels.map(p => ({ id: `px-${p.id}`, imgUrl: p.src.medium, uploadUrl: p.src.large2x || p.src.large, linkUrl: p.url, source: "Pexels", sourceColor: "#05A081" })),
+    ...pixabay.map(h => ({ id: `pb-${h.id}`, imgUrl: h.webformatURL, uploadUrl: h.largeImageURL || h.webformatURL, linkUrl: h.pageURL, source: "Pixabay", sourceColor: "#00AB6C" })),
+  ];
+
   return (
-    <div style={{
-      display: "flex", gap: 10, alignItems: "flex-start",
-      padding: "10px 0", borderBottom: `1px solid ${GOLD}08`,
-    }}>
-      {/* Numero slide */}
-      <div style={{
-        width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-        background: `${GOLD}15`, border: `1px solid ${GOLD}40`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 10, fontWeight: 700, color: GOLD,
-        fontFamily: "'Montserrat', sans-serif", marginTop: 2,
-      }}>
-        {slide.n}
+    <div style={{ padding: "12px 0", borderBottom: `1px solid ${GOLD}08` }}>
+      {/* Intestazione slide */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+        <div style={{
+          width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+          background: `${GOLD}15`, border: `1px solid ${GOLD}40`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 10, fontWeight: 700, color: GOLD,
+          fontFamily: "'Montserrat', sans-serif",
+        }}>
+          {slide.n}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {slide.title && (
+            <div style={{ fontSize: 13, color: OFF_WHITE, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.4 }}>
+              {slide.title}
+            </div>
+          )}
+          {slide.overlay && (
+            <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic", marginTop: 2 }}>
+              {slide.overlay}
+            </div>
+          )}
+          <div style={{ fontSize: 9, color: `${GOLD}80`, marginTop: 4, fontFamily: "monospace" }}>
+            🔍 {slide.search_query}
+          </div>
+        </div>
+        <a href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(slide.search_query + " luxury")}`}
+          target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 8, padding: "3px 8px", borderRadius: 5, background: "#E6002310", color: "#E60023", textDecoration: "none", fontWeight: 700, flexShrink: 0, border: "1px solid #E6002330" }}>
+          P Pinterest ↗
+        </a>
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Titolo + overlay testo suggerito */}
-        {(slide.title || slide.overlay) && (
-          <div style={{ marginBottom: 8 }}>
-            {slide.title && (
-              <div style={{ fontSize: 12, color: OFF_WHITE, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif" }}>
-                {slide.title}
+      {/* Griglia foto */}
+      {loading ? (
+        <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic", paddingLeft: 36 }}>Cerco foto...</div>
+      ) : allPhotos.length > 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(allPhotos.length, 3)}, 1fr)`, gap: 6, paddingLeft: 36 }}>
+          {allPhotos.map(p => (
+            <div key={p.id} style={{
+              borderRadius: 8, overflow: "hidden", background: "#000", position: "relative",
+              aspectRatio: vertical ? "9/16" : "4/3", border: `1px solid ${GOLD}15`,
+            }}>
+              <img src={p.imgUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.88 }} loading="lazy" />
+              <div style={{ position: "absolute", top: 4, left: 4, fontSize: 7, padding: "1px 5px", borderRadius: 3, background: `${p.sourceColor}CC`, color: "#fff", fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
+                {p.source}
               </div>
-            )}
-            {slide.overlay && (
-              <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic" }}>
-                {slide.overlay}
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "18px 4px 5px", background: "linear-gradient(transparent, rgba(0,0,0,0.85))", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <CanvaUploadBtn url={p.uploadUrl} />
+                <a href={p.linkUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ width: 16, height: 16, background: "rgba(0,0,0,0.55)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: OFF_WHITE, textDecoration: "none", fontSize: 9 }}>↗</a>
               </div>
-            )}
-            {slide.title && (
-              <div style={{ marginTop: 4 }}>
-                <CopyBtn text={slide.title + (slide.overlay ? "\n" + slide.overlay : "")} small />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Foto */}
-        {loading ? (
-          <div style={{ fontSize: 10, color: WARM_GREY, fontStyle: "italic" }}>Cerco foto...</div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {pexels && (
-              <PhotoThumb
-                imgUrl={pexels.src.medium}
-                uploadUrl={pexels.src.large2x || pexels.src.large}
-                linkUrl={pexels.url}
-                source="Pexels"
-                sourceColor="#05A081"
-                vertical={vertical}
-              />
-            )}
-            {pixabay && (
-              <PhotoThumb
-                imgUrl={pixabay.webformatURL}
-                uploadUrl={pixabay.webformatURL}
-                linkUrl={pixabay.pageURL}
-                source="Pixabay"
-                sourceColor="#00AB6C"
-                vertical={vertical}
-              />
-            )}
-            {/* Pinterest — link diretto con query specifica della slide */}
-            <a href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(slide.search_query + " luxury")}`}
-              target="_blank" rel="noopener noreferrer"
-              style={{
-                width: vertical ? 80 : 110, flexShrink: 0,
-                aspectRatio: vertical ? "9/16" : "4/3",
-                borderRadius: 8, border: `1px dashed #E6002350`,
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                textDecoration: "none", gap: 5, background: "#E6002308",
-              }}>
-              <span style={{ fontSize: 20, color: "#E60023" }}>P</span>
-              <span style={{ fontSize: 8, color: "#E60023", fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>Pinterest</span>
-              <span style={{ fontSize: 7, color: WARM_GREY, textAlign: "center", padding: "0 6px", lineHeight: 1.4 }}>
-                "{slide.search_query}" ↗
-              </span>
-            </a>
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 10, color: WARM_GREY, paddingLeft: 36 }}>Nessuna foto trovata</div>
+      )}
     </div>
   );
 }
@@ -813,13 +791,17 @@ function detectSlideCount(output) {
 }
 
 function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTemplates }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded,  setExpanded]  = useState(true);
+  const [activeTab, setActiveTab] = useState("slide");
   const [canvaType, setCanvaType] = useState(
     output.format === "scene" ? "reel" : output.format === "story" ? "story" : "post"
   );
-  const [canvaLoading, setCanvaLoading]   = useState(false);
-  const [canvaUrl, setCanvaUrl]           = useState(null);
+  const [canvaLoading, setCanvaLoading] = useState(false);
+  const [canvaUrl, setCanvaUrl]         = useState(null);
   const [canvaImageUrl, setCanvaImageUrl] = useState(null);
+
+  const isCarousel = output.slides?.length > 0;
+  const isVertical = output.format === "story" || output.format === "reel";
 
   const getCta = (langKey) => {
     if (!output.cta) return "";
@@ -827,14 +809,12 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
     return output.cta[langKey] || "";
   };
 
-  // Build single Instagram-ready caption block: EN → ES → IT + 5 hashtags
   const buildIGCaption = () => {
     const cap = output.caption || {};
     const en  = typeof cap === "string" ? cap : (cap.en || "");
     const es  = typeof cap === "string" ? "" : (cap.es || "");
     const it  = typeof cap === "string" ? "" : (cap.it || "");
     const tags = (output.hashtags_instagram || []).slice(0, 5).map(h => `#${h.replace(/^#/, "")}`).join(" ");
-
     const lines = [];
     if (en) lines.push(`🇬🇧 ${en}${getCta("en") ? `\n${getCta("en")}` : ""}`);
     if (es) lines.push(`🇪🇸 ${es}${getCta("es") ? `\n${getCta("es")}` : ""}`);
@@ -844,213 +824,319 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
   };
 
   const igCaption = buildIGCaption();
-  // Fallback single-language caption for preview / save
   const caption = (() => {
     if (!output.caption) return "";
     if (typeof output.caption === "string") return output.caption;
     return output.caption.en || output.caption.it || "";
   })();
 
-  const moodColors = {
-    aspirational: "#7B6A4A", authentic: "#4A6B7B",
-    exclusive: GOLD_DARK, playful: "#7B4A6B"
-  };
+  const moodColors = { aspirational: "#7B6A4A", authentic: "#4A6B7B", exclusive: GOLD_DARK, playful: "#7B4A6B" };
+
+  // Tabs available
+  const tabs = [
+    { id: "slide",   label: isCarousel ? "Slide" : "Post",    icon: "📋" },
+    { id: "foto",    label: "Foto",    icon: "📸" },
+    { id: "caption", label: "Caption", icon: "✍️" },
+    { id: "canva",   label: "Canva",   icon: "✦"  },
+  ];
 
   return (
-    <div style={{
-      background: CARD_BG, border: `1px solid ${GOLD}20`, borderRadius: 14,
-      overflow: "hidden", transition: "all 0.3s", marginBottom: 12
-    }}>
+    <div style={{ background: CARD_BG, border: `1px solid ${GOLD}20`, borderRadius: 14, overflow: "hidden", marginBottom: 12 }}>
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
         borderBottom: `1px solid ${GOLD}12`, cursor: "pointer",
         background: `linear-gradient(90deg, ${GOLD}08, transparent)`
       }} onClick={() => setExpanded(!expanded)}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.1em" }}>
-          #{output.id}
-        </span>
-        <span style={{ flex: 1, fontSize: 13, color: OFF_WHITE, fontFamily: "'Cormorant Garamond', serif" }}>
-          {output.title || `Output ${output.id}`}
-        </span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.1em" }}>#{output.id}</span>
+        <span style={{ flex: 1, fontSize: 13, color: OFF_WHITE, fontFamily: "'Cormorant Garamond', serif" }}>{output.title || `Output ${output.id}`}</span>
         {output.mood && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: `${moodColors[output.mood] || GOLD}20`, color: moodColors[output.mood] || GOLD, fontWeight: 600 }}>{output.mood}</span>}
         {output.best_time && <span style={{ fontSize: 9, color: WARM_GREY, fontFamily: "monospace" }}>⏰ {output.best_time}</span>}
         <span style={{ fontSize: 12, color: WARM_GREY }}>{expanded ? "▲" : "▼"}</span>
       </div>
 
       {expanded && (
-        <div style={{ padding: "16px" }}>
-          {/* Visual hint */}
-          {output.visual_description && (
-            <div style={{ padding: "10px 14px", background: `${GOLD}06`, borderRadius: 8, borderLeft: `2px solid ${GOLD}40`, marginBottom: 14 }}>
-              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>📷 Visual</div>
-              <div style={{ fontSize: 12, color: "#BBB", lineHeight: 1.6, fontStyle: "italic" }}>{output.visual_description}</div>
-              {output.search_query && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                    {["unsplash.com/s/photos/", "pexels.com/search/", "pinterest.com/search/pins/?q="].map((base, i) => {
-                      const sites = ["Unsplash", "Pexels", "Pinterest"];
-                      const colors = ["#111", "#05A081", "#E60023"];
+        <div>
+          {/* Tab bar */}
+          <div style={{ display: "flex", borderBottom: `1px solid ${GOLD}15`, background: "#0A0A0A" }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                flex: 1, padding: "9px 4px", fontSize: 10, fontWeight: 600, cursor: "pointer",
+                border: "none", background: "transparent",
+                color: activeTab === t.id ? GOLD : WARM_GREY,
+                borderBottom: `2px solid ${activeTab === t.id ? GOLD : "transparent"}`,
+                fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.05em",
+                transition: "all 0.15s",
+              }}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ─── TAB: SLIDE / POST ─── */}
+          {activeTab === "slide" && (
+            <div style={{ padding: "16px" }}>
+              {/* Visual direction */}
+              {output.visual_description && (
+                <div style={{ padding: "10px 14px", background: `${GOLD}06`, borderRadius: 8, borderLeft: `2px solid ${GOLD}40`, marginBottom: 14 }}>
+                  <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>📷 Visual Direction</div>
+                  <div style={{ fontSize: 12, color: "#BBB", lineHeight: 1.6, fontStyle: "italic" }}>{output.visual_description}</div>
+                </div>
+              )}
+
+              {/* Slide per slide — titolo + overlay + CTA */}
+              {isCarousel ? (
+                <div>
+                  <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>
+                    Testi slide ({output.slides.length} slide)
+                  </div>
+                  {output.slides.map((slide, i) => {
+                    const isLast = i === output.slides.length - 1;
+                    const cta = isLast ? getCta(lang || "it") : null;
+                    const copyText = [slide.title, slide.overlay, cta].filter(Boolean).join("\n");
+                    return (
+                      <div key={slide.n} style={{
+                        display: "flex", gap: 10, alignItems: "flex-start",
+                        padding: "12px", marginBottom: 8,
+                        background: isLast ? `${GOLD}08` : `${GOLD}04`,
+                        borderRadius: 10, border: `1px solid ${isLast ? GOLD + "30" : GOLD + "10"}`,
+                      }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                          background: isLast ? `${GOLD}25` : `${GOLD}12`,
+                          border: `1px solid ${GOLD}${isLast ? "60" : "30"}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 700, color: GOLD,
+                        }}>
+                          {slide.n}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {slide.title && (
+                            <div style={{ fontSize: 14, color: OFF_WHITE, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.3 }}>
+                              {slide.title}
+                            </div>
+                          )}
+                          {slide.overlay && (
+                            <div style={{ fontSize: 12, color: WARM_GREY, fontStyle: "italic", marginTop: 3 }}>
+                              {slide.overlay}
+                            </div>
+                          )}
+                          {isLast && cta && (
+                            <div style={{ marginTop: 6, fontSize: 12, color: GOLD, fontWeight: 600 }}>
+                              {cta}
+                            </div>
+                          )}
+                        </div>
+                        <CopyBtn text={copyText} small />
+                      </div>
+                    );
+                  })}
+
+                  {/* CTA globale del post (non ultima slide) */}
+                  {getCta("en") && (
+                    <div style={{ marginTop: 12, padding: "10px 14px", background: `${GOLD}06`, borderRadius: 8, borderLeft: `3px solid ${GOLD}` }}>
+                      <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 6 }}>CTA Post</div>
+                      {["en","es","it"].map(l => getCta(l) && (
+                        <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 9, color: WARM_GREY }}>{l === "en" ? "🇬🇧" : l === "es" ? "🇪🇸" : "🇮🇹"}</span>
+                          <span style={{ fontSize: 12, color: OFF_WHITE, flex: 1 }}>{getCta(l)}</span>
+                          <CopyBtn text={getCta(l)} small />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Post singolo */
+                <div>
+                  {caption && (
+                    <div style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, fontFamily: "'Cormorant Garamond', serif", marginBottom: 12 }}>
+                      {caption}
+                    </div>
+                  )}
+                  {getCta("it") && (
+                    <div style={{ fontSize: 13, color: GOLD, fontWeight: 600, marginBottom: 12 }}>{getCta("it")}</div>
+                  )}
+                  {output.platform_tip && (
+                    <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic", padding: "8px 0", borderTop: `1px solid ${GOLD}10` }}>
+                      💡 {output.platform_tip}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Save button */}
+              <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+                {!isSaved ? (
+                  <button onClick={() => onSave(output)} disabled={isSaving}
+                    style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid ${GOLD}50`, background: `${GOLD}18`, color: GOLD, fontSize: 11, fontWeight: 600, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                    {isSaving ? "Salvo..." : "💾 Salva Post"}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 11, color: "#5A9A5A", fontWeight: 600 }}>✓ Salvato nel DB</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ─── TAB: FOTO ─── */}
+          {activeTab === "foto" && (
+            <div style={{ padding: "16px" }}>
+              {output.search_query && !isCarousel && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>
+                    📸 Foto Post — "{output.search_query}"
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                    {[["unsplash.com/s/photos/","Unsplash","#111"],["pexels.com/search/","Pexels","#05A081"],["pinterest.com/search/pins/?q=","Pinterest","#E60023"]].map(([base, name, color]) => (
+                      <a key={name} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${color}20`, color, textDecoration: "none", fontWeight: 600, border: `1px solid ${color}30` }}>
+                        {name} ↗
+                      </a>
+                    ))}
+                  </div>
+                  <PexelsPhotoStrip query={output.search_query} vertical={isVertical} count={3} />
+                  {isVertical && <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />}
+                </div>
+              )}
+
+              {isCarousel ? (
+                <CarouselSlideStrip slides={output.slides} vertical={isVertical} />
+              ) : !output.search_query ? (
+                <div style={{ fontSize: 11, color: WARM_GREY, textAlign: "center", padding: "20px 0" }}>
+                  Nessuna query foto disponibile
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* ─── TAB: CAPTION ─── */}
+          {activeTab === "caption" && (
+            <div style={{ padding: "16px" }}>
+              {igCaption ? (
+                <>
+                  <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                    Caption Instagram — EN · ES · IT
+                  </div>
+                  <div style={{
+                    background: "#0A0A0A", border: `1px solid ${GOLD}20`, borderRadius: 10,
+                    padding: "14px 16px", fontSize: 13, color: OFF_WHITE,
+                    lineHeight: 1.8, whiteSpace: "pre-line", fontFamily: "'Cormorant Garamond', serif",
+                    userSelect: "all",
+                  }}>
+                    {igCaption}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <CopyBtn text={igCaption} label="📋 Copia Caption IG completa" />
+                  </div>
+                  {/* Singola lingua */}
+                  <div style={{ marginTop: 14, display: "flex", gap: 6 }}>
+                    {["en","es","it"].map(l => {
+                      const cap = output.caption || {};
+                      const txt = typeof cap === "string" ? cap : (cap[l] || "");
+                      if (!txt) return null;
+                      const flag = l === "en" ? "🇬🇧" : l === "es" ? "🇪🇸" : "🇮🇹";
                       return (
-                        <a key={i} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
-                          style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${colors[i]}20`, color: colors[i], textDecoration: "none", fontWeight: 600 }}>
-                          {sites[i]} ↗
-                        </a>
+                        <button key={l} onClick={() => navigator.clipboard.writeText(txt + (getCta(l) ? "\n" + getCta(l) : ""))}
+                          style={{ flex: 1, padding: "7px 4px", borderRadius: 6, border: `1px solid ${GOLD}20`, background: "transparent", color: WARM_GREY, fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                          {flag} Copia {l.toUpperCase()}
+                        </button>
                       );
                     })}
                   </div>
-                  {/* Carosello: per-slide con Pexels + Pixabay + Pinterest */}
-                  {output.slides?.length > 0 ? (
-                    <CarouselSlideStrip
-                      slides={output.slides}
-                      vertical={output.format === "story" || output.format === "reel"}
-                    />
-                  ) : (
-                    <>
-                      <PexelsPhotoStrip
-                        query={output.search_query}
-                        vertical={output.format === "story" || output.format === "reel" || output.format === "scene"}
-                        count={detectSlideCount(output) || 1}
-                      />
-                      {(output.format === "reel" || output.format === "story" || output.format === "scene") && (
-                        <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />
-                      )}
-                    </>
+                  {/* Hashtag Facebook */}
+                  {output.hashtags_facebook?.length > 0 && (
+                    <div style={{ marginTop: 14, padding: "10px 14px", background: "#1877F210", borderRadius: 8, border: "1px solid #1877F230" }}>
+                      <div style={{ fontSize: 9, color: "#1877F2", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 6 }}>Facebook Tags</div>
+                      <div style={{ fontSize: 12, color: "#6b8ec7" }}>
+                        {output.hashtags_facebook.map(h => `#${h.replace(/^#/, "")}`).join(" ")}
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        <CopyBtn text={output.hashtags_facebook.map(h => `#${h.replace(/^#/, "")}`).join(" ")} label="Copia Hashtag FB" small />
+                      </div>
+                    </div>
                   )}
+                  {output.platform_tip && (
+                    <div style={{ marginTop: 12, fontSize: 11, color: WARM_GREY, fontStyle: "italic", lineHeight: 1.6 }}>
+                      💡 {output.platform_tip}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: WARM_GREY, textAlign: "center", padding: "20px 0" }}>
+                  Nessuna caption disponibile
                 </div>
               )}
             </div>
           )}
 
-          {/* Instagram Caption — blocco unico copiabile EN → ES → IT + hashtag */}
-          {igCaption && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
-                Caption Instagram
+          {/* ─── TAB: CANVA ─── */}
+          {activeTab === "canva" && (
+            <div style={{ padding: "16px" }}>
+              <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
+                Crea Design Canva
               </div>
-              <div style={{
-                background: "#0A0A0A", border: `1px solid ${GOLD}20`, borderRadius: 10,
-                padding: "14px 16px", fontSize: 13, color: OFF_WHITE,
-                lineHeight: 1.8, whiteSpace: "pre-line", fontFamily: "'Cormorant Garamond', serif",
-                userSelect: "all",
-              }}>
-                {igCaption}
-              </div>
-              <div style={{ marginTop: 8 }}>
-                <CopyBtn text={igCaption} label="📋 Copia Caption IG" />
-              </div>
-            </div>
-          )}
-
-          {/* Platform tip */}
-          {output.platform_tip && (
-            <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic", marginBottom: 14, padding: "6px 0", borderTop: `1px solid ${GOLD}10` }}>
-              💡 {output.platform_tip}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {!isSaved ? (
-              <button onClick={() => onSave(output)} disabled={isSaving}
-                style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid ${GOLD}50`, background: isSaving ? `${GOLD}10` : `${GOLD}18`, color: GOLD, fontSize: 11, fontWeight: 600, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-                {isSaving ? "Salvo..." : "💾 Salva Post"}
-              </button>
-            ) : (
-              <span style={{ fontSize: 11, color: "#5A9A5A", fontWeight: 600, padding: "7px 0" }}>✓ Salvato nel DB</span>
-            )}
-
-            {/* Canva — auto-create design with Pexels background */}
-            <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
               {/* Format selector */}
-              {[
-                { id: "post",  icon: "📸", label: "1:1"   },
-                { id: "story", icon: "📱", label: "Story" },
-                { id: "reel",  icon: "🎬", label: "Reel"  },
-              ].map(t => (
-                <button key={t.id} onClick={() => { setCanvaType(t.id); setCanvaUrl(null); setCanvaImageUrl(null); }}
-                  title={t.label}
-                  style={{
-                    padding: "4px 7px", fontSize: 8, borderRadius: 4, cursor: "pointer",
-                    border: `1px solid ${canvaType === t.id ? CANVA_TEAL : CANVA_TEAL + "25"}`,
-                    background: canvaType === t.id ? `${CANVA_TEAL}18` : "transparent",
-                    color: canvaType === t.id ? CANVA_TEAL : WARM_GREY,
-                    fontFamily: "'Montserrat', sans-serif",
-                  }}>
-                  {t.icon}
-                </button>
-              ))}
+              <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                {[{ id: "post", icon: "📸", label: "Post 1:1" }, { id: "story", icon: "📱", label: "Story 9:16" }, { id: "reel", icon: "🎬", label: "Reel 9:16" }].map(t => (
+                  <button key={t.id} onClick={() => { setCanvaType(t.id); setCanvaUrl(null); setCanvaImageUrl(null); }}
+                    style={{
+                      flex: 1, padding: "8px 4px", fontSize: 11, borderRadius: 6, cursor: "pointer",
+                      border: `1px solid ${canvaType === t.id ? CANVA_TEAL : CANVA_TEAL + "25"}`,
+                      background: canvaType === t.id ? `${CANVA_TEAL}18` : "transparent",
+                      color: canvaType === t.id ? CANVA_TEAL : WARM_GREY,
+                      fontFamily: "'Montserrat', sans-serif", fontWeight: 600,
+                    }}>
+                    {t.icon} {t.label}
+                  </button>
+                ))}
+              </div>
 
               {canvaUrl ? (
-                /* Template ready — open link + optional image URL copy */
-                <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <a href={canvaUrl} target="_blank" rel="noopener noreferrer"
-                    style={{
-                      padding: "7px 12px", borderRadius: 6, textDecoration: "none",
-                      border: `1px solid #5A9A5A80`, background: "#5A9A5A18",
-                      color: "#5A9A5A", fontSize: 11, fontWeight: 600,
-                      fontFamily: "'Montserrat', sans-serif",
-                    }}>
-                    ✓ Apri Template →
+                    style={{ display: "block", padding: "10px 16px", borderRadius: 8, textDecoration: "none", textAlign: "center", border: `1px solid #5A9A5A80`, background: "#5A9A5A18", color: "#5A9A5A", fontSize: 13, fontWeight: 600, fontFamily: "'Montserrat', sans-serif" }}>
+                    ✓ Apri Template Canva →
                   </a>
                   {canvaImageUrl && (
-                    <button
-                      onClick={() => navigator.clipboard.writeText(canvaImageUrl)}
-                      title="Incolla l'URL in Canva → Immagine → da link"
-                      style={{
-                        padding: "7px 10px", borderRadius: 6, cursor: "pointer",
-                        border: `1px solid ${CANVA_TEAL}40`, background: `${CANVA_TEAL}10`,
-                        color: CANVA_TEAL, fontSize: 10, fontWeight: 600,
-                        fontFamily: "'Montserrat', sans-serif",
-                      }}>
-                      📋 Copia URL foto
+                    <button onClick={() => navigator.clipboard.writeText(canvaImageUrl)}
+                      style={{ padding: "8px 16px", borderRadius: 8, cursor: "pointer", border: `1px solid ${CANVA_TEAL}40`, background: `${CANVA_TEAL}10`, color: CANVA_TEAL, fontSize: 11, fontWeight: 600, fontFamily: "'Montserrat', sans-serif" }}>
+                      📋 Copia URL foto sfondo
                     </button>
                   )}
                 </div>
               ) : (
-                /* Create button */
                 <button disabled={canvaLoading} onClick={async () => {
-                    setCanvaLoading(true);
-                    try {
-                      const res = await fetch("/api/canva-create", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          caption,
-                          cta:          getCta(),
-                          search_query: output.search_query || "",
-                          format:       canvaType,
-                        }),
-                      });
-                      const data = await res.json();
-                      if (data.ok) {
-                        setCanvaUrl(data.url);
-                        if (data.imageUrl) setCanvaImageUrl(data.imageUrl);
-                      } else if (data.error === "CANVA_NOT_CONNECTED") {
-                        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-                      } else {
-                        alert(data.message || "Errore creazione design Canva");
-                      }
-                    } finally {
-                      setCanvaLoading(false);
+                  setCanvaLoading(true);
+                  try {
+                    const res = await fetch("/api/canva-create", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ caption, cta: getCta(), search_query: output.search_query || "", format: canvaType }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                      setCanvaUrl(data.url);
+                      if (data.imageUrl) setCanvaImageUrl(data.imageUrl);
+                    } else if (data.error === "CANVA_NOT_CONNECTED") {
+                      window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+                    } else {
+                      alert(data.message || "Errore creazione design Canva");
                     }
-                  }}
-                  style={{
-                    padding: "7px 14px", borderRadius: 6,
-                    cursor: canvaLoading ? "wait" : "pointer",
-                    border: `1px solid ${CANVA_TEAL}50`, background: `${CANVA_TEAL}15`,
-                    color: CANVA_TEAL, fontSize: 11, fontWeight: 600,
-                    fontFamily: "'Montserrat', sans-serif", opacity: canvaLoading ? 0.6 : 1,
-                    display: "flex", alignItems: "center", gap: 5,
-                  }}>
-                  {canvaLoading
-                    ? <><span style={{ fontSize: 9 }}>⏳</span> Creo...</>
-                    : <><span style={{ fontSize: 9 }}>✦</span> Crea Design</>
-                  }
+                  } finally { setCanvaLoading(false); }
+                }}
+                style={{
+                  width: "100%", padding: "10px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: canvaLoading ? "wait" : "pointer",
+                  border: `1px solid ${CANVA_TEAL}50`, background: `${CANVA_TEAL}15`,
+                  color: CANVA_TEAL, fontFamily: "'Montserrat', sans-serif",
+                  opacity: canvaLoading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}>
+                  {canvaLoading ? <><span>⏳</span> Creo design...</> : <><span>✦</span> Crea Design {canvaType}</>}
                 </button>
               )}
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
