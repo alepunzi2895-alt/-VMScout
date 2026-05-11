@@ -201,9 +201,9 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "hashtags_facebook": ["tag1", "tag2"],
       "cta": { "en": "...", "es": "...", "it": "..." },
       "visual_description": "Descrizione dell'immagine ideale",
-      "search_query": "english search query for stock photos",
+      "search_query": "luxury-specific EN query: 3-4 words MAX, include luxury adjective (luxury/private/exclusive/elegant) + subject (villa/yacht/pool/car/sunset) + location if relevant (ibiza/mediterranean/formentera). Es: 'luxury villa ibiza pool', 'private yacht mediterranean sunset', 'elegant villa terrace golden hour'",
       "slides": [
-        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "specific EN query slide 1" }
+        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "luxury-specific EN query for this slide: 3-4 words, adjective+subject+location (es: 'infinity pool sunset ibiza', 'private yacht turquoise water', 'luxury villa exterior evening')" }
       ],
       "best_time": "18:30",
       "platform_tip": "Suggerimento specifico piattaforma",
@@ -214,6 +214,8 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
   "mood_tags": ["tag1", "tag2", "tag3"],
   "save_to_memory": []
 }
+
+SEARCH QUERY RULE: Ogni search_query DEVE seguire la formula [aggettivo luxury] + [soggetto specifico] + [luogo/contesto]. Esempi ottimi: "luxury villa ibiza pool golden hour", "private yacht formentera turquoise", "elegant rooftop terrace sunset ibiza", "exclusive car transfer villa entrance", "crystal clear water mediterranean yacht". Esempi da EVITARE: "villa ibiza", "yacht sea", "sunset", "luxury travel" (troppo generico → risultati non pertinenti su Pexels/Pixabay).
 
 IMPORTANTE: hashtags_instagram DEVE avere ESATTAMENTE 5 hashtag significativi (non di più, non di meno).
 ${overrideRules}
