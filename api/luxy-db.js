@@ -112,6 +112,30 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, message: "Tabelle create e memoria brand inizializzata" });
     }
 
+    // ─── INIT STRATEGY (idempotente — aggiunge solo chiavi nuove) ────
+    if (action === "init_strategy") {
+      const entries = [
+        ["content_pillar_villa",       "Carosello 5 slide villa reveal (esterno golden hour → piscina → camera → terrazza → CTA). Foto singola pool reflection tramonto. Angoli: 'Questo non era prenotabile online.' / 'Brief alle 10. Villa confermata alle 12. ✦'", "strategy"],
+        ["content_pillar_yacht",       "Bow shot prua verso orizzonte (zero testo, solo ✦). Reel B-roll 15-30s: attracco → cocktail → tuffo → sunset, musica deep house. Carosello island hopping Ibiza-Formentera-Espalmador. Angoli: 'Nessuna fila. Solo tu e il mare. ✦' / 'Formentera è un privilegio.'", "strategy"],
+        ["content_pillar_nightlife",   "Table setup before doors open (venue vuoto = eleganza pre-apertura). Story sondaggio: 'Pacha o Ushuaia?' / 'Villa afterparty o club?'. Reel arrivo VIP: car → entrance → table (15 sec B-roll). Angoli: 'Lista chiusa. Non per te. ✦' / 'La serata inizia dove gli altri finiscono.'", "strategy"],
+        ["content_pillar_concierge",   "Dal messaggio al sogno (WhatsApp fittizio → foto risultato). Preparativi: bouquet in villa, ghiaccio yacht, fiori in camera. Caption: 'Ci pensiamo noi.' / 'Non chiediamo se è possibile. Troviamo come farlo.'", "strategy"],
+        ["content_pillar_destination", "Es Vedrà tramonto (caption poetica, no promo). Ses Salines / Cala Comte / Atlantis — angolo insider. Ibiza off season (ottobre-novembre). Formentera: 'Solo per chi sa dove andare. ✦'", "strategy"],
+        ["content_pillar_cars",        "Keys on marble (chiavi luxury su superficie, 0 testo, solo ✦). Auto davanti cancello villa al tramonto. Reel consegna auto 10 sec loop. Angoli: 'Ogni dettaglio curato. ✦'", "strategy"],
+        ["winning_formats",            "Carosello 3-5 slide: salvataggi +40%, reach doppio. Reel 15-30s no voiceover: copertura massima. Foto singola golden hour 1 riga caption: engagement rate top. Story sondaggio binario: warm lead DM diretti.", "strategy"],
+        ["caption_hooks_winning",      "Hook: 'Questo è ciò che ottieni quando ci pensiamo noi.' / 'Ibiza non è una destinazione. È uno stato d\'animo.' / 'Hai già la tua villa per agosto?' / 'Last minute accepted.' / 'Ci pensiamo noi. ✦'", "strategy"],
+        ["competitor_benchmark",       "Top Ibiza concierge: @ibizaconciergecompany (73K follower, 2.6K post, same-day booking WhatsApp). Formula vincente: mix servizi diversi + location beauty + lifestyle aspiration. Post frequenza: 1/giorno.", "strategy"],
+      ];
+      let inserted = 0;
+      for (const [key, value, category] of entries) {
+        await db.execute({
+          sql: "INSERT OR IGNORE INTO luxy_brand_memory (key, value, category) VALUES (?,?,?)",
+          args: [key, value, category],
+        });
+        inserted++;
+      }
+      return res.status(200).json({ ok: true, message: `Strategia content aggiunta: ${inserted} chiavi`, inserted });
+    }
+
     // ─── SAVE REQUEST ────────────────────────────────────────
     if (action === "save_request" && req.method === "POST") {
       const { type, prompt, result_json, language, tags } = req.body;

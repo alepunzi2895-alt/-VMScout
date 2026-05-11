@@ -102,12 +102,14 @@ const LANGUAGES = [
 ];
 
 const LUXY_QUICK_PROMPTS = [
-  { label: "Villa Golden Hour", text: "Caption @luxy.exp per villa privata con piscina a strapiombo sul mare di Ibiza. Il cliente arriva al tramonto. Stile candid, autentico. Max 3 righe + CTA DM.", icon: "🌅" },
-  { label: "Yacht Formentera", text: "Post Instagram per weekend su yacht a Formentera. Candid, no forced luxury. Hashtag core + niche. IT/EN bilingue.", icon: "⛵" },
-  { label: "Nightlife VIP", text: "Story + post per accesso VIP Pacha/Ushuaia Ibiza. Tone: FOMO autentico, mai pacchiano. Include sondaggio per story 'Dove stasera?'.", icon: "🎭" },
-  { label: "Piano 7 giorni", text: "Piano editoriale 7 giorni @luxy.exp. Mix: 3 ville, 1 yacht, 1 nightlife, 1 concierge H24, 1 destination beauty Ibiza. Estate 2025, real content style.", icon: "📅" },
-  { label: "Bio Update", text: "3 versioni bio Instagram per @luxy.exp. Max 150 char. Comunica: lusso, Ibiza, concierge H24, personalizzazione. Includi ✦ come firma Luxy.", icon: "👤" },
-  { label: "Reel Storyboard", text: "Storyboard reel 30s @luxy.exp: arrivo villa → piscina → tramonto → aperitivo. No voiceover, solo testo overlay minimal. Footage B-roll autentico.", icon: "🎬" },
+  { label: "Villa Reveal", text: "Carosello Instagram 5 slide @luxy.exp: villa privata Ibiza vista mare. Slide 1 = esterno golden hour (hook). Slide 2 = piscina a strapiombo. Slide 3 = camera con vista. Slide 4 = terrazza aperitivo. Slide 5 = CTA DM. Caption aspirazionale, candid, autentico.", icon: "🌅" },
+  { label: "Yacht Bow Shot", text: "Post singolo @luxy.exp: prua yacht verso orizzonte, acque cristalline Formentera. Caption ultra-minimale max 1-2 righe + firma ✦. No forced luxury. Foto che 'parla da sola'.", icon: "⛵" },
+  { label: "Nightlife FOMO", text: "Post + story @luxy.exp per serata VIP Ibiza (Pacha/Ushuaia/Hi). Angolo: table setup prima dell'apertura — eleganza, privilegio discreto. FOMO autentico, mai pacchiano. Story include sondaggio binario 'Pacha o Ushuaia?'.", icon: "🎭" },
+  { label: "Behind Concierge", text: "Post @luxy.exp sul 'dietro le quinte' del servizio concierge. Angolo: 'Dal messaggio WhatsApp al sogno realizzato' — racconta la cura dei dettagli senza mostrare dati cliente. Caption: mostra velocità di risposta e personalizzazione.", icon: "💎" },
+  { label: "Reel B-roll", text: "Storyboard reel 30s @luxy.exp: arrivo in auto → villa reveal → piscina al tramonto → aperitivo con vista mare. No voiceover, testo overlay minimal (max 3 parole per scena), musica house ambient. Footage 100% autentico.", icon: "🎬" },
+  { label: "Ibiza Destination", text: "Post @luxy.exp su spot iconico Ibiza/Formentera (Es Vedrà, Ses Salines, Cala Comte o Atlantis). Angolo insider: 'Posti che solo chi abita Ibiza conosce davvero'. Caption storytelling, non touristy.", icon: "🏝" },
+  { label: "Car Detail", text: "Post @luxy.exp per servizio auto/transfer di lusso. Angolo: dettaglio chiavi su superficie elegante o auto davanti cancello villa. Caption breve: 'Ogni dettaglio curato. ✦' oppure arrivo cliente all'aeroporto.", icon: "🚗" },
+  { label: "Piano 7 giorni", text: "Piano editoriale 7 giorni @luxy.exp estate 2026. Mix: 2 ville, 1 yacht, 1 nightlife, 1 behind the concierge, 1 destination Ibiza/Formentera, 1 car/transfer. Giorni e orari ottimali (18-20h e 22-23h). Real content style.", icon: "📅" },
 ];
 
 // ─────────────────────────────────────────────────
@@ -132,6 +134,54 @@ ${igMemory ? `\nCONFIG INSTAGRAM DALLA BRAND MEMORY:\n${igMemory}\n` : ""}
 REGOLA D'ORO: Contenuti autentici, mai plastic luxury. Foto reali, lifestyle documentaristico, golden hour, mare cristallino, momenti candid.
 Stile visivo: minimal luxury. Nero, oro, bianco avorio. Mai pacchiano.
 Tone: Elegante e diretto. Il cliente si sente capito e coccolato. Non "economico", non "conveniente" — sempre "esclusivo", "su misura", "irripetibile".
+
+CONTENT PLAYBOOK VINCENTE (ispirato ai top concierge Ibiza con 10K–73K follower):
+
+PILLAR 1 — VILLA & PROPERTY (formato più salvato)
+• Carosello 5 slide "Villa Reveal": S1 esterno golden hour (hook forte) → S2 piscina a strapiombo → S3 camera con vista → S4 terrazza aperitivo → S5 CTA "→ DM per disponibilità"
+• Foto singola "Pool reflection" al tramonto: caption 1 riga, reach altissimo, facile da replicare
+• Angoli caption: "Questo non era prenotabile online." / "Brief ricevuto alle 10. Villa confermata alle 12. ✦" / "Chiamala villa. Noi la chiamiamo casa per questa settimana."
+
+PILLAR 2 — YACHT & MARE (reel + foto con engagement top)
+• "Bow shot" — prua verso orizzonte aperto, zero testo, solo firma ✦. Performa meglio senza caption
+• Reel B-roll 15-30s: attracco → cocktail a bordo → tuffo → sunset. Musica: deep house ambient, nessun voiceover
+• Carosello "Island Hopping in 24h": ogni slide = 1 tappa (Ibiza → Formentera → Espalmador) con 1 riga caption
+• Angoli: "Nessuna fila. Nessun orario. Solo tu e il mare. ✦" / "Formentera non è un posto. È un privilegio."
+
+PILLAR 3 — NIGHTLIFE & EVENTI (FOMO aspirazionale, mai pacchiano)
+• "Table setup before doors open" — eleganza pre-apertura vuota: oggetto più iconico di ogni serata VIP
+• Story sondaggio binario ad alto reply: "Pacha o Ushuaia stasera?" / "Villa afterparty o club?" / "Aperitivo o direttamente dopo mezzanotte?"
+• Reel arrivo VIP: car door → venue entrance → table reveal. 15 sec, solo B-roll
+• Angoli: "Lista chiusa. Non per te. ✦" / "La serata inizia dove gli altri finiscono."
+
+PILLAR 4 — CARS & TRANSFER (detail shot, altissima brand perception)
+• "Keys on marble" — chiavi luxury su superficie elegante, 0 testo. Solo firma.
+• Auto davanti cancello villa al tramonto. Caption: "Ogni dettaglio curato. ✦"
+• Reel consegna auto: 10 sec B-roll. Funziona su Reels come loop naturale.
+
+PILLAR 5 — BEHIND THE CONCIERGE (differenziante rispetto ai competitor)
+• "Dal messaggio al sogno" — screenshot fittizio di WhatsApp (richiesta generica) → foto del risultato. Senza dati reali.
+• "Quello che non si vede" — preparativi, bouquet in villa, ghiaccio sullo yacht, fiori in camera. Caption: "Ci pensiamo noi."
+• "Risposta in 3 minuti" — racconta la velocità e reattività del team. Angolo: affidabilità > ostentazione
+
+PILLAR 6 — DESTINATION IBIZA (content che porta follower non-clienti → funnel)
+• Es Vedrà al tramonto — caption poetica, niente promozione
+• Ses Salines / Cala Comte / Atlantis — angolo insider "posti che solo chi vive qui conosce"
+• "Ibiza off season" (ottobre-novembre) — isola silenziosa, lusso discreto, target cliente sofisticato
+• Formentera — "Solo per chi sa dove andare. ✦"
+
+FORMATI CHE CONVERTONO DI PIÙ (dati competitor con 10K-73K follower):
+• Carosello 3-5 slide: salvataggi +40%, reach organico doppio rispetto al singolo post
+• Reel 15-30s senza voiceover: copertura massima, funziona anche su account piccoli
+• Foto singola golden hour con caption 1 riga: engagement rate più alto in assoluto
+• Story sondaggio binario: genera reply DM elevate = warm lead diretti
+
+ANGOLI CAPTION CHE CONVERTONO:
+• "Questo è ciò che ottieni quando ci pensiamo noi." → mostra beneficio, non feature
+• "Non chiediamo se è possibile. Troviamo come farlo." → posizionamento concierge premium
+• "Ibiza non è una destinazione. È uno stato d'animo." → aspirational, alto salvataggio
+• Hook-domanda: "Hai già la tua villa per agosto?" → DM immediato
+• "Last minute accepted." → urgency senza pressione, funziona per yacht e nightlife`;
 
 LINGUA: Genera SEMPRE caption in INGLESE, SPAGNOLO e ITALIANO (in questo ordine). Il campo caption è un oggetto con chiavi "en", "es", "it".
 
@@ -1009,11 +1059,28 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
 // MEMORY PANEL
 // ─────────────────────────────────────────────────
 function MemoryPanel({ memory, onUpdate }) {
-  const [editing, setEditing] = useState(null);
-  const [editVal, setEditVal] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [editing, setEditing]         = useState(null);
+  const [editVal, setEditVal]         = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [seeding, setSeeding]         = useState(false);
+  const [seedMsg, setSeedMsg]         = useState("");
 
   const categories = [...new Set(memory.map(m => m.category))];
+
+  const handleSeedStrategy = async () => {
+    setSeeding(true);
+    setSeedMsg("");
+    try {
+      const r = await fetch("/api/luxy-db?action=init_strategy", { method: "POST" });
+      const d = await r.json();
+      setSeedMsg(d.ok ? `✓ ${d.message}` : `Errore: ${d.error}`);
+      if (d.ok) onUpdate();
+    } catch (e) {
+      setSeedMsg("Errore di rete");
+    }
+    setSeeding(false);
+    setTimeout(() => setSeedMsg(""), 4000);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -1025,11 +1092,29 @@ function MemoryPanel({ memory, onUpdate }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <span style={{ fontSize: 18 }}>🧠</span>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: OFF_WHITE, fontFamily: "'Cormorant Garamond', serif" }}>Brand Memory</div>
-          <div style={{ fontSize: 11, color: WARM_GREY }}>Informazioni persistenti su Luxy — vengono usate in ogni generazione</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🧠</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: OFF_WHITE, fontFamily: "'Cormorant Garamond', serif" }}>Brand Memory</div>
+            <div style={{ fontSize: 11, color: WARM_GREY }}>Informazioni persistenti su Luxy — vengono usate in ogni generazione</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {seedMsg && <span style={{ fontSize: 11, color: seedMsg.startsWith("✓") ? "#5A9A5A" : "#ff7070" }}>{seedMsg}</span>}
+          <button
+            onClick={handleSeedStrategy}
+            disabled={seeding}
+            title="Carica i Content Pillar e la strategia competitiva nei Brand Memory"
+            style={{
+              padding: "6px 14px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+              fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.08em",
+              cursor: seeding ? "wait" : "pointer", border: `1px solid ${GOLD}40`,
+              background: `${GOLD}12`, color: GOLD, opacity: seeding ? 0.6 : 1,
+            }}
+          >
+            {seeding ? "Caricamento…" : "⬆ Carica Strategia Content"}
+          </button>
         </div>
       </div>
 
