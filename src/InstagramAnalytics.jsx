@@ -92,19 +92,35 @@ function ConnectPanel({ onConnect }) {
   const [tokenInput, setTokenInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pages, setPages] = useState(null);
+  const [selectedPageId, setSelectedPageId] = useState("");
 
-  async function handleConnect() {
+  async function handleLoadPages() {
     const t = tokenInput.trim();
     if (!t) return;
     setLoading(true);
     setError("");
+    setPages(null);
+    setSelectedPageId("");
     try {
-      const pages = await igCall(t, "me/accounts");
-      if (pages.error) throw new Error(pages.error.message);
-      if (!pages.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
+      const res = await igCall(t, "me/accounts");
+      if (res.error) throw new Error(res.error.message);
+      if (!res.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
+      setPages(res.data);
+      setSelectedPageId(res.data[0].id);
+    } catch (err) {
+      setError(err.message);
+    }
+    setLoading(false);
+  }
 
-      const page = pages.data[0];
-      // Use Page Access Token (not User token) — required to read instagram_business_account
+  async function handleConnect() {
+    const t = tokenInput.trim();
+    if (!t || !pages || !selectedPageId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const page = pages.find(p => p.id === selectedPageId);
       const pageToken = page.access_token || t;
       const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username}" });
       if (igData.error) throw new Error(igData.error.message);
@@ -165,7 +181,7 @@ function ConnectPanel({ onConnect }) {
         <div style={{ ...label, marginBottom: 10 }}>Access Token</div>
         <textarea
           value={tokenInput}
-          onChange={e => setTokenInput(e.target.value)}
+          onChange={e => { setTokenInput(e.target.value); setPages(null); setSelectedPageId(""); setError(""); }}
           placeholder="EAAxxxxxxxxxxxxx..."
           rows={3}
           style={{
@@ -174,17 +190,38 @@ function ConnectPanel({ onConnect }) {
             fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box",
           }}
         />
+
+        {/* Page selector — shown after loading pages */}
+        {pages && pages.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ ...label, marginBottom: 8 }}>Seleziona Facebook Page</div>
+            <select
+              value={selectedPageId}
+              onChange={e => setSelectedPageId(e.target.value)}
+              style={{
+                width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.3)",
+                borderRadius: 6, color: OFF_WHITE, padding: "10px 12px", fontSize: 13,
+                fontFamily: "'Montserrat', sans-serif", outline: "none", cursor: "pointer",
+              }}
+            >
+              {pages.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {error && (
           <div style={{ marginTop: 10, padding: "8px 12px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 6, color: "#ff7070", fontSize: 12 }}>
             {error}
           </div>
         )}
         <button
-          onClick={handleConnect}
+          onClick={pages ? handleConnect : handleLoadPages}
           disabled={loading || !tokenInput.trim()}
           style={{ ...goldBtn(loading || !tokenInput.trim()), marginTop: 14, width: "100%" }}
         >
-          {loading ? "Connessione in corso…" : "Connetti Account Instagram"}
+          {loading ? "Caricamento…" : pages ? "Connetti Account Instagram" : "Carica le tue Page →"}
         </button>
       </div>
     </div>
