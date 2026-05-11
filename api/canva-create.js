@@ -3,13 +3,6 @@ import { getDb } from "./db.js";
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 
-// Your saved template design IDs — update these after styling in Canva
-const TEMPLATE_IDS = {
-  post:  "DAHJFvIQ56k",   // 1080 × 1350
-  story: "DAHJFudau5o",   // 1080 × 1920
-  reel:  "DAHJFnY488g",   // 1080 × 1920
-};
-
 // ─── helpers ────────────────────────────────────────────
 
 async function getToken(db) {
@@ -44,6 +37,17 @@ async function getToken(db) {
   return row.access_token;
 }
 
+async function getTemplateId(db, format) {
+  const keyMap = { post: "canva_template_post", story: "canva_template_story", reel: "canva_template_reel" };
+  const key = keyMap[format] || keyMap.post;
+  try {
+    const r = await db.execute({ sql: "SELECT value FROM luxy_brand_memory WHERE key=?", args: [key] });
+    const val = r.rows[0]?.value || "";
+    if (!val || val.startsWith("INSERISCI") || val.startsWith("METTI")) return null;
+    return val;
+  } catch { return null; }
+}
+
 async function fetchPexelsUrl(query, vertical) {
   if (!PEXELS_KEY) return null;
   try {
@@ -56,26 +60,30 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
-// Upload image to Canva assets via the async job endpoint
-async function uploadToCanva(imageUrl, token) {
+// Upload via URL-based job (same approach as canva-upload.js)
+async function uploadImageUrl(imageUrl, token) {
   try {
-    const img = await fetch(imageUrl, { headers: { "User-Agent": "VMScout/1.0" } });
-    if (!img.ok) return null;
-    const buf         = await img.arrayBuffer();
-    const contentType = img.headers.get("content-type") || "image/jpeg";
-    const nameMeta    = JSON.stringify({ name_base64: Buffer.from("luxy-bg.jpg").toString("base64") });
-
-    const r = await fetch(`${CANVA_API}/asset-uploads`, {
+    const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": contentType,
-        "Asset-Upload-Metadata": nameMeta,
-      },
-      body: buf,
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "luxy-bg.jpg", url: imageUrl }),
     });
     const d = await r.json();
-    return d.job?.id || null;
+    if (!r.ok || !d.job?.id) return null;
+
+    const jobId   = d.job.id;
+    const deadline = Date.now() + 20_000;
+    let job = d.job;
+    while (job.status === "in_progress" && Date.now() < deadline) {
+      await new Promise(res => setTimeout(res, 1500));
+      const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const pd = await poll.json();
+      job = pd.job ?? job;
+    }
+
+    return job.status === "success" ? (job.asset?.id || null) : null;
   } catch { return null; }
 }
 
@@ -84,7 +92,7 @@ async function uploadToCanva(imageUrl, token) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { caption, search_query, format = "post" } = req.body;
+  const { caption, search_query, format = "post", cta } = req.body;
   if (!caption) return res.status(400).json({ error: "Manca caption" });
 
   const db = getDb();
@@ -96,19 +104,58 @@ export default async function handler(req, res) {
   }
 
   try {
-    const vertical = format === "story" || format === "reel";
+    const vertical   = format === "story" || format === "reel";
+    const templateId = await getTemplateId(db, format);
 
-    // 1. Fetch matching Pexels photo
+    if (!templateId) {
+      return res.status(400).json({
+        error:   "TEMPLATE_NOT_SET",
+        message: `Template Canva per "${format}" non configurato. Aggiornalo in Brand Memory → Canva.`,
+      });
+    }
+
+    // 1. Fetch Pexels photo URL
     const imageUrl = search_query ? await fetchPexelsUrl(search_query, vertical) : null;
 
-    // 2. Upload image to the user's Canva asset library (async job — appears in Assets panel)
-    if (imageUrl) uploadToCanva(imageUrl, token); // fire-and-forget; don't block response
+    // 2. Upload image to Canva and wait for asset_id
+    const assetId = imageUrl ? await uploadImageUrl(imageUrl, token) : null;
 
-    // 3. Return template edit link so user can open and place the image
-    const designId = TEMPLATE_IDS[format] || TEMPLATE_IDS.post;
-    const editUrl  = `https://www.canva.com/design/${designId}/edit`;
+    // 3. Autofill template with text + image
+    const autofillData = {};
+    if (caption) {
+      autofillData["Testo_Post"] = { type: "text", text: caption };
+      autofillData["Caption"]    = { type: "text", text: caption };
+    }
+    if (cta) {
+      autofillData["CTA"] = { type: "text", text: cta };
+    }
+    if (assetId) {
+      autofillData["Immagine_Sfondo"] = { type: "image", asset_id: assetId };
+      autofillData["Background"]      = { type: "image", asset_id: assetId };
+    }
 
-    return res.status(200).json({ ok: true, url: editUrl, imageUrl });
+    const autofillRes = await fetch(
+      `${CANVA_API}/designs/templates/${templateId}/autofill`,
+      {
+        method:  "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body:    JSON.stringify({ data: autofillData }),
+      }
+    );
+    const autofillData2 = await autofillRes.json();
+
+    if (!autofillRes.ok) {
+      return res.status(400).json({
+        error:   true,
+        message: autofillData2.message || "Errore Canva Autofill API",
+        details: autofillData2,
+      });
+    }
+
+    const designId  = autofillData2.design?.id;
+    const designUrl = autofillData2.design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
+
+    return res.status(200).json({ ok: true, url: designUrl, imageUrl: imageUrl || null });
 
   } catch (err) {
     console.error("[canva-create]", err);
