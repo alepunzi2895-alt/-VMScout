@@ -49,7 +49,8 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
     {
       "slide_number": 1,
       "visual_description": "Description of the ideal image for this slide/post. Write in the user's language.",
-      "search_query": "English search query to find this exact image",
+      "search_query": "English search query to find this exact image — specific, text-free, high-res editorial style",
+      "instagram_hashtag": "#relevanthashtag",
       "captions": { "it": "...", "en": "...", "es": "..." },
       "hashtags_instagram": ["tag1", "..."],
       "hashtags_facebook": ["tag1", "..."],
@@ -88,10 +89,17 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
 
 PHOTO QUERY RULES:
 - ENGLISH. Aesthetic keywords. No plastic stock.
+- QUALITY: Generate queries that return HIGH RESOLUTION (1080p+), clean editorial photos. No watermarks. No text overlays. No logos in frame.
+- LICENSING: Target royalty-free commercial-use content. Prefer: "lifestyle", "editorial", "candid", "authentic", "natural light" — never "stock photo" or "studio".
+- SPECIFICITY: Tight, specific queries return better results. Include subject + lighting/moment + location/context (e.g., "woman rooftop golden hour", "coffee table morning light").
+- For INSTAGRAM-WORTHY shots: always add lighting/mood cue (golden hour, backlit, overcast) and composition cue (close-up, wide shot, overhead flat lay).
 
 VIDEO QUERY RULES:
 - ENGLISH. POV, handheld, cinematic. Max 3 words for query (e.g., "woman luxury spa").
+- QUALITY: Target HD/4K clean B-roll. No watermarks, no embedded text in footage. Include "cinematic" or "aerial" only when relevant.
 - LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic (e.g. "Scene 1: The Hook/Detail", "Scene 2: Over the shoulder interaction"). Compose a deeply connected cinematic storyboard.
+
+INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#goldenhourvilla") that the user can search at instagram.com/explore/tags/ for real inspiration from creators — add it as a "instagram_hashtag" field in each post_composer slide.
 
 POST COMPOSER RULES:
 - Generate exactly 3 slides for the core campaign.
@@ -116,27 +124,31 @@ const PHOTO_SOURCES = {
   unsplash: {
     name: "Unsplash", icon: "U", color: "#111",
     webUrl: (q, o) => `https://unsplash.com/s/photos/${encodeURIComponent(q)}${o ? `?orientation=${o}` : ""}`,
-    apiUrl: (q, o) => `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=6${o ? `&orientation=${o}` : ""}`,
+    apiUrl: (q, o) => `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=6&content_filter=high${o ? `&orientation=${o}` : ""}`,
     headers: () => ({ Authorization: `Client-ID ${API_KEYS.unsplash}` }),
-    parse: (d) => (d.results || []).map(r => ({ id: r.id, thumb: r.urls?.small, full: r.urls?.regular, alt: r.alt_description, author: r.user?.name, link: r.links?.html })),
+    parse: (d) => (d.results || []).map(r => ({ id: r.id, thumb: r.urls?.small, full: r.urls?.full || r.urls?.regular, alt: r.alt_description, author: r.user?.name, link: r.links?.html })),
   },
   pexels: {
     name: "Pexels", icon: "P", color: "#05A081",
     webUrl: (q) => `https://www.pexels.com/search/${encodeURIComponent(q)}/`,
-    apiUrl: (q, o) => `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=6${o === "portrait" ? "&orientation=portrait" : o === "landscape" ? "&orientation=landscape" : ""}`,
+    apiUrl: (q, o) => `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=6&size=large${o === "portrait" ? "&orientation=portrait" : o === "landscape" ? "&orientation=landscape" : ""}`,
     headers: () => ({ Authorization: API_KEYS.pexels }),
-    parse: (d) => (d.photos || []).map(p => ({ id: p.id, thumb: p.src?.medium, full: p.src?.large, alt: p.alt, author: p.photographer, link: p.url })),
+    parse: (d) => (d.photos || []).map(p => ({ id: p.id, thumb: p.src?.medium, full: p.src?.large2x || p.src?.large, alt: p.alt, author: p.photographer, link: p.url })),
   },
   pixabay: {
     name: "Pixabay", icon: "X", color: "#00AB6C",
     webUrl: (q) => `https://pixabay.com/images/search/${encodeURIComponent(q)}/`,
-    apiUrl: (q, o) => `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=6${o === "portrait" ? "&orientation=vertical" : o === "landscape" ? "&orientation=horizontal" : ""}`,
+    apiUrl: (q, o) => `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=6&image_type=photo&min_width=1280${o === "portrait" ? "&orientation=vertical" : o === "landscape" ? "&orientation=horizontal" : ""}`,
     headers: () => ({}),
-    parse: (d) => (d.hits || []).map(h => ({ id: h.id, thumb: h.webformatURL, full: h.largeImageURL, alt: h.tags, author: h.user, link: h.pageURL })),
+    parse: (d) => (d.hits || []).map(h => ({ id: h.id, thumb: h.webformatURL, full: h.fullHDURL || h.largeImageURL, alt: h.tags, author: h.user, link: h.pageURL })),
   },
   pinterest: {
     name: "Pinterest", icon: "P", color: "#E60023",
     webUrl: (q) => `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(q)}&rs=typed`,
+  },
+  instagram: {
+    name: "Instagram", icon: "IG", color: "#E1306C",
+    webUrl: (q) => `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(q)}`,
   },
 };
 
@@ -144,9 +156,13 @@ const VIDEO_SOURCES = {
   pexels_video: {
     name: "Pexels Video", icon: "▶", color: "#05A081",
     webUrl: (q) => `https://www.pexels.com/search/videos/${encodeURIComponent(q)}/`,
-    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3`,
+    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3&size=large`,
     headers: () => ({ Authorization: API_KEYS.pexels }),
-    parse: (d) => (d.videos || []).map(v => ({ id: v.id, videoUrl: v.video_files?.[0]?.link, image: v.image, author: v.user?.name, link: v.url })),
+    parse: (d) => (d.videos || []).map(v => {
+      const files = (v.video_files || []).filter(f => f.file_type === "video/mp4");
+      const hd = files.find(f => f.quality === "hd") || files.find(f => (f.width || 0) >= 1280) || files[0];
+      return { id: v.id, videoUrl: hd?.link, image: v.image, author: v.user?.name, link: v.url };
+    }),
   },
   coverr: {
     name: "Coverr", icon: "C", color: "#1A1A2E",
@@ -155,13 +171,17 @@ const VIDEO_SOURCES = {
   pixabay_video: {
     name: "Pixabay Video", icon: "X", color: "#00AB6C",
     webUrl: (q) => `https://pixabay.com/videos/search/${encodeURIComponent(q)}/`,
-    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3`,
+    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3&min_width=1280`,
     headers: () => ({}),
-    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.tiny?.url || h.videos?.medium?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
+    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.large?.url || h.videos?.medium?.url || h.videos?.tiny?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
   },
   pinterest_video: {
     name: "Pinterest Video", icon: "P", color: "#E60023",
     webUrl: (q) => `https://www.pinterest.com/search/videos/?q=${encodeURIComponent(q)}&rs=typed`,
+  },
+  instagram_video: {
+    name: "Instagram Reels", icon: "IG", color: "#E1306C",
+    webUrl: (q) => `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(q)}`,
   },
 };
 
@@ -427,23 +447,38 @@ ${JSON.stringify(slide, null, 2)}
 
 Respond ONLY with a single JSON object (the new slide). No markdown fences, no preamble.`;
 
-function SlideSearchLinks({ query, orientation }) {
+function SlideSearchLinks({ query, orientation, instagramHashtag }) {
   if (!query) return null;
-  const allSources = { ...PHOTO_SOURCES, ...VIDEO_SOURCES };
   const photoKeys = Object.keys(PHOTO_SOURCES);
   const sources = photoKeys.map(k => ({ key: k, ...PHOTO_SOURCES[k] }));
+  const igHashtag = instagramHashtag?.replace(/^#/, "");
 
   return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-      {sources.map(src => (
-        <a key={src.key} href={src.webUrl(query, orientation)} target="_blank" rel="noopener noreferrer"
-          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(139,115,85,0.15)", textDecoration: "none", fontSize: 9, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s", background: "transparent" }}
-          onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8B7355"; e.currentTarget.style.borderColor = "rgba(139,115,85,0.15)"; }}>
-          <span style={{ width: 14, height: 14, borderRadius: 3, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
-          {src.name}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {sources.filter(s => s.key !== "instagram").map(src => (
+          <a key={src.key} href={src.webUrl(query, orientation)} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(139,115,85,0.15)", textDecoration: "none", fontSize: 9, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s", background: "transparent" }}
+            onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8B7355"; e.currentTarget.style.borderColor = "rgba(139,115,85,0.15)"; }}>
+            <span style={{ width: 14, height: 14, borderRadius: 3, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
+            {src.name}
+          </a>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <a href={PHOTO_SOURCES.instagram.webUrl(query)} target="_blank" rel="noopener noreferrer"
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: "#E1306C", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, fontWeight: 700, flexShrink: 0 }}>IG</span>
+          Instagram (ispirazione)
         </a>
-      ))}
+        {igHashtag && (
+          <a href={`https://www.instagram.com/explore/tags/${encodeURIComponent(igHashtag)}/`} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
+            #{igHashtag}
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -542,7 +577,7 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
                   <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6, opacity: 0.7 }}>
                     Cerca "{post.search_query}" su:
                   </div>
-                  <SlideSearchLinks query={post.search_query} orientation={orientation} />
+                  <SlideSearchLinks query={post.search_query} orientation={orientation} instagramHashtag={post.instagram_hashtag} />
                 </div>
               )}
 

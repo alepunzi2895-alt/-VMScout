@@ -45,13 +45,13 @@ const VIDEO_SOURCES = {
   pexels_video: {
     name: "Pexels Video", icon: "▶", color: "#05A081",
     webUrl: (q) => `https://www.pexels.com/search/videos/${encodeURIComponent(q)}/`,
-    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3`,
+    apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3&size=large`,
     headers: () => ({ Authorization: API_KEYS.pexels }),
     parse: (d) => (d.videos || []).map(v => {
       const files = (v.video_files || []).filter(f => f.file_type === "video/mp4");
-      const preview = files.find(f => f.quality === "hd") || files[0];
-      const upload  = [...files].sort((a, b) => (a.width || 9999) - (b.width || 9999))[0] || files[0];
-      return { id: v.id, videoUrl: preview?.link, uploadUrl: upload?.link, image: v.image, author: v.user?.name, link: v.url };
+      const hd = files.find(f => f.quality === "hd") || files.find(f => (f.width || 0) >= 1280) || files[0];
+      const upload = [...files].sort((a, b) => (b.width || 0) - (a.width || 0))[0] || files[0];
+      return { id: v.id, videoUrl: hd?.link, uploadUrl: upload?.link, image: v.image, author: v.user?.name, link: v.url };
     }),
   },
   coverr: {
@@ -61,13 +61,17 @@ const VIDEO_SOURCES = {
   pixabay_video: {
     name: "Pixabay Video", icon: "X", color: "#00AB6C",
     webUrl: (q) => `https://pixabay.com/videos/search/${encodeURIComponent(q)}/`,
-    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3`,
+    apiUrl: (q) => `https://pixabay.com/api/videos/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(q)}&per_page=3&min_width=1280`,
     headers: () => ({}),
-    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.tiny?.url || h.videos?.medium?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
+    parse: (d) => (d.hits || []).map(h => ({ id: h.id, videoUrl: h.videos?.large?.url || h.videos?.medium?.url || h.videos?.tiny?.url, image: h.userImageURL, author: h.user, link: h.pageURL })),
   },
   pinterest_video: {
     name: "Pinterest Video", icon: "P", color: "#E60023",
     webUrl: (q) => `https://www.pinterest.com/search/videos/?q=${encodeURIComponent(q)}&rs=typed`,
+  },
+  instagram_video: {
+    name: "Instagram Reels", icon: "IG", color: "#E1306C",
+    webUrl: (q) => `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(q)}`,
   },
 };
 
@@ -200,10 +204,11 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "hashtags_instagram": ["tag1","tag2","tag3","tag4","tag5"],
       "hashtags_facebook": ["tag1", "tag2"],
       "cta": { "en": "...", "es": "...", "it": "..." },
-      "visual_description": "Descrizione dell'immagine ideale",
-      "search_query": "luxury-specific EN query: 3-4 words MAX, include luxury adjective (luxury/private/exclusive/elegant) + subject (villa/yacht/pool/car/sunset) + location if relevant (ibiza/mediterranean/formentera). Es: 'luxury villa ibiza pool', 'private yacht mediterranean sunset', 'elegant villa terrace golden hour'",
+      "visual_description": "Descrizione dell'immagine ideale — specificare: soggetto, luce, composizione, niente testi in frame",
+      "search_query": "luxury-specific EN query: 3-4 words MAX, include luxury adjective (luxury/private/exclusive/elegant) + subject (villa/yacht/pool/car/sunset) + location if relevant (ibiza/mediterranean/formentera). Es: 'luxury villa ibiza pool golden hour', 'private yacht mediterranean sunset editorial', 'elegant villa terrace candid ibiza'. ALWAYS clean, no text overlay, high-res.",
+      "instagram_hashtag": "#relevanthashtag",
       "slides": [
-        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "luxury-specific EN query for this slide: 3-4 words, adjective+subject+location (es: 'infinity pool sunset ibiza', 'private yacht turquoise water', 'luxury villa exterior evening')" }
+        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "luxury-specific EN query for this slide: 3-4 words, adjective+subject+location+quality cue (es: 'infinity pool sunset ibiza editorial', 'private yacht turquoise water candid', 'luxury villa exterior evening golden hour')", "instagram_hashtag": "#hashtag" }
       ],
       "best_time": "18:30",
       "platform_tip": "Suggerimento specifico piattaforma",
@@ -216,6 +221,10 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
 }
 
 SEARCH QUERY RULE: Ogni search_query DEVE seguire la formula [aggettivo luxury] + [soggetto specifico] + [luogo ESPLICITO]. REGOLA CRITICA: Se il contenuto cita una destinazione (Ibiza, Sardegna, Mykonos, Formentera, Santorini, ecc.), il NOME DEL LUOGO deve apparire nella search_query di quella slide — non metterlo solo nel titolo. Esempi ottimi: "luxury villa ibiza pool golden hour", "sardinia crystal water yacht", "mykonos white cycladic villa pool", "formentera turquoise sea luxury", "ibiza sunset terrace cocktail", "sardinia coast luxury catamaran". Esempi da EVITARE: "villa pool", "clear water yacht", "sunset terrace" (non trovano immagini pertinenti senza il luogo).
+
+QUALITÀ & LICENSING: Tutte le search_query devono puntare a contenuti HIGH RESOLUTION (1080p+), privi di watermark, loghi o testi in overlay — adatti per uso commerciale. Usa termini come "editorial", "lifestyle photography", "candid" — mai "stock photo". Per video: aggiungi "cinematic" o "4K" solo se pertinente.
+
+INSTAGRAM HASHTAG: Per ogni output aggiungi il campo "instagram_hashtag" con 1 hashtag rilevante (senza spazi, es. "#luxuryvillalibiza") da usare su instagram.com/explore/tags/ per trovare ispirazione da creator reali.
 
 IMPORTANTE: hashtags_instagram DEVE avere ESATTAMENTE 5 hashtag significativi (non di più, non di meno).
 ${overrideRules}
@@ -369,7 +378,7 @@ function PexelsPhotoStrip({ query, vertical = false, count = 4 }) {
     let active = true;
     setLoading(true);
     fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=${vertical ? "portrait" : "landscape"}`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&size=large&orientation=${vertical ? "portrait" : "landscape"}`,
       { headers: { Authorization: API_KEYS.pexels } }
     )
       .then(r => r.json())
@@ -403,7 +412,7 @@ function PexelsPhotoStrip({ query, vertical = false, count = 4 }) {
                 background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
                 display: "flex", justifyContent: "center",
               }}>
-                <CanvaUploadBtn url={p.src.large2x || p.src.large} />
+                <CanvaUploadBtn url={p.src.original || p.src.large2x || p.src.large} />
               </div>
               <a href={p.url} target="_blank" rel="noopener noreferrer"
                 style={{
@@ -476,7 +485,7 @@ function SlidePhotoRow({ slide, vertical = false }) {
 
     if (API_KEYS.pexels) {
       fetch(
-        `https://api.pexels.com/v1/search?query=${encodeURIComponent(slide.search_query)}&per_page=3&orientation=${orientation}`,
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(slide.search_query)}&per_page=3&size=large&orientation=${orientation}`,
         { headers: { Authorization: API_KEYS.pexels } }
       )
         .then(r => r.json())
@@ -486,7 +495,7 @@ function SlidePhotoRow({ slide, vertical = false }) {
 
     if (API_KEYS.pixabay) {
       fetch(
-        `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(slide.search_query)}&per_page=3&image_type=photo&orientation=${vertical ? "vertical" : "horizontal"}&safesearch=true`
+        `https://pixabay.com/api/?key=${API_KEYS.pixabay}&q=${encodeURIComponent(slide.search_query)}&per_page=3&image_type=photo&min_width=1280&orientation=${vertical ? "vertical" : "horizontal"}&safesearch=true`
       )
         .then(r => r.json())
         .then(d => { setPixabay(d.hits || []); finish(); })
@@ -495,8 +504,8 @@ function SlidePhotoRow({ slide, vertical = false }) {
   }, [slide.search_query, vertical]);
 
   const allPhotos = [
-    ...pexels.map(p => ({ id: `px-${p.id}`, imgUrl: p.src.medium, uploadUrl: p.src.large2x || p.src.large, linkUrl: p.url, source: "Pexels", sourceColor: "#05A081" })),
-    ...pixabay.map(h => ({ id: `pb-${h.id}`, imgUrl: h.webformatURL, uploadUrl: h.largeImageURL || h.webformatURL, linkUrl: h.pageURL, source: "Pixabay", sourceColor: "#00AB6C" })),
+    ...pexels.map(p => ({ id: `px-${p.id}`, imgUrl: p.src.medium, uploadUrl: p.src.original || p.src.large2x || p.src.large, linkUrl: p.url, source: "Pexels", sourceColor: "#05A081" })),
+    ...pixabay.map(h => ({ id: `pb-${h.id}`, imgUrl: h.webformatURL, uploadUrl: h.fullHDURL || h.largeImageURL || h.webformatURL, linkUrl: h.pageURL, source: "Pixabay", sourceColor: "#00AB6C" })),
   ];
 
   return (
@@ -526,12 +535,26 @@ function SlidePhotoRow({ slide, vertical = false }) {
           <div style={{ fontSize: 9, color: `${GOLD}80`, marginTop: 4, fontFamily: "monospace" }}>
             🔍 {slide.search_query}
           </div>
+          {slide.instagram_hashtag && (
+            <a href={`https://www.instagram.com/explore/tags/${encodeURIComponent(slide.instagram_hashtag.replace(/^#/, ""))}/`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-block", marginTop: 3, fontSize: 8, padding: "1px 6px", borderRadius: 4, background: "#E1306C12", color: "#E1306C", textDecoration: "none", fontWeight: 600 }}>
+              {slide.instagram_hashtag} IG ↗
+            </a>
+          )}
         </div>
-        <a href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(slide.search_query + " luxury")}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 8, padding: "3px 8px", borderRadius: 5, background: "#E6002310", color: "#E60023", textDecoration: "none", fontWeight: 700, flexShrink: 0, border: "1px solid #E6002330" }}>
-          P Pinterest ↗
-        </a>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(slide.search_query)}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 8, padding: "3px 8px", borderRadius: 5, background: "#E1306C10", color: "#E1306C", textDecoration: "none", fontWeight: 700, border: "1px solid #E1306C30" }}>
+            IG ↗
+          </a>
+          <a href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(slide.search_query + " luxury")}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 8, padding: "3px 8px", borderRadius: 5, background: "#E6002310", color: "#E60023", textDecoration: "none", fontWeight: 700, border: "1px solid #E6002330" }}>
+            P ↗
+          </a>
+        </div>
       </div>
 
       {/* Griglia foto */}
@@ -988,15 +1011,37 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
                     📸 Foto Post — "{output.search_query}"
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                    {[["unsplash.com/s/photos/","Unsplash","#111"],["pexels.com/search/","Pexels","#05A081"],["pinterest.com/search/pins/?q=","Pinterest","#E60023"]].map(([base, name, color]) => (
+                    {[
+                      [`unsplash.com/s/photos/`, "Unsplash", "#111"],
+                      [`pexels.com/search/`, "Pexels", "#05A081"],
+                      [`pinterest.com/search/pins/?q=`, "Pinterest", "#E60023"],
+                    ].map(([base, name, color]) => (
                       <a key={name} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
                         style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${color}20`, color, textDecoration: "none", fontWeight: 600, border: `1px solid ${color}30` }}>
                         {name} ↗
                       </a>
                     ))}
+                    <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C20", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C30" }}>
+                      Instagram ↗
+                    </a>
                   </div>
                   <PexelsPhotoStrip query={output.search_query} vertical={isVertical} count={3} />
                   {isVertical && <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />}
+                  {output.instagram_hashtag && (
+                    <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                      <a href={`https://www.instagram.com/explore/tags/${encodeURIComponent(output.instagram_hashtag.replace(/^#/, ""))}/`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C15", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C30" }}>
+                        IG {output.instagram_hashtag} ↗
+                      </a>
+                      <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(output.search_query)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C08", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C20" }}>
+                        IG Cerca ↗
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
