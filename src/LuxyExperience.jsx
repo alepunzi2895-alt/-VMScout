@@ -630,7 +630,18 @@ function SceneVideoPlayer({ query, sourceKey = "pexels_video" }) {
     return () => { active = false; };
   }, [query, sourceKey, canFetch]);
 
-  if (!canFetch) return null;
+  if (!canFetch) {
+    return (
+      <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {Object.entries(VIDEO_SOURCES).map(([key, s]) => (
+          <a key={key} href={s.webUrl(query)} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${s.color}18`, color: s.color, textDecoration: "none", fontWeight: 600, border: `1px solid ${s.color}30`, fontFamily: "'Montserrat', sans-serif" }}>
+            {s.name} ↗
+          </a>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -824,7 +835,8 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
   const [canvaImageUrl, setCanvaImageUrl] = useState(null);
 
   const isCarousel = output.slides?.length > 0;
-  const isVertical = output.format === "story" || output.format === "reel";
+  const isVertical = output.format === "story" || output.format === "reel" || output.format === "scene";
+  const isVideoFormat = output.format === "reel" || output.format === "scene";
 
   const getCta = (langKey) => {
     if (!output.cta) return "";
@@ -857,10 +869,10 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
 
   // Tabs available
   const tabs = [
-    { id: "slide",   label: isCarousel ? "Slide" : "Post",    icon: "📋" },
-    { id: "foto",    label: "Foto",    icon: "📸" },
-    { id: "caption", label: "Caption", icon: "✍️" },
-    { id: "canva",   label: "Canva",   icon: "✦"  },
+    { id: "slide",   label: isCarousel ? "Slide" : "Post",              icon: "📋" },
+    { id: "foto",    label: isVideoFormat ? "Footage" : "Foto",         icon: isVideoFormat ? "🎬" : "📸" },
+    { id: "caption", label: "Caption",                                   icon: "✍️" },
+    { id: "canva",   label: "Canva",                                     icon: "✦"  },
   ];
 
   return (
@@ -1002,32 +1014,62 @@ function OutputCard({ output, lang, platform, onSave, isSaving, isSaved, canvaTe
             </div>
           )}
 
-          {/* ─── TAB: FOTO ─── */}
+          {/* ─── TAB: FOTO / FOOTAGE ─── */}
           {activeTab === "foto" && (
             <div style={{ padding: "16px" }}>
               {output.search_query && !isCarousel && (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 9, color: WARM_GREY, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>
-                    📸 Foto Post — "{output.search_query}"
+                    {isVideoFormat ? `🎬 Footage — "${output.search_query}"` : `📸 Foto Post — "${output.search_query}"`}
                   </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                    {[
-                      [`unsplash.com/s/photos/`, "Unsplash", "#111"],
-                      [`pexels.com/search/`, "Pexels", "#05A081"],
-                      [`pinterest.com/search/pins/?q=`, "Pinterest", "#E60023"],
-                    ].map(([base, name, color]) => (
-                      <a key={name} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${color}20`, color, textDecoration: "none", fontWeight: 600, border: `1px solid ${color}30` }}>
-                        {name} ↗
+
+                  {/* Link sorgenti video */}
+                  {isVideoFormat && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                      {[
+                        [`pexels.com/search/videos/`, "Pexels Video", "#05A081"],
+                        [`pixabay.com/videos/search/`, "Pixabay Video", "#00AB6C"],
+                        [`coverr.co/s?q=`, "Coverr", "#1A1A2E"],
+                        [`pinterest.com/search/videos/?q=`, "Pinterest Video", "#E60023"],
+                      ].map(([base, name, color]) => (
+                        <a key={name} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${color}20`, color, textDecoration: "none", fontWeight: 600, border: `1px solid ${color}30` }}>
+                          {name} ↗
+                        </a>
+                      ))}
+                      <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C20", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C30" }}>
+                        IG Reels ↗
                       </a>
-                    ))}
-                    <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C20", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C30" }}>
-                      Instagram ↗
-                    </a>
-                  </div>
-                  <PexelsPhotoStrip query={output.search_query} vertical={isVertical} count={3} />
-                  {isVertical && <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />}
+                    </div>
+                  )}
+
+                  {/* Video player inline per reel/scene */}
+                  {isVideoFormat && <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />}
+
+                  {/* Link sorgenti foto (solo per non-video) */}
+                  {!isVideoFormat && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                      {[
+                        [`unsplash.com/s/photos/`, "Unsplash", "#111"],
+                        [`pexels.com/search/`, "Pexels", "#05A081"],
+                        [`pinterest.com/search/pins/?q=`, "Pinterest", "#E60023"],
+                      ].map(([base, name, color]) => (
+                        <a key={name} href={`https://www.${base}${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: `${color}20`, color, textDecoration: "none", fontWeight: 600, border: `1px solid ${color}30` }}>
+                          {name} ↗
+                        </a>
+                      ))}
+                      <a href={`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(output.search_query)}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, background: "#E1306C20", color: "#E1306C", textDecoration: "none", fontWeight: 600, border: "1px solid #E1306C30" }}>
+                        Instagram ↗
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Foto (solo per non-video; per story mostra entrambi) */}
+                  {!isVideoFormat && <PexelsPhotoStrip query={output.search_query} vertical={isVertical} count={3} />}
+                  {output.format === "story" && <SceneVideoPlayer query={output.search_query} sourceKey="pexels_video" />}
                   {output.instagram_hashtag && (
                     <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                       <a href={`https://www.instagram.com/explore/tags/${encodeURIComponent(output.instagram_hashtag.replace(/^#/, ""))}/`}
