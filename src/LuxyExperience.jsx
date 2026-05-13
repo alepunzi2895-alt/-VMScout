@@ -205,10 +205,10 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "hashtags_facebook": ["tag1", "tag2"],
       "cta": { "en": "...", "es": "...", "it": "..." },
       "visual_description": "Descrizione dell'immagine ideale — specificare: soggetto, luce, composizione, niente testi in frame",
-      "search_query": "luxury-specific EN query: 3-4 words MAX, include luxury adjective (luxury/private/exclusive/elegant) + subject (villa/yacht/pool/car/sunset) + location if relevant (ibiza/mediterranean/formentera). Es: 'luxury villa ibiza pool golden hour', 'private yacht mediterranean sunset editorial', 'elegant villa terrace candid ibiza'. ALWAYS clean, no text overlay, high-res.",
+      "search_query": "MAX 3 WORDS: adjective + subject + location. Es: 'luxury villa ibiza', 'private yacht formentera', 'elegant car ibiza'. Mai più di 3 parole — query lunghe non trovano risultati.",
       "instagram_hashtag": "#relevanthashtag",
       "slides": [
-        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "luxury-specific EN query for this slide: 3-4 words, adjective+subject+location+quality cue (es: 'infinity pool sunset ibiza editorial', 'private yacht turquoise water candid', 'luxury villa exterior evening golden hour')", "instagram_hashtag": "#hashtag" }
+        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "MAX 3 WORDS per slide (es: 'infinity pool ibiza', 'private yacht formentera', 'luxury villa sunset')", "instagram_hashtag": "#hashtag" }
       ],
       "best_time": "18:30",
       "platform_tip": "Suggerimento specifico piattaforma",
@@ -220,9 +220,11 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
   "save_to_memory": []
 }
 
-SEARCH QUERY RULE: Ogni search_query DEVE seguire la formula [aggettivo luxury] + [soggetto specifico] + [luogo ESPLICITO]. REGOLA CRITICA: Se il contenuto cita una destinazione (Ibiza, Sardegna, Mykonos, Formentera, Santorini, ecc.), il NOME DEL LUOGO deve apparire nella search_query di quella slide — non metterlo solo nel titolo. Esempi ottimi: "luxury villa ibiza pool golden hour", "sardinia crystal water yacht", "mykonos white cycladic villa pool", "formentera turquoise sea luxury", "ibiza sunset terrace cocktail", "sardinia coast luxury catamaran". Esempi da EVITARE: "villa pool", "clear water yacht", "sunset terrace" (non trovano immagini pertinenti senza il luogo).
-
-QUALITÀ & LICENSING: Tutte le search_query devono puntare a contenuti HIGH RESOLUTION (1080p+), privi di watermark, loghi o testi in overlay — adatti per uso commerciale. Usa termini come "editorial", "lifestyle photography", "candid" — mai "stock photo". Per video: aggiungi "cinematic" o "4K" solo se pertinente.
+SEARCH QUERY RULE — CRITICA: MAX 3 PAROLE per ogni search_query. Formula fissa: [aggettivo luxury] + [soggetto] + [luogo].
+- Giusto: "luxury villa ibiza", "private yacht formentera", "elegant pool mykonos", "luxury car sardinia"
+- SBAGLIATO: "luxury villa ibiza pool golden hour editorial" (troppo lungo = zero risultati)
+- Se il contenuto cita una destinazione il NOME DEL LUOGO deve essere la terza parola — sempre.
+- NON aggiungere mai: "editorial", "candid", "golden hour", "HD", "cinematic", "arrival", "reveal" nella search_query. Quei dettagli vanno SOLO in visual_description.
 
 INSTAGRAM HASHTAG: Per ogni output aggiungi il campo "instagram_hashtag" con 1 hashtag rilevante (senza spazi, es. "#luxuryvillalibiza") da usare su instagram.com/explore/tags/ per trovare ispirazione da creator reali.
 

@@ -49,7 +49,7 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
     {
       "slide_number": 1,
       "visual_description": "Description of the ideal image for this slide/post. Write in the user's language.",
-      "search_query": "English search query to find this exact image — specific, text-free, high-res editorial style",
+      "search_query": "MAX 3 WORDS English query: adjective + subject + location (e.g. 'luxury villa ibiza', 'rooftop bar sunset'). Never add quality words.",
       "instagram_hashtag": "#relevanthashtag",
       "captions": { "it": "...", "en": "...", "es": "..." },
       "hashtags_instagram": ["tag1", "..."],
@@ -88,18 +88,18 @@ When the user provides a marketing objective, respond ONLY with valid JSON (no m
 }
 
 PHOTO QUERY RULES:
-- ENGLISH. Aesthetic keywords. No plastic stock.
-- QUALITY: Generate queries that return HIGH RESOLUTION (1080p+), clean editorial photos. No watermarks. No text overlays. No logos in frame.
-- LICENSING: Target royalty-free commercial-use content. Prefer: "lifestyle", "editorial", "candid", "authentic", "natural light" — never "stock photo" or "studio".
-- SPECIFICITY: Tight, specific queries return better results. Include subject + lighting/moment + location/context (e.g., "woman rooftop golden hour", "coffee table morning light").
-- For INSTAGRAM-WORTHY shots: always add lighting/mood cue (golden hour, backlit, overcast) and composition cue (close-up, wide shot, overhead flat lay).
+- ENGLISH. MAX 3 WORDS. Formula: [adjective] + [subject] + [location]. Never more.
+- Good: "luxury villa ibiza", "yacht formentera sunset", "rooftop bar milan"
+- Bad: "luxury villa ibiza pool golden hour editorial" (too many words = no results)
+- No quality descriptors in the query (no "editorial", "candid", "HD", "lifestyle") — those go in visual_description only.
 
 VIDEO QUERY RULES:
-- ENGLISH. POV, handheld, cinematic. Max 3 words for query (e.g., "woman luxury spa").
-- QUALITY: Target HD/4K clean B-roll. No watermarks, no embedded text in footage. Include "cinematic" or "aerial" only when relevant.
-- LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic (e.g. "Scene 1: The Hook/Detail", "Scene 2: Over the shoulder interaction"). Compose a deeply connected cinematic storyboard.
+- ENGLISH. MAX 3 WORDS. Same formula as photos.
+- Good: "luxury car ibiza", "yacht sea sunset", "villa pool aerial"
+- Bad: "luxury car ibiza villa arrival cinematic" (too long)
+- LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic. Compose a deeply connected cinematic storyboard.
 
-INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#goldenhourvilla") that the user can search at instagram.com/explore/tags/ for real inspiration from creators — add it as a "instagram_hashtag" field in each post_composer slide.
+INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#luxuryvillalibiza") — add it as a "instagram_hashtag" field in each post_composer slide.
 
 POST COMPOSER RULES:
 - Generate exactly 3 slides for the core campaign.

@@ -28,11 +28,13 @@ async function getToken(db) {
     const td = await tr.json();
     if (td.access_token) {
       await db.execute({
-        sql: "UPDATE luxy_canva_auth SET access_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
-        args: [td.access_token, td.expires_in || 3600],
+        sql: "UPDATE luxy_canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
+        args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600],
       });
       return td.access_token;
     }
+    // Refresh token scaduto → forza re-login
+    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
   }
   return row.access_token;
 }
