@@ -128,7 +128,28 @@ const getLuxySystemPrompt = (memory, contentType) => {
   const overrideRules = contentType === "video_storyboard"
     ? "LUXY STORYTELLING: Genera uno storyboard video. L'array 'outputs' DEVE rappresentare le SCENE del video (id: 1 = Scena 1). Per ogni scena: 'visual_description' (azione chiara), 'search_query' (massimo 3 parole in inglese esattissime per trovare il footage), 'caption' (il voiceover o testo in overlay)."
     : `Per piano editoriale, ogni output è un giorno. Per hashtag strategy, outputs = gruppi hashtag. Per bio profilo, outputs = 3 bio.
-CAROSELLO: Se l'output è un carosello (title contiene "carosello" o descrivi slide multiple), DEVI includere il campo "slides" con un oggetto per ogni slide: { "n": numero, "title": "Titolo overlay (max 5 parole IT)", "overlay": "Sottotitolo breve (max 8 parole IT)", "search_query": "2-3 parole EN specifiche e DIVERSE per questa slide" }. Le search_query DEVONO essere uniche per ogni slide (es: S1="infinity pool sunset ibiza", S2="luxury black car villa entrance", S3="private yacht turquoise sea", ecc.).`;
+CAROSELLO: Se l'output è un carosello (title contiene "carosello" o descrivi slide multiple), DEVI includere il campo "slides" con un oggetto per ogni slide: { "n": numero, "title": "Titolo overlay (max 5 parole IT)", "overlay": "Sottotitolo breve (max 8 parole IT)", "search_query": "2-3 parole EN specifiche e DIVERSE per questa slide", "instagram_hashtag": "#hashtag" }.
+
+REGOLA CRITICA — search_query NELLE SLIDE DEL CAROSELLO:
+Se il carosello presenta N elementi dello stesso tipo (es: "5 ville", "3 yacht", "4 destinazioni"), ogni slide DEVE rappresentare un soggetto VISIVAMENTE DISTINTO — NON lo stesso soggetto da angolazioni diverse.
+
+Per VILLE (es: "5 ville luxury ibiza"):
+  S1="cliffside white villa" | S2="infinity pool panoramic" | S3="modern minimalist interior" | S4="terrace golden sunset" | S5="lush garden pool"
+  MAI "luxury villa ibiza" x5 — produrrebbe 5 foto identiche.
+
+Per YACHT (es: "3 yacht privati"):
+  S1="superyacht bow ocean" | S2="yacht deck sundowner" | S3="aerial yacht formentera"
+
+Per DESTINAZIONI (es: "4 tappe Ibiza"):
+  Usa il nome del posto come parola chiave: S1="ibiza old town" | S2="formentera beach" | S3="es vedra cliff" | S4="cala comte sunset"
+
+Per NIGHTLIFE (es: "5 serate VIP"):
+  S1="empty club stage" | S2="rooftop bar ibiza" | S3="vip table setup" | S4="dj booth crowd" | S5="pool party aerial"
+
+Per AUTO/TRANSFER:
+  S1="luxury car keys marble" | S2="sports car coast road" | S3="suv villa entrance" | S4="convertible sunset drive"
+
+La search_query di ogni slide deve essere così distinta che rappresenti chiaramente un SOGGETTO DIVERSO, non una variante dello stesso.`;
 
   return `Sei il Senior Marketing Strategist di Luxy Experience, un servizio concierge di lusso con base a Ibiza.
 ${memoryContext}
@@ -208,7 +229,7 @@ Rispondi SOLO con JSON valido (nessun markdown, nessun testo prima o dopo). Stru
       "search_query": "MAX 3 WORDS: adjective + subject + location. Es: 'luxury villa ibiza', 'private yacht formentera', 'elegant car ibiza'. Mai più di 3 parole — query lunghe non trovano risultati.",
       "instagram_hashtag": "#relevanthashtag",
       "slides": [
-        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "MAX 3 WORDS per slide (es: 'infinity pool ibiza', 'private yacht formentera', 'luxury villa sunset')", "instagram_hashtag": "#hashtag" }
+        { "n": 1, "title": "Titolo slide IT", "overlay": "Testo overlay IT", "search_query": "2-3 parole EN — soggetto UNICO e DIVERSO per ogni slide (es villa: S1='cliffside white villa', S2='infinity pool panoramic', S3='modern interior villa', S4='terrace golden sunset', S5='lush garden pool')", "instagram_hashtag": "#hashtag" }
       ],
       "best_time": "18:30",
       "platform_tip": "Suggerimento specifico piattaforma",
