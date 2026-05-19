@@ -97,12 +97,21 @@ VIDEO QUERY RULES:
 - ENGLISH. MAX 3 WORDS. Same formula as photos.
 - Good: "luxury car ibiza", "yacht sea sunset", "villa pool aerial"
 - Bad: "luxury car ibiza villa arrival cinematic" (too long)
+- SCENE DIFFERENTIATION: Each scene's search_query MUST be visually distinct from the others — different subject, setting, or action. If the video is about one subject (e.g. a villa), vary the area: S1="villa exterior aerial" | S2="infinity pool sunset" | S3="interior living room" | S4="terrace aperitivo" | S5="villa sea view". Never repeat the same query across scenes.
 - LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic. Compose a deeply connected cinematic storyboard.
 
 INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#luxuryvillalibiza") — add it as a "instagram_hashtag" field in each post_composer slide.
 
 POST COMPOSER RULES:
 - Generate exactly 3 slides for the core campaign.
+- CRITICAL — CAROUSEL/MULTI-SLIDE DIFFERENTIATION: If the campaign or user request involves N items of the same type (e.g. "3 villas", "5 yachts", "4 destinations", "3 products"), each slide's search_query MUST represent a VISUALLY DISTINCT subject — NOT the same subject from different angles.
+  - Villas: S1="cliffside white villa" | S2="infinity pool panoramic" | S3="modern minimalist interior" — NEVER "luxury villa ibiza" x3
+  - Yachts: S1="superyacht bow ocean" | S2="yacht deck sundowner" | S3="aerial yacht formentera"
+  - Destinations: use the place name as key: S1="ibiza old town" | S2="formentera beach" | S3="es vedra cliff"
+  - Nightlife venues: S1="empty club stage" | S2="rooftop bar ibiza" | S3="vip table setup"
+  - Cars/Transfer: S1="luxury car keys marble" | S2="sports car coast road" | S3="suv villa entrance"
+  - Products: vary the use-case or setting, not just lighting angle
+  Each slide's query must be so distinct that a designer immediately understands it represents a DIFFERENT subject.
 
 EDITORIAL PLAN RULES:
 - DURATION: ${duration}
