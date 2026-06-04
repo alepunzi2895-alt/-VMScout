@@ -14,8 +14,9 @@ const API_KEYS = {
 // ─────────────────────────────────────────────────
 // SYSTEM PROMPT GENERATOR
 // ─────────────────────────────────────────────────
-const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }) => {
+const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, brand = null) => {
   const { duration, frequency } = config;
+  const brandCtx = brand?.name ? `\n\nBRAND CONTEXT (usa sempre queste info per personalizzare ogni output):\n- Brand: ${brand.name}${brand.sector ? `\n- Settore: ${brand.sector}` : ""}${brand.tone ? `\n- Tono di voce: ${brand.tone}` : ""}${brand.description ? `\n- Descrizione: ${brand.description}` : ""}${brand.instagramHandle ? `\n- Instagram: ${brand.instagramHandle}` : ""}${brand.hashtags ? `\n- Hashtag principali: ${brand.hashtags}` : ""}` : "";
 
   return `You are Visual Marketing Scout — a Senior Marketing Strategist, Visual Director & Content Architect. You analyze business/campaign objectives and return complete visual strategies with search queries, ready-to-post social captions, and video storytelling storyboards.
 
@@ -98,7 +99,7 @@ VIDEO QUERY RULES:
 - Good: "luxury car ibiza", "yacht sea sunset", "villa pool aerial"
 - Bad: "luxury car ibiza villa arrival cinematic" (too long)
 - SCENE DIFFERENTIATION: Each scene's search_query MUST be visually distinct from the others — different subject, setting, or action. If the video is about one subject (e.g. a villa), vary the area: S1="villa exterior aerial" | S2="infinity pool sunset" | S3="interior living room" | S4="terrace aperitivo" | S5="villa sea view". Never repeat the same query across scenes.
-- LUXY STORYTELLING: Each scene MUST have a clear narrative purpose/story logic. Compose a deeply connected cinematic storyboard.
+- STORYTELLING: Each scene MUST have a clear narrative purpose/story logic. Compose a deeply connected cinematic storyboard.
 
 INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#luxuryvillalibiza") — add it as a "instagram_hashtag" field in each post_composer slide.
 
@@ -123,7 +124,7 @@ EDITORIAL PLAN RULES:
 - Include "story_reel_hint" for every content item to create an ecosystem, not just isolated posts.
 - Ensure the "fb_cross_post_tip" explains adaptation for Facebook.
 
-CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.`;
+CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.${brandCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -264,12 +265,14 @@ function ImageGrid({ images }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, margin: "10px 0" }}>
       {images.slice(0, 6).map((img, i) => (
-        <a key={i} href={img.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", borderRadius: 8, overflow: "hidden", aspectRatio: "1", position: "relative" }}>
+        <div key={i} style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", position: "relative", background: "#111" }}>
           <img src={img.thumb} alt={img.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} loading="lazy" />
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.6))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace" }}>
-            {img.author}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "18px 5px 5px", background: "linear-gradient(transparent, rgba(0,0,0,0.7))", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <span style={{ fontSize: 7, color: "rgba(255,255,255,0.7)", fontFamily: "'JetBrains Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "55%" }}>{img.author}</span>
+            {img.full && <CanvaUploadBtn url={img.full} />}
           </div>
-        </a>
+          <a href={img.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 10 }}>↗</a>
+        </div>
       ))}
     </div>
   );
@@ -285,6 +288,99 @@ function CopyButton({ text, label = "Copia" }) {
     <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       style={{ width: "100%", padding: "7px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", background: copied ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
       {copied ? "✓ Copiato!" : label}
+    </button>
+  );
+}
+
+function CanvaUploadBtn({ url }) {
+  const [status, setStatus] = useState("idle");
+  const [errMsg, setErrMsg] = useState("");
+
+  async function handleUpload() {
+    setStatus("loading");
+    setErrMsg("");
+    try {
+      const res = await fetch("/api/canva-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, name: "vmscout-media" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setStatus("done");
+      } else if (data.error === "CANVA_NOT_CONNECTED") {
+        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+        setStatus("idle");
+      } else {
+        setErrMsg(data.message || `Errore`);
+        setStatus("error");
+        setTimeout(() => setStatus("idle"), 5000);
+      }
+    } catch (e) {
+      setErrMsg(e.message || "Errore");
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 5000);
+    }
+  }
+
+  const base = { padding: "4px 8px", borderRadius: 5, fontSize: 9, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", cursor: "pointer", border: "none", display: "flex", alignItems: "center", gap: 3 };
+  if (status === "done") return <span style={{ ...base, background: "#3A7A3A", color: "#9EE49E" }}>✓ Canva</span>;
+  if (status === "error") return <span title={errMsg} style={{ ...base, background: "#7A3A3A", color: "#E49E9E", cursor: "help" }}>⚠ Err</span>;
+  return (
+    <button onClick={handleUpload} disabled={status === "loading"} style={{ ...base, background: "rgba(0,196,204,0.75)", color: "#fff", opacity: status === "loading" ? 0.6 : 1 }}>
+      {status === "loading" ? "⏳" : "⬆"} Canva
+    </button>
+  );
+}
+
+function CanvaSlideBtn({ caption, query, canvaTemplates }) {
+  const [state, setState] = useState("idle");
+  const [url, setUrl] = useState(null);
+  const templateId = canvaTemplates?.post || "";
+
+  if (!templateId) {
+    return (
+      <span title="Configura il template in Canva Studio" style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "help", userSelect: "none" }}>
+        ✦ Canva
+      </span>
+    );
+  }
+
+  if (state === "done" && url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        style={{ padding: "7px 12px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
+        ✓ Canva →
+      </a>
+    );
+  }
+
+  async function handleCreate() {
+    setState("loading");
+    try {
+      const res = await fetch("/api/canva-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption, search_query: query, format: "post", templateId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setUrl(data.url);
+        setState("done");
+      } else if (data.error === "CANVA_NOT_CONNECTED") {
+        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+        setState("idle");
+      } else {
+        setState("error");
+        setTimeout(() => setState("idle"), 3000);
+      }
+    } catch { setState("idle"); }
+  }
+
+  return (
+    <button onClick={handleCreate} disabled={state === "loading"}
+      style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 4 }}>
+      {state === "loading" ? "⏳" : state === "error" ? "⚠" : "✦"} Canva
     </button>
   );
 }
@@ -492,7 +588,7 @@ function SlideSearchLinks({ query, orientation, instagramHashtag }) {
   );
 }
 
-function PostsTab({ data, onRegenSlide, regenLoading }) {
+function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
   const { post_composer, orientation } = data;
   const [lang, setLang] = useState("it");
   const [platform, setPlatform] = useState("instagram");
@@ -620,10 +716,11 @@ function PostsTab({ data, onRegenSlide, regenLoading }) {
                 </div>
               </div>
 
-              <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.02)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
                   <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
                 </div>
+                <CanvaSlideBtn caption={getCaption(post)} query={post.search_query || ""} canvaTemplates={brand?.canvaTemplates} />
                 <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
                   style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
                   {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
@@ -860,7 +957,7 @@ function EditorialTab({ data }) {
 // ─────────────────────────────────────────────────
 // STRATEGY MESSAGE (MAIN WRAPPER)
 // ─────────────────────────────────────────────────
-function StrategyMessage({ data, onUpdateData, originalBrief }) {
+function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedSource, setSelectedSource] = useState("unsplash");
   const [imageCache, setImageCache] = useState({});
@@ -915,7 +1012,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief }) {
 
       { activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
       { activeTab === "piano" && <EditorialTab data={data} />}
-      { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} />}
+      { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} brand={brand} />}
       { activeTab === "video" && <VideoTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
@@ -931,7 +1028,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief }) {
 // ─────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────
-export default function VisualMarketingScout() {
+export default function VisualMarketingScout({ brand }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -953,7 +1050,7 @@ export default function VisualMarketingScout() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: getSystemPrompt(planConfig), messages: [{ role: "user", content: userMsg }] }),
+        body: JSON.stringify({ system: getSystemPrompt(planConfig, brand), messages: [{ role: "user", content: userMsg }] }),
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
@@ -1048,7 +1145,7 @@ export default function VisualMarketingScout() {
                 <div style={{ maxWidth: "95%" }}>
                   <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
                   <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
-                    {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
+                    {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} brand={brand} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
                   </div>
                 </div>
               )}

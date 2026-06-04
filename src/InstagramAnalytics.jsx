@@ -128,7 +128,7 @@ function ConnectPanel({ onConnect }) {
       const igUser = igData.instagram_business_account;
       if (!igUser) throw new Error(
         `Nessun account Instagram Business collegato alla Page "${page.name}". ` +
-        "Controlla: (1) @luxy.exp è account Business/Creator su Instagram, " +
+        "Controlla: (1) il tuo account è Business/Creator su Instagram, " +
         "(2) è collegato a questa Facebook Page da Impostazioni → Account collegati."
       );
 
@@ -144,7 +144,7 @@ function ConnectPanel({ onConnect }) {
       <div style={{ textAlign: "center", marginBottom: 40 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📱</div>
         <div style={{ fontSize: 22, color: OFF_WHITE, fontFamily: "'Playfair Display', serif", marginBottom: 8 }}>
-          Connetti @luxy.exp
+          Connetti il tuo Account Instagram
         </div>
         <div style={{ fontSize: 13, color: WARM_GREY, lineHeight: 1.7 }}>
           Analisi intelligente dei post per costruire la strategia perfetta.
@@ -158,7 +158,7 @@ function ConnectPanel({ onConnect }) {
           ["1", "Vai su", "developers.facebook.com/tools/explorer"],
           ["2", "Seleziona la tua app Facebook (o creane una gratuita)"],
           ["3", 'Clicca "Generate Access Token" e aggiungi i permessi:', "instagram_basic  instagram_manage_insights  pages_show_list  pages_read_engagement"],
-          ["4", "Assicurati che @luxy.exp sia account Business/Creator su Instagram e collegato alla tua Facebook Page (Instagram → Impostazioni → Account → Account collegati)"],
+          ["4", "Assicurati che il tuo account sia Business/Creator su Instagram e collegato alla tua Facebook Page (Instagram → Impostazioni → Account → Account collegati)"],
           ["5", "Copia il token e incollalo qui sotto"],
         ].map(([n, text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
@@ -369,10 +369,11 @@ function AnalysisPanel({ text }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function InstagramAnalytics() {
+export default function InstagramAnalytics({ brand }) {
+  const defaultHandle = brand?.instagramHandle || "";
   const [token,     setToken]     = useState(() => localStorage.getItem("ig_token") || "");
   const [accountId, setAccountId] = useState(() => localStorage.getItem("ig_account_id") || "");
-  const [username,  setUsername]  = useState(() => localStorage.getItem("ig_username") || "@luxy.exp");
+  const [username,  setUsername]  = useState(() => localStorage.getItem("ig_username") || defaultHandle);
   const [posts,     setPosts]     = useState([]);
   const [loading,   setLoading]   = useState(false);
   const [step,      setStep]      = useState("");
@@ -385,15 +386,15 @@ export default function InstagramAnalytics() {
   function handleConnect({ token: t, accountId: id, username: u }) {
     localStorage.setItem("ig_token", t);
     localStorage.setItem("ig_account_id", id);
-    localStorage.setItem("ig_username", u || "@luxy.exp");
+    localStorage.setItem("ig_username", u || "");
     setToken(t);
     setAccountId(id);
-    setUsername(u || "@luxy.exp");
+    setUsername(u || "");
   }
 
   function disconnect() {
     ["ig_token", "ig_account_id", "ig_username", "ig_analysis"].forEach(k => localStorage.removeItem(k));
-    setToken(""); setAccountId(""); setUsername("@luxy.exp");
+    setToken(""); setAccountId(""); setUsername(defaultHandle);
     setPosts([]); setAnalysis(""); setError("");
   }
 
@@ -457,21 +458,19 @@ export default function InstagramAnalytics() {
       caption: (p.caption || "").substring(0, 200),
     }));
 
-    const system = `Sei il social media strategist di @luxy.exp, concierge di lusso a Ibiza.
+    const brandCtx = brand?.name
+      ? `\nBRAND: ${brand.name}${brand.sector ? ` | Settore: ${brand.sector}` : ""}${brand.tone ? ` | Tono: ${brand.tone}` : ""}${brand.description ? `\nDescrizione: ${brand.description}` : ""}`
+      : "";
+    const system = `Sei un social media strategist esperto. Analizza i dati Instagram forniti e offri consigli strategici concreti basati sui dati reali.${brandCtx}
 
-STILE UFFICIALE:
+REGOLE GENERALI:
 • Caption: max 3-4 righe. Prima frase = gancio evocativo. MAI "Benvenuti" o "Vi presentiamo".
-• Firma ✦ come separatore o chiusura.
-• Emoji: max 1-2. CTA finale: "→ DM per info" | "→ link in bio" | "→ info@luxy.exp"
-• Hashtag: 8-12 nel PRIMO COMMENTO. Core: #luxyexperience #ibiza #ibizaluxury
-• Niche: #villasibiza #yachtibiza #luxuryconcierge #ibizalifestyle #ibizasunset
-• Reel: B-roll 15-30s, niente voiceover, musica ambient/house, testo overlay minimal
-• Target: IT + UK + DE + ES. Bilingue IT/EN preferito.
-• Best timing: 18:00-20:00 e 22:00-23:00 CET
-• Servizi: Ville & Hotel, Yacht & Barche, Auto & Scooter, Nightlife, Ticket & Eventi, Concierge H24
-• NEVER: foto stock, tono corporate, prezzi nel caption, urgency forzata`;
+• Emoji: max 1-2 per post. CTA finale chiaro.
+• Hashtag: nel PRIMO COMMENTO, non nel caption.
+• Reel: B-roll 15-30s, testo overlay minimal, musica coerente con il tono del brand.
+• NEVER: foto stock pulite, tono corporate, urgency forzata.`;
 
-    const userMsg = `Analizza i dati Instagram reali di @luxy.exp (ultimi ${posts.length} post):
+    const userMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
 
 ${JSON.stringify(postsSummary, null, 2)}
 

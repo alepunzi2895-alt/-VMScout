@@ -92,7 +92,7 @@ async function uploadImageUrl(imageUrl, token) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { caption, search_query, format = "post", cta } = req.body;
+  const { caption, search_query, format = "post", cta, templateId: bodyTemplateId } = req.body;
   if (!caption) return res.status(400).json({ error: "Manca caption" });
 
   const db = getDb();
@@ -104,13 +104,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const vertical   = format === "story" || format === "reel";
-    const templateId = await getTemplateId(db, format);
+    const vertical = format === "story" || format === "reel";
+    const templateId = bodyTemplateId || await getTemplateId(db, format);
 
     if (!templateId) {
       return res.status(400).json({
         error:   "TEMPLATE_NOT_SET",
-        message: `Template Canva per "${format}" non configurato. Aggiornalo in Brand Memory → Canva.`,
+        message: `Template Canva per "${format}" non configurato. Impostalo in Canva Studio.`,
       });
     }
 
