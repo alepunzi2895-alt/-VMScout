@@ -484,6 +484,12 @@ function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Cl
     <div style={{ ...card, marginTop: 24 }}>
       <div style={{ ...label, marginBottom: 20 }}>{title}</div>
 
+      {data._visualUnavailable && (
+        <div style={{ fontSize: 11, color: "#E4A050", background: "#E4A05012", border: "1px solid #E4A05030", borderRadius: 8, padding: "8px 12px", marginBottom: 20 }}>
+          ⚠ Analisi visiva non disponibile questa volta (il resto dell'analisi è comunque completo) — riprova più tardi.
+        </div>
+      )}
+
       {patterns?.summary && (
         <AnalysisSection title="📊 Pattern Vincenti">
           <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{patterns.summary}</p>
@@ -775,17 +781,9 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
       caption: (p.caption || "").substring(0, 200),
     }));
 
-    // Foto dei post con più engagement — Claude le vede davvero e analizza
-    // stile visivo/storytelling, non solo i numeri.
-    // Meno immagini = meno tempo di elaborazione visiva per Claude (fetch+encode
-    // server-side + tempo di generazione) — 4 bastano per un'analisi visiva
-    // solida e riducono il rischio di timeout (504) sulla funzione serverless.
-    const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 4);
-    const imageUrls = topForVision.map(p => p.thumbnail_url || p.media_url).filter(Boolean);
-
     const priorInsights = await fetchPriorInsights();
     const priorCtx = priorInsights && (priorInsights.tips?.length || priorInsights.strengths?.length || priorInsights.weaknesses?.length)
-      ? `\n\nMEMORIA ACCUMULATA DA ANALISI PRECEDENTI DI QUESTO PROGETTO — non ripetere gli stessi identici consigli, verifica se sono stati applicati (confronta con i dati/immagini attuali) e approfondisci/evolvi:
+      ? `\n\nMEMORIA ACCUMULATA DA ANALISI PRECEDENTI DI QUESTO PROGETTO — non ripetere gli stessi identici consigli, verifica se sono stati applicati (confronta con i dati attuali) e approfondisci/evolvi:
 ${priorInsights.strengths?.length ? `Punti di forza già confermati in passato: ${priorInsights.strengths.join(" | ")}` : ""}
 ${priorInsights.weaknesses?.length ? `Debolezze già individuate in passato: ${priorInsights.weaknesses.join(" | ")}` : ""}
 ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.tips.join(" | ")}` : ""}`
@@ -795,7 +793,13 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
       ? `\nBRAND: ${brand.name}${brand.sector ? ` | Settore: ${brand.sector}` : ""}${brand.tone ? ` | Tono: ${brand.tone}` : ""}${brand.description ? `\nDescrizione: ${brand.description}` : ""}`
       : "";
 
-    const system = `Sei un social media strategist ed esperto di direzione artistica/visual storytelling. Analizza i dati Instagram e le foto reali allegate, e offri consigli strategici concreti.${brandCtx}${priorCtx}
+    // Due chiamate separate e in parallelo invece di una sola grande richiesta
+    // testo+immagini: quella testuale (patterns/timing/pillars/corrections/
+    // next_posts) è la parte essenziale e deve sempre riuscire; quella visiva
+    // (foto allegate) è più pesante/rischiosa e a "best effort" — se va in
+    // timeout o fallisce, l'analisi resta comunque completa e utile, solo
+    // senza la sezione di stile visivo, invece di fallire tutto.
+    const textSystem = `Sei un social media strategist esperto. Analizza i dati Instagram forniti e offri consigli strategici concreti basati sui dati reali.${brandCtx}${priorCtx}
 
 REGOLE GENERALI:
 • Caption: max 3-4 righe. Prima frase = gancio evocativo. MAI "Benvenuti" o "Vi presentiamo".
@@ -809,36 +813,62 @@ Rispondi SOLO con un oggetto JSON valido (no markdown fences, no testo fuori dal
   "patterns": { "summary": "analisi pattern vincenti con dati a supporto, in italiano", "winning_formats": ["formato1", "formato2"] },
   "timing": { "summary": "analisi orari/giorni migliori confrontati con la fascia 18-23h", "best_slot": "es. 19:00-21:00" },
   "content_pillars": ["tema1", "tema2", "tema3"],
-  "visual_storytelling": {
-    "style_description": "descrizione onesta dello stile visivo ricorrente nelle foto allegate (luce, palette, composizione, coerenza col brand)",
-    "recurring_elements": ["elemento1", "elemento2"],
-    "storytelling_pattern": "che storia raccontano i post in sequenza, se ce n'è una",
-    "strengths": ["punto di forza visivo 1", "punto di forza visivo 2"],
-    "weaknesses": ["cosa migliorare visivamente 1", "cosa migliorare visivamente 2"]
-  },
   "corrections": ["abitudine da eliminare 1", "abitudine da eliminare 2"],
   "next_posts": [
     {
       "idea": "titolo breve dell'idea",
       "content_type": "Post | Reel | Carosello",
-      "rationale": "perché funzionerà, basato sui dati e sulle immagini analizzate",
+      "rationale": "perché funzionerà, basato sui dati analizzati",
       "visual_scout_brief": "brief completo in italiano, pronto da inviare a Visual Scout per generare subito questo post: includi soggetto, location/ambientazione, mood ed eventuale formato"
     }
   ]
 }
 Genera esattamente 3 idee in "next_posts", diverse tra loro per soggetto/formato.`;
 
-    const userMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post) e le ${imageUrls.length} foto allegate dei post con più engagement:
+    const textUserMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
 
 ${JSON.stringify(postsSummary, null, 2)}
 
 Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
 
+    // Solo 3 foto e un compito piccolo e mirato: molto più veloce del
+    // precedente prompt unico che chiedeva TUTTO (testo + visivo) insieme.
+    const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 3);
+    const imageUrls = topForVision.map(p => p.thumbnail_url || p.media_url).filter(Boolean);
+
+    const visualSystem = `Sei un direttore artistico esperto di visual storytelling per Instagram.${brandCtx} Guarda le foto allegate (i post con più engagement dell'account) e analizza onestamente lo stile visivo ricorrente.
+
+Rispondi SOLO con un oggetto JSON valido (no markdown fences, no testo fuori dal JSON), con questa struttura esatta:
+{
+  "visual_storytelling": {
+    "style_description": "descrizione onesta dello stile visivo ricorrente nelle foto (luce, palette, composizione, coerenza col brand)",
+    "recurring_elements": ["elemento1", "elemento2"],
+    "storytelling_pattern": "che storia raccontano i post in sequenza, se ce n'è una",
+    "strengths": ["punto di forza visivo 1", "punto di forza visivo 2"],
+    "weaknesses": ["cosa migliorare visivamente 1", "cosa migliorare visivamente 2"]
+  }
+}`;
+    const visualUserMsg = `Analizza lo stile visivo di queste ${imageUrls.length} foto, i post più performanti di ${username || "questo account"}.`;
+
     try {
-      const raw = await callClaude(system, userMsg, imageUrls);
-      const parsed = parseJsonResponse(raw);
+      const [textSettled, visualSettled] = await Promise.allSettled([
+        callClaude(textSystem, textUserMsg, []).then(parseJsonResponse),
+        imageUrls.length ? callClaude(visualSystem, visualUserMsg, imageUrls).then(parseJsonResponse) : Promise.reject(new Error("nessuna immagine disponibile")),
+      ]);
+
+      if (textSettled.status === "rejected") throw textSettled.reason;
+      const parsed = textSettled.value;
+
+      if (visualSettled.status === "fulfilled") {
+        parsed.visual_storytelling = visualSettled.value.visual_storytelling || null;
+      } else {
+        console.warn("[InstagramAnalytics] analisi visiva non disponibile:", visualSettled.reason?.message);
+        parsed.visual_storytelling = null;
+        parsed._visualUnavailable = true;
+      }
+
       setAnalysis(parsed);
-      const saved = await saveToHistory({ project_id: brand?.id, type: "analytics", prompt: userMsg, result_json: parsed });
+      const saved = await saveToHistory({ project_id: brand?.id, type: "analytics", prompt: textUserMsg, result_json: parsed });
       mergeIntoProjectInsights(parsed);
       if (saved?.ok) setHistoryRefreshKey(k => k + 1);
     } catch (err) {
