@@ -34,7 +34,7 @@ async function igCall(token, path, params = {}) {
 // Salva ogni analisi AI nello storico persistente (Turso) e ne restituisce l'id.
 async function saveToHistory({ project_id, type, prompt, result_json }) {
   try {
-    const res = await fetch("/api/history", {
+    const res = await fetch("/api/history?action=save_request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
@@ -747,7 +747,7 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   // ogni prossima analisi/strategia legge questa memoria prima di generare.
   function mergeIntoProjectInsights(parsed) {
     if (!brand?.id) return;
-    fetch("/api/history", {
+    fetch("/api/history?action=merge_insights", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -793,6 +793,12 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
       ? `\nBRAND: ${brand.name}${brand.sector ? ` | Settore: ${brand.sector}` : ""}${brand.tone ? ` | Tono: ${brand.tone}` : ""}${brand.description ? `\nDescrizione: ${brand.description}` : ""}`
       : "";
 
+    // Sequencing: dice al modello cosa è stato pubblicato per ultimo, così
+    // "next_posts" propone qualcosa di diverso (formato E tema) invece di
+    // un'altra idea scenografica simile all'ultima.
+    const lastPost = [...posts].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    const lastPostCtx = lastPost ? `\nULTIMO CONTENUTO PUBBLICATO: ${mediaLabel(lastPost.media_type)} — "${(lastPost.caption || "").substring(0, 100)}"` : "";
+
     // Due chiamate separate e in parallelo invece di una sola grande richiesta
     // testo+immagini: quella testuale (patterns/timing/pillars/corrections/
     // next_posts) è la parte essenziale e deve sempre riuscire; quella visiva
@@ -808,13 +814,15 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
     // concisione FERREI (limite di parole per campo, niente markdown, meno
     // elementi) lo stesso payload di 24 post reali è sceso da >45s (timeout)
     // a ~9s. Le istruzioni sotto sono quelle testate, non un tentativo nuovo.
-    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${priorCtx}
+    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${priorCtx}${lastPostCtx}
 
 Struttura ESATTA:
 {"patterns":{"summary":"UNA frase, max 20 parole","winning_formats":["formato1","formato2"]},"timing":{"summary":"UNA frase, max 20 parole","best_slot":"es. 19:00-21:00"},"content_pillars":["tema1","tema2","tema3"],"corrections":["max 10 parole","max 10 parole"],"next_posts":[{"idea":"max 6 parole","content_type":"Post|Reel|Carosello","rationale":"UNA frase, max 15 parole","visual_scout_brief":"max 30 parole, in italiano: soggetto, location/mood"}]}
 
 REGOLE FERREE:
-- Genera SOLO 2 elementi in "next_posts", diversi tra loro per soggetto/formato.
+- Genera SOLO 2 elementi in "next_posts".
+- SEQUENZA: le 2 idee devono avere formato E tema diversi tra loro E diversi dall'ULTIMO CONTENUTO PUBBLICATO (se indicato sopra) — mai la stessa idea scenografica riproposta.
+- MIX OBBLIGATORIO: almeno 1 delle 2 idee deve riguardare l'OFFERTA/I SERVIZI CONCRETI del brand (es. pacchetti su misura, prenotazioni, esperienze specifiche, collaborazioni, orari/luoghi dedicati) — non solo atmosfera/paesaggio. L'altra può essere più scenografica/emotiva.
 - Ogni campo testuale ha un limite di parole indicato sopra: NON superarlo.
 - NON usare markdown (niente #, **, tabelle, emoji decorative).
 - NON aggiungere spiegazioni, premesse o testo fuori dal JSON.

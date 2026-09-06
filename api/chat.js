@@ -4,7 +4,7 @@
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // limite Anthropic per immagine
 const IMAGE_FETCH_TIMEOUT_MS = 12000;
-const ANTHROPIC_TIMEOUT_MS = 45000; // margine sotto maxDuration:60 di vercel.json
+const ANTHROPIC_TIMEOUT_MS = 52000; // margine sotto maxDuration:60 di vercel.json
 
 // Le foto Instagram reali (media_url) sono spesso piene risoluzioni da centinaia
 // di KB a qualche MB — su 4-5 immagini + inflazione ~33% del base64 diventa un

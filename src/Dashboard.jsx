@@ -85,7 +85,7 @@ export default function Dashboard({ brand, onSuggestBrief }) {
   async function handleMarkUsed(entryId) {
     setData(prev => prev ? { ...prev, calendar: prev.calendar.map(e => e.id === entryId ? { ...e, status: "generato" } : e) } : prev);
     try {
-      await fetch("/api/history", {
+      await fetch("/api/history?action=update_calendar_status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "update_calendar_status", project_id: brand.id, entry_id: entryId, status: "generato" }),

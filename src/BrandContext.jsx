@@ -31,7 +31,7 @@ function loadBrands() {
 // resta la fonte di verità immediata/offline, il DB è lo storico durevole
 // (sopravvive a un browser diverso o alla cancellazione della cache).
 function syncProjectToDb(brand) {
-  fetch("/api/history", {
+  fetch("/api/history?action=save_project", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

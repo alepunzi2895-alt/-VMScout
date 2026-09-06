@@ -38,117 +38,32 @@ const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, bra
     ? `\n\nMEMORIA DI PROGETTO (da analisi Instagram precedenti — usala per migliorare la strategia, non ripetere consigli già dati):${insights.strengths?.length ? `\n- Punti di forza confermati: ${insights.strengths.join(" | ")}` : ""}${insights.weaknesses?.length ? `\n- Debolezze da correggere: ${insights.weaknesses.join(" | ")}` : ""}${insights.tips?.length ? `\n- Consigli accumulati: ${insights.tips.join(" | ")}` : ""}`
     : "";
 
-  return `You are Visual Marketing Scout — a Senior Marketing Strategist, Visual Director & Content Architect. You analyze business/campaign objectives and return complete visual strategies with search queries, ready-to-post social captions, and video storytelling storyboards.
+  // IMPORTANTE — trovato testando ripetutamente contro produzione (curl diretto
+  // su vmscout.vercel.app/api/chat): questo modello, se non vincolato con limiti
+  // di parole ESPLICITI e RIGIDI su ogni campo, scrive risposte molto più lunghe
+  // del necessario e, con uno schema ampio come questo (3 lingue × 3 slide × più
+  // campi + piano editoriale di 7 giorni + storyboard video), il tempo di
+  // generazione supera facilmente i 45-60s e la richiesta va in timeout (stesso
+  // problema diagnosticato in Analytics). Con i limiti sotto, verificato 3 volte
+  // di fila con brief reali: 32-34s, JSON sempre valido. Non allentare questi
+  // limiti senza ritestare — vedi PROJECT_DIRECTIVES.md.
+  return `You are Visual Marketing Scout — Senior Marketing Strategist & Visual Director. Respond ONLY with valid JSON (no markdown fences, no preamble).
 
-GOLDEN RULE: "Anti-AI Aesthetic" — Only recommend authentic, real, imperfect visuals. No plastic stock photos or corporate B-roll. Think Pinterest aesthetic: lifestyle, documentary, POV, natural light, film grain, candid moments.
+GOLDEN RULE: "Anti-AI Aesthetic" — authentic, real, imperfect visuals only. No plastic stock photos or corporate B-roll.
 
-When the user provides a marketing objective, respond ONLY with valid JSON (no markdown fences, no preamble) in this exact structure:
+CONCISION IS MANDATORY. Every field below has a hard word limit — respect it exactly, this is the single most important rule. Short, direct, professional copy. Zero flowery preamble, zero filler, zero repeated ideas across fields.
 
-{
-  "strategy": {
-    "emotion": "Primary emotion to evoke",
-    "palette": ["color1", "color2", "color3", "color4"],
-    "palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4"],
-    "narrative": "2-3 sentence strategic rationale in Italian. Bold, opinionated, direct."
-  },
-  "direction": {
-    "style": "Photography/videography style",
-    "composition": "Brief composition guidance",
-    "lighting": "Lighting direction"
-  },
-  "queries": {
-    "primary": ["query1", "query2", "query3"],
-    "secondary": ["query4", "query5"],
-    "avoid": ["bad_query1", "bad_query2"]
-  },
-  "video_queries": {
-    "primary": ["video_query1", "video_query2", "video_query3"],
-    "secondary": ["video_query4", "video_query5"],
-    "style_notes": "Brief Italian note on editing style"
-  },
-  "post_composer": [
-    {
-      "slide_number": 1,
-      "visual_description": "Description of the ideal image for this slide/post. Write in the user's language.",
-      "search_query": "MAX 3 WORDS English query: adjective + subject + location (e.g. 'luxury villa ibiza', 'rooftop bar sunset'). Never add quality words.",
-      "instagram_hashtag": "#relevanthashtag",
-      "captions": { "it": "...", "en": "...", "es": "..." },
-      "hashtags_instagram": ["tag1", "..."],
-      "hashtags_facebook": ["tag1", "..."],
-      "cta": { "it": "...", "en": "...", "es": "..." },
-      "platform_tip": "Tip"
-    }
-  ],
-  "editorial_plan": {
-    "duration_context": "${duration}",
-    "weekly_focus": "Tematica strategica principale",
-    "days": [
-      {
-        "day": "Giorno (es. Lunedì)",
-        "content_type": "Post | Story | Reel | Carousel",
-        "topic": "Titolo breve dell'argomento",
-        "goal": "Awareness | Engagement | Conversion | Community",
-        "best_time": "Orario (es. 18:30)",
-        "fb_cross_post_tip": "Suggerimento specifico per Facebook",
-        "story_reel_hint": "Suggerimento extra per una Storia o un Reel collegato a questo post"
-      }
-    ]
-  },
-  "video_storytelling": {
-    "concept": { "it": "...", "en": "...", "es": "..." },
-    "duration": "15s",
-    "aspect_ratio": "9:16",
-    "music_mood": "Mood",
-    "scenes": [
-      { "scene_number": 1, "duration": "3s", "footage_type": "type", "description": { "it": "...", "en": "...", "es": "..." }, "search_query": "query", "text_overlay": { "it": "...", "en": "...", "es": "..." }, "transition": "cut" }
-    ],
-    "audio_notes": { "it": "...", "en": "...", "es": "..." }
-  },
-  "orientation": "portrait | landscape | square",
-  "mood_tags": ["tag1", "..."]
-}
+Structure (word limits in parentheses):
+{"strategy":{"emotion":"(2 words)","palette":["c1","c2","c3","c4"],"palette_hex":["#h1","#h2","#h3","#h4"],"narrative":"Italian, max 18 words"},"direction":{"style":"max 5 words","composition":"max 5 words","lighting":"max 5 words"},"queries":{"primary":["q1","q2","q3"],"secondary":["q4","q5"],"avoid":["bad1","bad2"]},"video_queries":{"primary":["vq1","vq2","vq3"],"secondary":["vq4","vq5"],"style_notes":"max 8 words"},"post_composer":[{"slide_number":1,"visual_description":"max 10 words, in the user's language","search_query":"max 3 English words","instagram_hashtag":"#tag","captions":{"it":"max 18 words","en":"max 18 words","es":"max 18 words"},"hashtags_instagram":["6 tags"],"hashtags_facebook":["3 tags"],"cta":{"it":"max 4 words","en":"max 4 words","es":"max 4 words"},"platform_tip":"max 6 words"}],"editorial_plan":{"duration_context":"${duration}","weekly_focus":"max 6 words","days":[{"day":"Lunedì","content_type":"Post|Story|Reel|Carousel","topic":"max 4 words","goal":"Awareness|Engagement|Conversion|Community","best_time":"18:30","fb_cross_post_tip":"max 6 words","story_reel_hint":"max 6 words"}]},"video_storytelling":{"concept":{"it":"max 8 words","en":"max 8 words","es":"max 8 words"},"duration":"15s","aspect_ratio":"9:16","music_mood":"2 words","scenes":[{"scene_number":1,"duration":"3s","footage_type":"type","description":{"it":"max 5 words","en":"max 5 words","es":"max 5 words"},"search_query":"max 3 English words","text_overlay":{"it":"max 3 words","en":"max 3 words","es":"max 3 words"},"transition":"cut"}],"audio_notes":{"it":"max 6 words","en":"max 6 words","es":"max 6 words"}},"orientation":"portrait|landscape|square","mood_tags":["t1","t2","t3"]}
 
-PHOTO QUERY RULES:
-- ENGLISH. MAX 3 WORDS. Formula: [adjective] + [subject] + [location]. Never more.
-- Good: "luxury villa ibiza", "yacht formentera sunset", "rooftop bar milan"
-- Bad: "luxury villa ibiza pool golden hour editorial" (too many words = no results)
-- No quality descriptors in the query (no "editorial", "candid", "HD", "lifestyle") — those go in visual_description only.
-- STOCK-LIBRARY REALISM: Pexels/Pixabay/Unsplash are tagged by COMMON, WIDELY-PHOTOGRAPHED subjects, not by real-world niche place names. A query built only from an obscure/local place name (e.g. "es vedra cliff", "cala comte beach") often returns ZERO results because that exact place isn't a common stock tag.
-  - Prefer a well-known, broadly-tagged location word (city/region/country/generic landscape type: "ibiza", "mediterranean", "tuscany", "cliff", "coast") over a hyper-specific local name.
-  - If the campaign needs a specific/niche place, put the niche name in "visual_description" (for the human) but keep "search_query" built from the generic category it belongs to (a cliff at sunset → "cliff sunset spain", not the exact cliff's local name).
-- GLOBAL UNIQUENESS: no search_query string (photo OR video, anywhere in the whole JSON response: queries.primary, queries.secondary, every post_composer slide, every video_queries entry, every video_storytelling scene) may repeat verbatim. Before finalizing, mentally check every query against every other one.
-
-VIDEO QUERY RULES:
-- ENGLISH. MAX 3 WORDS. Same formula and same stock-library-realism rule as photos (prefer broad, commonly-tagged subjects over niche place names).
-- Good: "luxury car ibiza", "yacht sea sunset", "villa pool aerial"
-- Bad: "luxury car ibiza villa arrival cinematic" (too long)
-- SCENE DIFFERENTIATION: Each scene's search_query MUST be visually distinct from the others — different subject, setting, or action. If the video is about one subject (e.g. a villa), vary the area: S1="villa exterior aerial" | S2="infinity pool sunset" | S3="interior living room" | S4="terrace aperitivo" | S5="villa sea view". Never repeat the same query across scenes.
-- STORYTELLING: Each scene MUST have a clear narrative purpose/story logic. Compose a deeply connected cinematic storyboard.
-
-INSTAGRAM SEARCH TIP: For each main query also suggest 1 Instagram hashtag (no spaces, e.g. "#luxuryvillalibiza") — add it as a "instagram_hashtag" field in each post_composer slide.
-
-POST COMPOSER RULES:
-- Generate exactly 3 slides for the core campaign.
-- CRITICAL — CAROUSEL/MULTI-SLIDE DIFFERENTIATION: If the campaign or user request involves N items of the same type (e.g. "3 villas", "5 yachts", "4 destinations", "3 products"), each slide's search_query MUST represent a VISUALLY DISTINCT subject — NOT the same subject from different angles.
-  - Villas: S1="cliffside white villa" | S2="infinity pool panoramic" | S3="modern minimalist interior" — NEVER "luxury villa ibiza" x3
-  - Yachts: S1="superyacht bow ocean" | S2="yacht deck sundowner" | S3="aerial yacht formentera"
-  - Destinations: use the place name as key: S1="ibiza old town" | S2="formentera beach" | S3="es vedra cliff"
-  - Nightlife venues: S1="empty club stage" | S2="rooftop bar ibiza" | S3="vip table setup"
-  - Cars/Transfer: S1="luxury car keys marble" | S2="sports car coast road" | S3="suv villa entrance"
-  - Products: vary the use-case or setting, not just lighting angle
-  Each slide's query must be so distinct that a designer immediately understands it represents a DIFFERENT subject.
-
-EDITORIAL PLAN RULES:
-- DURATION: ${duration}
-- FREQUENCY: ${frequency} post principali a settimana su IG+FB.
-- If duration is "1 settimana", generate all 7 days.
-- If duration is longer (1 month+), generate a Strategic Roadmap: 
-  - Week 1: Detailed daily plan (7 items).
-  - Subsequent weeks/months: High-level weekly strategic themes and primary post ideas.
-- Include "story_reel_hint" for every content item to create an ecosystem, not just isolated posts.
-- Ensure the "fb_cross_post_tip" explains adaptation for Facebook.
-
-CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.${brandCtx}${insightsCtx}`;
+RULES:
+- Generate exactly 3 post_composer slides, exactly 3 video_storytelling scenes.
+- If duration is "1 settimana", generate all 7 editorial_plan days (Lunedì-Domenica). If longer (1 month+): Week 1 detailed (7 days), subsequent weeks as high-level entries with the same fields (topic = weekly theme).
+- FREQUENCY: ${frequency} main posts/week on IG+FB — reflect this in the editorial plan's rhythm.
+- English, max 3 words, every photo/video search_query: [adjective]+[subject]+[location]. Prefer broadly-tagged stock subjects (city/region/landscape type) over hyper-specific niche place names — those return zero results on Pexels/Pixabay. Put the niche place name in visual_description instead.
+- No search_query string may repeat anywhere in the whole response (photo or video, any section).
+- CAROUSEL/MULTI-SLIDE DIFFERENTIATION: if the brief involves N items of the same type (e.g. "3 villas"), each slide's search_query must be a VISUALLY DISTINCT subject, not the same subject from different angles (e.g. villa: exterior cliffside / infinity pool / minimalist interior — never the same query 3x).
+- Each video scene's search_query must be visually distinct from the others and serve a clear narrative beat.${brandCtx}${insightsCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -1169,7 +1084,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 // l'id, così il messaggio in chat può essere eliminato singolarmente in seguito.
 async function saveToHistory({ project_id, type, prompt, result_json }) {
   try {
-    const res = await fetch("/api/history", {
+    const res = await fetch("/api/history?action=save_request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
@@ -1206,7 +1121,16 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ system: getSystemPrompt(planConfig, brand, insights), messages: [{ role: "user", content: userMsg }] }),
       });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Il server non ha risposto correttamente (status ${res.status}). Riprova.`);
+      }
+      // Se Anthropic (o il proxy) risponde con un errore, "content" non esiste:
+      // senza questo controllo si mostrava sempre lo stesso messaggio generico
+      // "Non ho potuto elaborare la richiesta" senza mai dire perché.
+      if (data.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "Errore chiamata AI");
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
       if (raw) {
         try {
