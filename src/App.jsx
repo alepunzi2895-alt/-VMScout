@@ -422,19 +422,29 @@ function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
   const url = src.webUrl(query, orientation);
   const canFetch = src.apiUrl && API_KEYS[sourceKey];
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [noResults, setNoResults] = useState(false);
 
-  const handleFetch = async (e) => {
-    e.preventDefault();
-    if (images) { setExpanded(!expanded); return; }
+  // Anteprima automatica appena la card compare (o quando si cambia fonte
+  // foto) — non serve più cliccare "Anteprima" per vedere le immagini.
+  useEffect(() => {
+    if (!canFetch || images) return;
+    let active = true;
     setLoading(true);
     setNoResults(false);
-    const outcome = await fetchImages(query, orientation, sourceKey);
-    if (outcome) onImagesFetched(query, outcome);
-    else setNoResults(true);
-    setExpanded(true);
-    setLoading(false);
+    fetchImages(query, orientation, sourceKey).then(outcome => {
+      if (!active) return;
+      if (outcome) onImagesFetched(query, outcome);
+      else setNoResults(true);
+      setLoading(false);
+    });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, sourceKey, canFetch]);
+
+  const handleToggle = (e) => {
+    e.preventDefault();
+    setExpanded(v => !v);
   };
 
   return (
@@ -447,9 +457,9 @@ function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
           <span style={{ marginLeft: "auto", fontSize: 16, opacity: 0.4 }}>↗</span>
         </a>
         {canFetch && (
-          <button onClick={handleFetch}
+          <button onClick={handleToggle}
             style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.2)", background: expanded ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>
-            {loading ? "..." : images ? (expanded ? "Nascondi" : "Mostra") : "Anteprima"}
+            {loading ? "..." : expanded ? "Nascondi" : "Mostra"}
           </button>
         )}
       </div>
@@ -469,14 +479,49 @@ function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
 }
 
 function VideoQueryCard({ query, sourceKey }) {
+  const [videos, setVideos] = useState(null);
+  const [loading, setLoading] = useState(false);
   const src = VIDEO_SOURCES[sourceKey];
+  const apiKeyKey = sourceKey.split("_")[0];
+  const canFetch = src?.apiUrl && API_KEYS[apiKeyKey];
+
+  // Stessa logica/pattern di SceneVideoPlayer (tab Video): anteprima automatica
+  // invece di solo un link, così anche i video_queries in Strategia si vedono.
+  useEffect(() => {
+    if (!query || !canFetch) { setVideos(null); return; }
+    let active = true;
+    setLoading(true);
+    fetchVideos(query, sourceKey).then(res => {
+      if (active) { setVideos(res); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [query, sourceKey, canFetch]);
+
   return (
-    <a href={src.webUrl(query)} target="_blank" rel="noopener noreferrer"
-      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(26,26,46,0.05)", borderRadius: 10, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(26,26,46,0.1)", fontSize: 13 }}>
-      <span style={{ width: 24, height: 24, borderRadius: 6, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
-      <span style={{ fontStyle: "italic", opacity: 0.85 }}>"{query}"</span>
-      <span style={{ marginLeft: "auto", fontSize: 14, opacity: 0.4 }}>▶</span>
-    </a>
+    <div>
+      <a href={src.webUrl(query)} target="_blank" rel="noopener noreferrer"
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(26,26,46,0.05)", borderRadius: 10, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(26,26,46,0.1)", fontSize: 13 }}>
+        <span style={{ width: 24, height: 24, borderRadius: 6, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
+        <span style={{ fontStyle: "italic", opacity: 0.85 }}>"{query}"</span>
+        <span style={{ marginLeft: "auto", fontSize: 14, opacity: 0.4 }}>▶</span>
+      </a>
+      {canFetch && (
+        loading ? (
+          <div style={{ fontSize: 10, color: "#999", fontStyle: "italic", marginTop: 8 }}>Cerco footage "{query}"...</div>
+        ) : videos && videos.length > 0 ? (
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 8, paddingBottom: 2 }}>
+            {videos.slice(0, 3).map(v => (
+              <div key={v.id} style={{ width: 110, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
+                <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+                <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 10 }}>↗</a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: "#999", marginTop: 8 }}>Nessun video trovato</div>
+        )
+      )}
+    </div>
   );
 }
 
@@ -633,6 +678,39 @@ function SlideSearchLinks({ query, orientation, instagramHashtag }) {
   );
 }
 
+// Prima fonte foto con una chiave API configurata — per l'anteprima automatica
+// nel tab Post non serve uno switcher, basta mostrare subito qualcosa di reale.
+function defaultPhotoSource() {
+  return Object.keys(PHOTO_SOURCES).find(k => PHOTO_SOURCES[k].apiUrl && API_KEYS[k]) || null;
+}
+
+function SlidePreviewImages({ query, orientation }) {
+  const sourceKey = defaultPhotoSource();
+  const [outcome, setOutcome] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!query || !sourceKey) return;
+    let active = true;
+    setLoading(true);
+    fetchImages(query, orientation, sourceKey).then(o => { if (active) { setOutcome(o); setLoading(false); } });
+    return () => { active = false; };
+  }, [query, orientation, sourceKey]);
+
+  if (!sourceKey) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      {loading ? (
+        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Cerco immagini per "{query}"...</div>
+      ) : outcome?.results?.length ? (
+        <ImageGrid images={outcome.results.slice(0, 3)} />
+      ) : (
+        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Nessuna immagine trovata per "{query}"</div>
+      )}
+    </div>
+  );
+}
+
 function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
   const { post_composer, orientation } = data;
   const [lang, setLang] = useState("it");
@@ -728,6 +806,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                     Cerca "{post.search_query}" su:
                   </div>
                   <SlideSearchLinks query={post.search_query} orientation={orientation} instagramHashtag={post.instagram_hashtag} />
+                  <SlidePreviewImages query={post.search_query} orientation={orientation} />
                 </div>
               )}
 
