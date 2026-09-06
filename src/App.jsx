@@ -1,5 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
+// Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
+// "solo JSON": invece di assumere che l'intera stringa ripulita sia JSON puro,
+// estrae la sottostringa dalla prima "{" all'ultima "}".
+function parseJsonResponse(raw) {
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Il modello non ha risposto con un JSON valido.");
+  }
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
 // ─────────────────────────────────────────────────
 // API CONFIGURATION
 // Le keys vengono lette dalle Environment Variables di Vercel
@@ -1102,7 +1115,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
       const result = await res.json();
       const raw = result.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
       if (raw) {
-        const newSlide = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        const newSlide = parseJsonResponse(raw);
         newSlide.slide_number = slide.slide_number;
         const updated = { ...data };
         updated.post_composer = [...data.post_composer];
@@ -1197,7 +1210,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
       if (raw) {
         try {
-          const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+          const parsed = parseJsonResponse(raw);
           const saved = await saveToHistory({ project_id: brand?.id, type: "strategy", prompt: userMsg, result_json: parsed });
           setMessages(prev => [...prev, { role: "assistant", content: parsed, type: "strategy", requestId: saved?.id ?? null }]);
         } catch { setMessages(prev => [...prev, { role: "assistant", content: raw, type: "text" }]); }

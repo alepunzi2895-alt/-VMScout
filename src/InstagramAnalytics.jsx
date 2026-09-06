@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
 
 const GOLD      = "#C9A96E";
 const DARK      = "#0D0D0D";
@@ -58,12 +59,37 @@ async function callClaude(system, userMsg, images = []) {
       images,
     }),
   });
-  const data = await res.json();
-  return data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("") || "";
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    // Risposta non-JSON (funzione crashata/andata in timeout, body vuoto, pagina
+    // di errore Vercel, ecc.) — meglio un messaggio chiaro con lo status HTTP che
+    // un errore di parsing criptico che confonde col JSON dell'analisi stessa.
+    throw new Error(`Il server non ha risposto correttamente (status ${res.status}). Riprova.`);
+  }
+  // Se Anthropic (o il nostro proxy) risponde con un errore, "content" non
+  // esiste: senza questo controllo si tornava una stringa vuota che poi
+  // falliva JSON.parse più a valle con un messaggio criptico e senza motivo.
+  if (data.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "Errore chiamata AI");
+  if (data.type === "error") throw new Error(data.error?.message || "Errore chiamata AI");
+  const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("") || "";
+  if (!raw) throw new Error("Risposta vuota dal modello.");
+  return raw;
 }
 
+// Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
+// "solo JSON" (più probabile con input visivo + schema complesso): invece di
+// assumere che l'intera stringa ripulita sia JSON puro, estrae la sottostringa
+// dalla prima "{" all'ultima "}".
 function parseJsonResponse(raw) {
-  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Il modello non ha risposto con un JSON valido. Riprova.");
+  }
+  return JSON.parse(cleaned.slice(start, end + 1));
 }
 
 // ── Shared styles ────────────────────────────────────────────────────────────
@@ -643,6 +669,14 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
     setProfilePic(p || "");
   }
 
+  // Niente più "Carica Post" manuale ogni volta: appena connesso (o al mount,
+  // se la sessione persistita non ha ancora post cache) carica da solo. Il
+  // pulsante "Aggiorna Feed" resta per un refresh esplicito quando serve.
+  useEffect(() => {
+    if (isConnected && posts.length === 0 && !loading) fetchPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
   function disconnect() {
     ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts"].forEach(k => localStorage.removeItem(k));
     setToken(""); setAccountId(""); setUsername(defaultHandle); setProfilePic("");
@@ -846,6 +880,32 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
     [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 5),
     [posts]);
 
+  // ── Dataset per i grafici avanzati ─────────────────────────────────────────
+
+  const trendData = useMemo(() =>
+    [...posts]
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .map(p => ({ label: fmtDate(p.timestamp), value: engRate(p) })),
+    [posts]);
+
+  const formatData = useMemo(() =>
+    Object.entries(mediaTypeCounts).map(([type, count]) => {
+      const value = posts.filter(p => p.media_type === type).reduce((s, p) => s + engRate(p), 0) / count;
+      return { label: mediaLabel(type), value, count, color: FORMAT_COLORS[type] };
+    }),
+    [posts, mediaTypeCounts]);
+
+  const weekdayData = useMemo(() => {
+    const WD_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+    const acc = WD_LABELS.map(label => ({ label, total: 0, count: 0 }));
+    posts.forEach(p => {
+      const idx = (new Date(p.timestamp).getDay() + 6) % 7; // 0=Lun..6=Dom
+      acc[idx].total += engRate(p);
+      acc[idx].count++;
+    });
+    return acc.map(({ label, total, count }) => ({ label, value: count ? total / count : 0, count }));
+  }, [posts]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!isConnected) {
@@ -958,6 +1018,28 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+
+          {/* Analisi Avanzata — grafici */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ ...label, marginBottom: 14 }}>📈 Analisi Avanzata</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ ...card, gridColumn: "1 / -1" }}>
+                <div style={{ fontSize: 12, color: OFF_WHITE, fontWeight: 600, marginBottom: 4 }}>Andamento Engagement</div>
+                <div style={{ fontSize: 10, color: WARM_GREY, marginBottom: 12 }}>Ordine cronologico, post più vecchio → più recente</div>
+                <EngagementTrendChart data={trendData} />
+              </div>
+              <div style={{ ...card }}>
+                <div style={{ fontSize: 12, color: OFF_WHITE, fontWeight: 600, marginBottom: 4 }}>Engagement per Formato</div>
+                <div style={{ fontSize: 10, color: WARM_GREY, marginBottom: 12 }}>Media per tipo di contenuto</div>
+                <MiniBarChart data={formatData} />
+              </div>
+              <div style={{ ...card }}>
+                <div style={{ fontSize: 12, color: OFF_WHITE, fontWeight: 600, marginBottom: 4 }}>Engagement per Giorno</div>
+                <div style={{ fontSize: 10, color: WARM_GREY, marginBottom: 12 }}>Media per giorno della settimana</div>
+                <MiniBarChart data={weekdayData} highlightBest />
               </div>
             </div>
           </div>
