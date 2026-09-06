@@ -799,55 +799,46 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
     // (foto allegate) è più pesante/rischiosa e a "best effort" — se va in
     // timeout o fallisce, l'analisi resta comunque completa e utile, solo
     // senza la sezione di stile visivo, invece di fallire tutto.
-    const textSystem = `Sei un social media strategist esperto. Analizza i dati Instagram forniti e offri consigli strategici concreti basati sui dati reali.${brandCtx}${priorCtx}
+    // IMPORTANTE — trovato testando direttamente in produzione (curl contro
+    // vmscout.vercel.app/api/chat con payload realistici): il vero collo di
+    // bottiglia non erano le immagini né la dimensione dell'input, ma il
+    // MODELLO che, con dati ricchi da analizzare, ignora istruzioni "soft" di
+    // brevità e genera analisi lunghissime in markdown (1500-2000+ token di
+    // output, a ~45 token/s → oltre 45s con post reali). Con vincoli di
+    // concisione FERREI (limite di parole per campo, niente markdown, meno
+    // elementi) lo stesso payload di 24 post reali è sceso da >45s (timeout)
+    // a ~9s. Le istruzioni sotto sono quelle testate, non un tentativo nuovo.
+    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${priorCtx}
 
-REGOLE GENERALI:
-• Caption: max 3-4 righe. Prima frase = gancio evocativo. MAI "Benvenuti" o "Vi presentiamo".
-• Emoji: max 1-2 per post. CTA finale chiaro.
-• Hashtag: nel PRIMO COMMENTO, non nel caption.
-• Reel: B-roll 15-30s, testo overlay minimal, musica coerente con il tono del brand.
-• NEVER: foto stock pulite, tono corporate, urgency forzata.
+Struttura ESATTA:
+{"patterns":{"summary":"UNA frase, max 20 parole","winning_formats":["formato1","formato2"]},"timing":{"summary":"UNA frase, max 20 parole","best_slot":"es. 19:00-21:00"},"content_pillars":["tema1","tema2","tema3"],"corrections":["max 10 parole","max 10 parole"],"next_posts":[{"idea":"max 6 parole","content_type":"Post|Reel|Carosello","rationale":"UNA frase, max 15 parole","visual_scout_brief":"max 30 parole, in italiano: soggetto, location/mood"}]}
 
-Rispondi SOLO con un oggetto JSON valido (no markdown fences, no testo fuori dal JSON), con questa struttura esatta:
-{
-  "patterns": { "summary": "analisi pattern vincenti con dati a supporto, in italiano", "winning_formats": ["formato1", "formato2"] },
-  "timing": { "summary": "analisi orari/giorni migliori confrontati con la fascia 18-23h", "best_slot": "es. 19:00-21:00" },
-  "content_pillars": ["tema1", "tema2", "tema3"],
-  "corrections": ["abitudine da eliminare 1", "abitudine da eliminare 2"],
-  "next_posts": [
-    {
-      "idea": "titolo breve dell'idea",
-      "content_type": "Post | Reel | Carosello",
-      "rationale": "perché funzionerà, basato sui dati analizzati",
-      "visual_scout_brief": "brief completo in italiano, pronto da inviare a Visual Scout per generare subito questo post: includi soggetto, location/ambientazione, mood ed eventuale formato"
-    }
-  ]
-}
-Genera esattamente 3 idee in "next_posts", diverse tra loro per soggetto/formato.`;
+REGOLE FERREE:
+- Genera SOLO 2 elementi in "next_posts", diversi tra loro per soggetto/formato.
+- Ogni campo testuale ha un limite di parole indicato sopra: NON superarlo.
+- NON usare markdown (niente #, **, tabelle, emoji decorative).
+- NON aggiungere spiegazioni, premesse o testo fuori dal JSON.
+- Risposta totale: massimo 400 parole in tutto il JSON.
+- Mantieni comunque dati concreti e tono lusso/evocativo, solo estremamente sintetico.`;
 
-    const textUserMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
+    const textUserMsg = `Dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
 
-${JSON.stringify(postsSummary, null, 2)}
-
-Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
+${JSON.stringify(postsSummary)}`;
 
     // Solo 3 foto e un compito piccolo e mirato: molto più veloce del
     // precedente prompt unico che chiedeva TUTTO (testo + visivo) insieme.
     const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 3);
     const imageUrls = topForVision.map(p => p.thumbnail_url || p.media_url).filter(Boolean);
 
-    const visualSystem = `Sei un direttore artistico esperto di visual storytelling per Instagram.${brandCtx} Guarda le foto allegate (i post con più engagement dell'account) e analizza onestamente lo stile visivo ricorrente.
+    const visualSystem = `Sei un direttore artistico esperto di visual storytelling per Instagram.${brandCtx} Guarda le foto allegate e rispondi SOLO con JSON valido (no markdown fences, no testo extra).
 
-Rispondi SOLO con un oggetto JSON valido (no markdown fences, no testo fuori dal JSON), con questa struttura esatta:
-{
-  "visual_storytelling": {
-    "style_description": "descrizione onesta dello stile visivo ricorrente nelle foto (luce, palette, composizione, coerenza col brand)",
-    "recurring_elements": ["elemento1", "elemento2"],
-    "storytelling_pattern": "che storia raccontano i post in sequenza, se ce n'è una",
-    "strengths": ["punto di forza visivo 1", "punto di forza visivo 2"],
-    "weaknesses": ["cosa migliorare visivamente 1", "cosa migliorare visivamente 2"]
-  }
-}`;
+Struttura ESATTA:
+{"visual_storytelling":{"style_description":"UNA frase, max 20 parole","recurring_elements":["max 3 parole","max 3 parole"],"storytelling_pattern":"UNA frase, max 15 parole","strengths":["max 8 parole"],"weaknesses":["max 8 parole"]}}
+
+REGOLE FERREE:
+- NON usare markdown. NON aggiungere testo fuori dal JSON.
+- Rispetta i limiti di parole indicati per ogni campo.
+- Massimo 1 elemento in "strengths" e in "weaknesses".`;
     const visualUserMsg = `Analizza lo stile visivo di queste ${imageUrls.length} foto, i post più performanti di ${username || "questo account"}.`;
 
     try {
