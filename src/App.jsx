@@ -14,9 +14,16 @@ const API_KEYS = {
 // ─────────────────────────────────────────────────
 // SYSTEM PROMPT GENERATOR
 // ─────────────────────────────────────────────────
-const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, brand = null) => {
+const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, brand = null, insights = null) => {
   const { duration, frequency } = config;
   const brandCtx = brand?.name ? `\n\nBRAND CONTEXT (usa sempre queste info per personalizzare ogni output):\n- Brand: ${brand.name}${brand.sector ? `\n- Settore: ${brand.sector}` : ""}${brand.tone ? `\n- Tono di voce: ${brand.tone}` : ""}${brand.description ? `\n- Descrizione: ${brand.description}` : ""}${brand.instagramHandle ? `\n- Instagram: ${brand.instagramHandle}` : ""}${brand.hashtags ? `\n- Hashtag principali: ${brand.hashtags}` : ""}` : "";
+
+  // Memoria di progetto accumulata dalle analisi Instagram passate (loop di
+  // auto-apprendimento): ogni nuova strategia costruisce sopra a quanto già
+  // imparato, invece di ripartire sempre da zero.
+  const insightsCtx = insights && (insights.tips?.length || insights.strengths?.length || insights.weaknesses?.length)
+    ? `\n\nMEMORIA DI PROGETTO (da analisi Instagram precedenti — usala per migliorare la strategia, non ripetere consigli già dati):${insights.strengths?.length ? `\n- Punti di forza confermati: ${insights.strengths.join(" | ")}` : ""}${insights.weaknesses?.length ? `\n- Debolezze da correggere: ${insights.weaknesses.join(" | ")}` : ""}${insights.tips?.length ? `\n- Consigli accumulati: ${insights.tips.join(" | ")}` : ""}`
+    : "";
 
   return `You are Visual Marketing Scout — a Senior Marketing Strategist, Visual Director & Content Architect. You analyze business/campaign objectives and return complete visual strategies with search queries, ready-to-post social captions, and video storytelling storyboards.
 
@@ -93,9 +100,13 @@ PHOTO QUERY RULES:
 - Good: "luxury villa ibiza", "yacht formentera sunset", "rooftop bar milan"
 - Bad: "luxury villa ibiza pool golden hour editorial" (too many words = no results)
 - No quality descriptors in the query (no "editorial", "candid", "HD", "lifestyle") — those go in visual_description only.
+- STOCK-LIBRARY REALISM: Pexels/Pixabay/Unsplash are tagged by COMMON, WIDELY-PHOTOGRAPHED subjects, not by real-world niche place names. A query built only from an obscure/local place name (e.g. "es vedra cliff", "cala comte beach") often returns ZERO results because that exact place isn't a common stock tag.
+  - Prefer a well-known, broadly-tagged location word (city/region/country/generic landscape type: "ibiza", "mediterranean", "tuscany", "cliff", "coast") over a hyper-specific local name.
+  - If the campaign needs a specific/niche place, put the niche name in "visual_description" (for the human) but keep "search_query" built from the generic category it belongs to (a cliff at sunset → "cliff sunset spain", not the exact cliff's local name).
+- GLOBAL UNIQUENESS: no search_query string (photo OR video, anywhere in the whole JSON response: queries.primary, queries.secondary, every post_composer slide, every video_queries entry, every video_storytelling scene) may repeat verbatim. Before finalizing, mentally check every query against every other one.
 
 VIDEO QUERY RULES:
-- ENGLISH. MAX 3 WORDS. Same formula as photos.
+- ENGLISH. MAX 3 WORDS. Same formula and same stock-library-realism rule as photos (prefer broad, commonly-tagged subjects over niche place names).
 - Good: "luxury car ibiza", "yacht sea sunset", "villa pool aerial"
 - Bad: "luxury car ibiza villa arrival cinematic" (too long)
 - SCENE DIFFERENTIATION: Each scene's search_query MUST be visually distinct from the others — different subject, setting, or action. If the video is about one subject (e.g. a villa), vary the area: S1="villa exterior aerial" | S2="infinity pool sunset" | S3="interior living room" | S4="terrace aperitivo" | S5="villa sea view". Never repeat the same query across scenes.
@@ -124,7 +135,7 @@ EDITORIAL PLAN RULES:
 - Include "story_reel_hint" for every content item to create an ecosystem, not just isolated posts.
 - Ensure the "fb_cross_post_tip" explains adaptation for Facebook.
 
-CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.${brandCtx}`;
+CRITICAL: Generate the entire JSON. Respond ONLY with the JSON object. No other text.${brandCtx}${insightsCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -198,7 +209,7 @@ const VIDEO_SOURCES = {
 // ─────────────────────────────────────────────────
 // API VIDEO FETCHER
 // ─────────────────────────────────────────────────
-async function fetchVideos(query, sourceKey) {
+async function fetchVideosOnce(query, sourceKey) {
   const src = VIDEO_SOURCES[sourceKey];
   if (!src?.apiUrl || !API_KEYS[sourceKey.split("_")[0]]) return null;
   try {
@@ -207,6 +218,14 @@ async function fetchVideos(query, sourceKey) {
     const data = await res.json();
     return src.parse(data);
   } catch { return null; }
+}
+
+async function fetchVideos(query, sourceKey) {
+  for (const attempt of broadenAttempts(query)) {
+    const results = await fetchVideosOnce(attempt, sourceKey);
+    if (results?.length) return results;
+  }
+  return null;
 }
 
 const EXAMPLES = [
@@ -220,7 +239,7 @@ const EXAMPLES = [
 // ─────────────────────────────────────────────────
 // API IMAGE FETCHER
 // ─────────────────────────────────────────────────
-async function fetchImages(query, orientation, sourceKey) {
+async function fetchImagesOnce(query, orientation, sourceKey) {
   const src = PHOTO_SOURCES[sourceKey];
   if (!src?.apiUrl || !API_KEYS[sourceKey]) return null;
   try {
@@ -229,6 +248,28 @@ async function fetchImages(query, orientation, sourceKey) {
     const data = await res.json();
     return src.parse(data);
   } catch { return null; }
+}
+
+// Query troppo specifiche (nomi di luogo di nicchia, 3 parole rare insieme)
+// spesso restituiscono 0 risultati su Pexels/Pixabay. Invece di lasciare la
+// ricerca vuota, allarga progressivamente togliendo l'ultima parola (di solito
+// la location, la più di nicchia) finché non trova risultati o le parole finiscono.
+function broadenAttempts(query) {
+  const words = (query || "").trim().split(/\s+/).filter(Boolean);
+  const attempts = [];
+  for (let n = words.length; n >= 1; n--) {
+    const q = words.slice(0, n).join(" ");
+    if (!attempts.includes(q)) attempts.push(q);
+  }
+  return attempts.length ? attempts : [query];
+}
+
+async function fetchImages(query, orientation, sourceKey) {
+  for (const attempt of broadenAttempts(query)) {
+    const results = await fetchImagesOnce(attempt, orientation, sourceKey);
+    if (results?.length) return { results, queryUsed: attempt };
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────
@@ -385,19 +426,85 @@ function CanvaSlideBtn({ caption, query, canvaTemplates }) {
   );
 }
 
+// Compone l'INTERO carosello (tutte le slide di post_composer) in un solo
+// design Canva: niente più un design per slide da creare a mano — il backend
+// cerca/carica le immagini e compila un template con placeholder ripetuti.
+function CanvaCarouselBtn({ slides, canvaTemplates }) {
+  const [state, setState] = useState("idle");
+  const [url, setUrl] = useState(null);
+  const [errMsg, setErrMsg] = useState("");
+  const templateId = canvaTemplates?.carousel || "";
+
+  if (!templateId) {
+    return (
+      <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, Image_2/Testo_2, ...)'
+        style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "help", userSelect: "none" }}>
+        ✦ Configura template carosello per crearlo in un click
+      </span>
+    );
+  }
+
+  if (state === "done" && url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        style={{ padding: "9px 16px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 700, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
+        ✓ Apri Carosello in Canva →
+      </a>
+    );
+  }
+
+  async function handleCreate() {
+    setState("loading");
+    setErrMsg("");
+    try {
+      const res = await fetch("/api/canva-carousel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slides, templateId, format: "post" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setUrl(data.url);
+        setState("done");
+      } else if (data.error === "CANVA_NOT_CONNECTED") {
+        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+        setState("idle");
+      } else {
+        setErrMsg(data.message || "Errore durante la creazione del carosello.");
+        setState("error");
+        setTimeout(() => setState("idle"), 5000);
+      }
+    } catch (e) {
+      setErrMsg(e.message || "Errore di rete.");
+      setState("error");
+      setTimeout(() => setState("idle"), 5000);
+    }
+  }
+
+  return (
+    <button onClick={handleCreate} disabled={state === "loading"} title={state === "error" ? errMsg : undefined}
+      style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+      {state === "loading" ? "⏳ Compongo il carosello…" : state === "error" ? "⚠ Riprova" : `✦ Crea Carosello Completo su Canva (${slides.length} slide)`}
+    </button>
+  );
+}
+
 function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
   const src = PHOTO_SOURCES[sourceKey];
   const url = src.webUrl(query, orientation);
   const canFetch = src.apiUrl && API_KEYS[sourceKey];
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [noResults, setNoResults] = useState(false);
 
   const handleFetch = async (e) => {
     e.preventDefault();
     if (images) { setExpanded(!expanded); return; }
     setLoading(true);
-    const results = await fetchImages(query, orientation, sourceKey);
-    if (results) onImagesFetched(query, results);
+    setNoResults(false);
+    const outcome = await fetchImages(query, orientation, sourceKey);
+    if (outcome) onImagesFetched(query, outcome);
+    else setNoResults(true);
     setExpanded(true);
     setLoading(false);
   };
@@ -418,7 +525,17 @@ function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
           </button>
         )}
       </div>
-      {expanded && images && <ImageGrid images={images} />}
+      {expanded && images?.queryUsed && images.queryUsed !== query && (
+        <div style={{ fontSize: 10, color: "#B46432", fontStyle: "italic", marginTop: 6, paddingLeft: 4 }}>
+          Nessun risultato per "{query}" — risultati mostrati per "{images.queryUsed}"
+        </div>
+      )}
+      {expanded && images && <ImageGrid images={images.results} />}
+      {expanded && noResults && (
+        <div style={{ fontSize: 11, color: "#999", fontStyle: "italic", marginTop: 8, paddingLeft: 4 }}>
+          Nessun risultato trovato, nemmeno con una query più generica. Prova un'altra fonte foto.
+        </div>
+      )}
     </div>
   );
 }
@@ -734,6 +851,13 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       <div style={{ marginTop: 14 }}>
         <CopyButton text={post_composer.map(p => `--- SLIDE ${p.slide_number} ---\n${getCaption(p)}\n\n${getHashtags(p).map(h => `#${h.replace(/^#/, "")}`).join(" ")}\n\nCTA: ${getCta(p)}`).join("\n\n")} label={`Copia Tutte (${LANGS.find(l=>l.id===lang)?.flag} ${platform === "instagram" ? "IG" : "FB"})`} />
       </div>
+
+      <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+        <CanvaCarouselBtn
+          slides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
+          canvaTemplates={brand?.canvaTemplates}
+        />
+      </div>
     </div>
   );
 }
@@ -1028,22 +1152,29 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 // ─────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────
-// Salva ogni domanda/risposta AI nello storico persistente (Turso) — fire-and-forget,
-// non deve mai bloccare o rompere l'esperienza in chat se il salvataggio fallisce.
-function saveToHistory({ project_id, type, prompt, result_json }) {
-  fetch("/api/history", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
-  }).catch(err => console.warn("[VisualMarketingScout] salvataggio storico fallito:", err.message));
+// Salva ogni domanda/risposta AI nello storico persistente (Turso) e ne restituisce
+// l'id, così il messaggio in chat può essere eliminato singolarmente in seguito.
+async function saveToHistory({ project_id, type, prompt, result_json }) {
+  try {
+    const res = await fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("[VisualMarketingScout] salvataggio storico fallito:", err.message);
+    return null;
+  }
 }
 
-export default function VisualMarketingScout({ brand }) {
+export default function VisualMarketingScout({ brand, initialBrief, onConsumeInitialBrief }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showApiSetup, setShowApiSetup] = useState(false);
   const [planConfig, setPlanConfig] = useState({ duration: "1 settimana", frequency: 3 });
+  const [insights, setInsights] = useState(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -1060,15 +1191,15 @@ export default function VisualMarketingScout({ brand }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: getSystemPrompt(planConfig, brand), messages: [{ role: "user", content: userMsg }] }),
+        body: JSON.stringify({ system: getSystemPrompt(planConfig, brand, insights), messages: [{ role: "user", content: userMsg }] }),
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
       if (raw) {
         try {
           const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-          setMessages(prev => [...prev, { role: "assistant", content: parsed, type: "strategy" }]);
-          saveToHistory({ project_id: brand?.id, type: "strategy", prompt: userMsg, result_json: parsed });
+          const saved = await saveToHistory({ project_id: brand?.id, type: "strategy", prompt: userMsg, result_json: parsed });
+          setMessages(prev => [...prev, { role: "assistant", content: parsed, type: "strategy", requestId: saved?.id ?? null }]);
         } catch { setMessages(prev => [...prev, { role: "assistant", content: raw, type: "text" }]); }
       } else {
         setMessages(prev => [...prev, { role: "assistant", content: "Non ho potuto elaborare la richiesta. Riprova con più dettagli.", type: "text" }]);
@@ -1077,6 +1208,65 @@ export default function VisualMarketingScout({ brand }) {
       setMessages(prev => [...prev, { role: "assistant", content: `Errore: ${err.message}`, type: "text" }]);
     } finally { setLoading(false); }
   };
+
+  // Al montaggio (ogni volta che si entra nel tab, o si cambia progetto attivo)
+  // recupera la cronologia salvata su DB per questo progetto e la mostra come
+  // conversazione già presente in chat. Se arriva un brief da Analytics
+  // (handoff "prossimo post"), lo invia solo DOPO che la cronologia è pronta,
+  // altrimenti l'hydration sovrascriverebbe il messaggio appena inviato.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setMessages([]);
+      setInsights(null);
+      if (brand?.id) {
+        try {
+          const [histRes, insightsRes] = await Promise.all([
+            fetch(`/api/history?action=history&project_id=${encodeURIComponent(brand.id)}&type=strategy&limit=50`),
+            fetch(`/api/history?action=get_insights&project_id=${encodeURIComponent(brand.id)}`),
+          ]);
+          const d = await histRes.json();
+          const insightsData = await insightsRes.json();
+          if (!cancelled && insightsData.ok) setInsights(insightsData.data);
+          if (!cancelled && d.ok) {
+            const rows = [...(d.data || [])].reverse();
+            const hydrated = [];
+            rows.forEach(row => {
+              hydrated.push({ role: "user", content: row.prompt });
+              try {
+                hydrated.push({ role: "assistant", content: JSON.parse(row.result_json), type: "strategy", requestId: row.id });
+              } catch {
+                hydrated.push({ role: "assistant", content: "(risposta non disponibile)", type: "text" });
+              }
+            });
+            setMessages(hydrated);
+          }
+        } catch (err) { console.warn("[VisualMarketingScout] recupero storico fallito:", err.message); }
+      }
+      if (!cancelled && initialBrief) {
+        sendMessage(initialBrief);
+        onConsumeInitialBrief?.();
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand?.id]);
+
+  async function deleteExchange(assistantIndex) {
+    const msg = messages[assistantIndex];
+    if (!msg?.requestId) return;
+    setMessages(prev => prev.filter((_, i) => i !== assistantIndex && i !== assistantIndex - 1));
+    try {
+      await fetch("/api/history?action=delete_request", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: msg.requestId }),
+      });
+    } catch (err) {
+      console.warn("[VisualMarketingScout] eliminazione fallita:", err.message);
+    }
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
@@ -1154,7 +1344,15 @@ export default function VisualMarketingScout({ brand }) {
                 </div>
               ) : (
                 <div style={{ maxWidth: "95%" }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
+                    {msg.requestId != null && (
+                      <button onClick={() => deleteExchange(i)} title="Elimina questa domanda e risposta"
+                        style={{ fontSize: 10, color: "#B45050", background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", fontFamily: "'JetBrains Mono', monospace" }}>
+                        🗑 Elimina
+                      </button>
+                    )}
+                  </div>
                   <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
                     {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} brand={brand} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
                   </div>

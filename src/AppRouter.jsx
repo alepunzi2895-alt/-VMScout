@@ -4,7 +4,7 @@ import Home from "./Home.jsx";
 import VisualMarketingScout from "./App.jsx";
 import InstagramAnalytics from "./InstagramAnalytics.jsx";
 import CanvaStudio from "./CanvaStudio.jsx";
-import History from "./History.jsx";
+import Dashboard from "./Dashboard.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -13,7 +13,7 @@ const TABS = [
   { id: "vmscout", label: "Visual Scout", icon: "🎯" },
   { id: "instagram", label: "Analytics", icon: "📊" },
   { id: "canva", label: "Canva Studio", icon: "✦" },
-  { id: "history", label: "Storico", icon: "🕘" },
+  { id: "dashboard", label: "Dashboard", icon: "🧭" },
 ];
 
 function Nav({ activeApp, setActiveApp }) {
@@ -135,17 +135,27 @@ function Nav({ activeApp, setActiveApp }) {
 
 function AppContent() {
   const [activeApp, setActiveApp] = useState("home");
+  const [pendingBrief, setPendingBrief] = useState(null);
   const { activeBrand } = useBrand();
+
+  // Handoff da Analytics: un'idea "prossimo post" passa qui il brief già pronto,
+  // noi cambiamo tab e VisualMarketingScout lo invia da solo appena montato.
+  function goToScoutWithBrief(brief) {
+    setPendingBrief(brief);
+    setActiveApp("vmscout");
+  }
 
   return (
     <div style={{ minHeight: "100vh" }}>
       <Nav activeApp={activeApp} setActiveApp={setActiveApp} />
       <div style={{ paddingTop: 44 }}>
         {activeApp === "home" && <Home onNavigate={setActiveApp} />}
-        {activeApp === "vmscout" && <VisualMarketingScout brand={activeBrand} />}
-        {activeApp === "instagram" && <InstagramAnalytics brand={activeBrand} />}
+        {activeApp === "vmscout" && (
+          <VisualMarketingScout brand={activeBrand} initialBrief={pendingBrief} onConsumeInitialBrief={() => setPendingBrief(null)} />
+        )}
+        {activeApp === "instagram" && <InstagramAnalytics brand={activeBrand} onSuggestBrief={goToScoutWithBrief} />}
         {activeApp === "canva" && <CanvaStudio />}
-        {activeApp === "history" && <History brand={activeBrand} />}
+        {activeApp === "dashboard" && <Dashboard brand={activeBrand} onSuggestBrief={goToScoutWithBrief} />}
       </div>
     </div>
   );

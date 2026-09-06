@@ -1,8 +1,12 @@
-// /api/history.js — CRUD per progetti e storico richieste AI (VMScout)
-// Persiste ciò che prima viveva solo in localStorage: progetti (brand) e ogni
-// domanda/risposta generata dall'AI (strategia, analytics, ecc.), per progetto.
+// /api/history.js — CRUD per progetti, storico richieste AI e insight accumulati (VMScout)
+// Persiste ciò che prima viveva solo in localStorage: progetti (brand), ogni
+// domanda/risposta generata dall'AI (strategia, analytics, ecc.) per progetto,
+// e la "memoria" di progetto (punti di forza/debolezza, consigli, calendario
+// post) che si arricchisce a ogni analisi Instagram — la base del loop di
+// auto-apprendimento: ogni nuova strategia/analisi la legge prima di generare.
 
 import { getDb } from "./db.js";
+import crypto from "crypto";
 
 async function ensureTables(db) {
   await db.batch([
@@ -26,7 +30,24 @@ async function ensureTables(db) {
       result_json TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+    `CREATE TABLE IF NOT EXISTS project_insights (
+      project_id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
   ], "write");
+}
+
+const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [] };
+
+function dedupAppend(arr, additions, cap) {
+  const out = [...(arr || [])];
+  const seen = new Set(out.map(v => v.toLowerCase()));
+  (additions || []).forEach(a => {
+    const v = (a || "").trim();
+    if (v && !seen.has(v.toLowerCase())) { out.push(v); seen.add(v.toLowerCase()); }
+  });
+  return out.slice(-cap);
 }
 
 export default async function handler(req, res) {
@@ -101,6 +122,67 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: "Manca id" });
       await db.execute({ sql: "DELETE FROM requests WHERE id=?", args: [id] });
       return res.status(200).json({ ok: true });
+    }
+
+    // ─── PROJECT INSIGHTS (memoria di progetto per il loop di auto-apprendimento) ─
+    if (action === "get_insights" && req.method === "GET") {
+      const { project_id } = req.query;
+      if (!project_id) return res.status(400).json({ error: "Manca project_id" });
+      const rows = await db.execute({ sql: "SELECT data, updated_at FROM project_insights WHERE project_id=?", args: [project_id] });
+      if (!rows.rows.length) return res.status(200).json({ ok: true, data: null });
+      let data = EMPTY_INSIGHTS;
+      try { data = { ...EMPTY_INSIGHTS, ...JSON.parse(rows.rows[0].data) }; } catch {}
+      return res.status(200).json({ ok: true, data, updated_at: rows.rows[0].updated_at });
+    }
+
+    if (action === "merge_insights" && req.method === "POST") {
+      const { project_id, tips, strengths, weaknesses, calendar_entries } = req.body;
+      if (!project_id) return res.status(400).json({ error: "Manca project_id" });
+
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      let current = EMPTY_INSIGHTS;
+      if (existing.rows.length) {
+        try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
+      }
+
+      current.tips = dedupAppend(current.tips, tips, 30);
+      current.strengths = dedupAppend(current.strengths, strengths, 20);
+      current.weaknesses = dedupAppend(current.weaknesses, weaknesses, 20);
+
+      if (Array.isArray(calendar_entries) && calendar_entries.length) {
+        const newEntries = calendar_entries.map(e => ({
+          id: crypto.randomUUID(),
+          idea: e.idea || "",
+          rationale: e.rationale || "",
+          content_type: e.content_type || "Post",
+          visual_scout_brief: e.visual_scout_brief || "",
+          status: "suggerito",
+          created_at: new Date().toISOString(),
+        }));
+        current.calendar = [...(current.calendar || []), ...newEntries].slice(-30);
+      }
+
+      await db.execute({
+        sql: `INSERT INTO project_insights (project_id, data, updated_at) VALUES (?,?,datetime('now'))
+              ON CONFLICT(project_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
+        args: [project_id, JSON.stringify(current)],
+      });
+      return res.status(200).json({ ok: true, data: current });
+    }
+
+    if (action === "update_calendar_status" && req.method === "POST") {
+      const { project_id, entry_id, status } = req.body;
+      if (!project_id || !entry_id) return res.status(400).json({ error: "Mancano project_id o entry_id" });
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      if (!existing.rows.length) return res.status(404).json({ error: "Nessun insight per questo progetto" });
+      let current = EMPTY_INSIGHTS;
+      try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
+      current.calendar = (current.calendar || []).map(e => e.id === entry_id ? { ...e, status: status || "generato" } : e);
+      await db.execute({
+        sql: "UPDATE project_insights SET data=?, updated_at=datetime('now') WHERE project_id=?",
+        args: [JSON.stringify(current), project_id],
+      });
+      return res.status(200).json({ ok: true, data: current });
     }
 
     if (action === "stats" && req.method === "GET") {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const GOLD      = "#C9A96E";
 const DARK      = "#0D0D0D";
@@ -30,26 +30,40 @@ async function igCall(token, path, params = {}) {
   return res.json();
 }
 
-// Salva ogni analisi AI nello storico persistente (Turso) — fire-and-forget.
-function saveToHistory({ project_id, type, prompt, result_json }) {
-  fetch("/api/history", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
-  }).catch(err => console.warn("[InstagramAnalytics] salvataggio storico fallito:", err.message));
+// Salva ogni analisi AI nello storico persistente (Turso) e ne restituisce l'id.
+async function saveToHistory({ project_id, type, prompt, result_json }) {
+  try {
+    const res = await fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("[InstagramAnalytics] salvataggio storico fallito:", err.message);
+    return null;
+  }
 }
 
-async function callClaude(system, userMsg) {
+// `images`: URL delle foto dei post da allegare come input visivo — Claude le
+// analizza (estetica, storytelling) insieme ai dati testuali. Il fetch+base64
+// avviene lato server (api/chat.js), niente CORS verso *.cdninstagram.com.
+async function callClaude(system, userMsg, images = []) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system,
       messages: [{ role: "user", content: userMsg }],
+      images,
     }),
   });
   const data = await res.json();
-  return data.content?.[0]?.text || "";
+  return data.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("") || "";
+}
+
+function parseJsonResponse(raw) {
+  return JSON.parse(raw.replace(/```json|```/g, "").trim());
 }
 
 // ── Shared styles ────────────────────────────────────────────────────────────
@@ -134,10 +148,10 @@ function ConnectPanel({ onConnect }) {
   const [selectedPageId, setSelectedPageId] = useState("");
 
   async function connectDirect(t) {
-    const res = await igCall(t, "me", { fields: "id,username,account_type" });
+    const res = await igCall(t, "me", { fields: "id,username,account_type,profile_picture_url" });
     if (res.error) throw new Error(res.error.message);
     if (!res.id) throw new Error("Impossibile leggere l'account Instagram da questo token.");
-    onConnect({ token: t, accountId: res.id, username: res.username });
+    onConnect({ token: t, accountId: res.id, username: res.username, profilePic: res.profile_picture_url || "" });
   }
 
   async function loadPages(t) {
@@ -151,7 +165,7 @@ function ConnectPanel({ onConnect }) {
   async function connectWithPage(t) {
     const page = pages.find(p => p.id === selectedPageId);
     const pageToken = page.access_token || t;
-    const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username}" });
+    const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username,profile_picture_url}" });
     if (igData.error) throw new Error(igData.error.message);
 
     const igUser = igData.instagram_business_account;
@@ -163,7 +177,7 @@ function ConnectPanel({ onConnect }) {
 
     // Salva il token verificato (Page token se disponibile) — è quello che ha
     // effettivamente accesso all'account IG Business, non il token utente generico.
-    onConnect({ token: pageToken, accountId: igUser.id, username: igUser.username });
+    onConnect({ token: pageToken, accountId: igUser.id, username: igUser.username, profilePic: igUser.profile_picture_url || "" });
   }
 
   async function handleSubmit() {
@@ -393,72 +407,253 @@ function HourChart({ posts }) {
   );
 }
 
-// ── Analysis Panel ────────────────────────────────────────────────────────────
+// ── Analysis Panel (JSON strutturato: pattern, timing, analisi visiva, prossimi post) ──
 
-function AnalysisPanel({ text }) {
-  if (!text) return null;
+function ChipList({ items, color = GOLD }) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+      {items.map((t, i) => (
+        <span key={i} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: `${color}18`, color, fontWeight: 500 }}>{t}</span>
+      ))}
+    </div>
+  );
+}
 
-  const sections = text.split(/(?=##\s)/g).filter(Boolean);
+function AnalysisSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", marginBottom: 10 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function NextPostCard({ post, onSuggestBrief, saved, onMarkUsed }) {
+  return (
+    <div style={{ background: CARD2, border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: OFF_WHITE }}>{post.idea}</div>
+        {post.content_type && (
+          <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{post.content_type}</span>
+        )}
+      </div>
+      {post.rationale && <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.5, marginBottom: 10 }}>{post.rationale}</div>}
+      <button
+        onClick={() => { onSuggestBrief(post.visual_scout_brief || post.idea); onMarkUsed?.(); }}
+        disabled={!post.visual_scout_brief && !post.idea}
+        style={{ ...goldBtn(false), background: `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: "#fff", fontSize: 10, padding: "8px 14px" }}
+      >
+        {saved === false ? "✓ Inviato a Visual Scout" : "🎯 Genera con Visual Scout →"}
+      </button>
+    </div>
+  );
+}
+
+function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Claude" }) {
+  if (!data) return null;
+  const { patterns, timing, content_pillars, visual_storytelling: vs, corrections, next_posts } = data;
 
   return (
     <div style={{ ...card, marginTop: 24 }}>
-      <div style={{ ...label, marginBottom: 20 }}>Analisi Strategica · Claude</div>
-      {sections.map((section, i) => {
-        const lines = section.split("\n").filter(l => l.trim());
-        const heading = lines[0].replace(/^##\s*/, "").trim();
-        const body = lines.slice(1).join("\n");
-        return (
-          <div key={i} style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", marginBottom: 10 }}>
-              {heading}
+      <div style={{ ...label, marginBottom: 20 }}>{title}</div>
+
+      {patterns?.summary && (
+        <AnalysisSection title="📊 Pattern Vincenti">
+          <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{patterns.summary}</p>
+          <ChipList items={patterns.winning_formats} />
+        </AnalysisSection>
+      )}
+
+      {timing?.summary && (
+        <AnalysisSection title="⏰ Timing Ottimale">
+          <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{timing.summary}</p>
+          {timing.best_slot && <div style={{ marginTop: 8, display: "inline-block", fontSize: 12, fontWeight: 700, color: GOLD, background: `${GOLD}15`, padding: "4px 12px", borderRadius: 6 }}>{timing.best_slot}</div>}
+        </AnalysisSection>
+      )}
+
+      {content_pillars?.length > 0 && (
+        <AnalysisSection title="🎯 Content Pillars">
+          <ChipList items={content_pillars} color="#C9A96E" />
+        </AnalysisSection>
+      )}
+
+      {vs && (vs.style_description || vs.storytelling_pattern) && (
+        <AnalysisSection title="🖼 Analisi Visiva & Storytelling">
+          {vs.style_description && <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: "0 0 8px", opacity: 0.9 }}>{vs.style_description}</p>}
+          {vs.storytelling_pattern && <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: "0 0 8px", opacity: 0.9, fontStyle: "italic" }}>{vs.storytelling_pattern}</p>}
+          <ChipList items={vs.recurring_elements} color="#8A8070" />
+          {vs.strengths?.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#5ABA5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>✓ Punti di forza</div>
+              {vs.strengths.map((s, i) => <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.85, padding: "3px 0" }}>• {s}</div>)}
             </div>
-            <div style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.8, whiteSpace: "pre-wrap", opacity: 0.9 }}>
-              {body.replace(/\*\*(.*?)\*\*/g, "$1")}
+          )}
+          {vs.weaknesses?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#E4A050", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>⚠ Da migliorare</div>
+              {vs.weaknesses.map((s, i) => <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.85, padding: "3px 0" }}>• {s}</div>)}
             </div>
-          </div>
-        );
-      })}
+          )}
+        </AnalysisSection>
+      )}
+
+      {corrections?.length > 0 && (
+        <AnalysisSection title="⚠️ Cosa Correggere">
+          {corrections.map((c, i) => <div key={i} style={{ fontSize: 12, color: "#E49E9E", opacity: 0.9, padding: "3px 0" }}>• {c}</div>)}
+        </AnalysisSection>
+      )}
+
+      {next_posts?.length > 0 && onSuggestBrief && (
+        <AnalysisSection title="🚀 Prossimi Post — Idee Pronte">
+          {next_posts.map((p, i) => <NextPostCard key={i} post={p} onSuggestBrief={onSuggestBrief} />)}
+        </AnalysisSection>
+      )}
+    </div>
+  );
+}
+
+// ── Past Analyses (storico inline, non più una sezione separata) ─────────────
+
+function fmtDateTime(ts) {
+  if (!ts) return "";
+  return new Date(ts.replace(" ", "T") + "Z").toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function PastAnalyses({ brand, refreshKey, onSuggestBrief }) {
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !brand?.id) return;
+    setLoading(true);
+    fetch(`/api/history?action=history&project_id=${encodeURIComponent(brand.id)}&type=analytics&limit=30`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) setItems(d.data || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, brand?.id, refreshKey]);
+
+  async function handleDelete(id) {
+    setItems(prev => prev.filter(i => i.id !== id));
+    try {
+      await fetch("/api/history?action=delete_request", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } catch {}
+  }
+
+  if (!brand?.id) return null;
+
+  return (
+    <div style={{ ...card, marginTop: 16 }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+        <span style={{ ...label }}>🕘 Analisi Precedenti</span>
+        <span style={{ fontSize: 11, color: WARM_GREY }}>{open ? "▲ Nascondi" : "▼ Mostra"}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 16 }}>
+          {loading && <div style={{ fontSize: 12, color: WARM_GREY }}>Caricamento…</div>}
+          {!loading && !items.length && <div style={{ fontSize: 12, color: WARM_GREY }}>Nessuna analisi precedente per questo progetto.</div>}
+          {items.map(item => {
+            let parsed = null;
+            try { parsed = JSON.parse(item.result_json); } catch {}
+            const expanded = expandedId === item.id;
+            return (
+              <div key={item.id} style={{ borderBottom: "1px solid rgba(201,169,110,0.08)", padding: "10px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 11, color: WARM_GREY }}>{fmtDateTime(item.created_at)}</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => setExpandedId(expanded ? null : item.id)}
+                      style={{ fontSize: 10, color: GOLD, background: "transparent", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                      {expanded ? "Nascondi" : "Dettagli"}
+                    </button>
+                    <button onClick={() => handleDelete(item.id)}
+                      style={{ fontSize: 10, color: "#E47070", background: "transparent", border: "1px solid rgba(180,60,60,0.25)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                      Elimina
+                    </button>
+                  </div>
+                </div>
+                {expanded && parsed && (
+                  <div style={{ marginTop: 12 }}>
+                    <AnalysisPanel data={parsed} onSuggestBrief={onSuggestBrief} title="Analisi" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function InstagramAnalytics({ brand }) {
+function readJsonLS(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : fallback;
+  } catch { return fallback; }
+}
+
+export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   const defaultHandle = brand?.instagramHandle || "";
-  const [token,     setToken]     = useState(() => localStorage.getItem("ig_token") || "");
-  const [accountId, setAccountId] = useState(() => localStorage.getItem("ig_account_id") || "");
-  const [username,  setUsername]  = useState(() => localStorage.getItem("ig_username") || defaultHandle);
-  const [posts,     setPosts]     = useState([]);
+  const [token,      setToken]      = useState(() => localStorage.getItem("ig_token") || "");
+  const [accountId,  setAccountId]  = useState(() => localStorage.getItem("ig_account_id") || "");
+  const [username,   setUsername]   = useState(() => localStorage.getItem("ig_username") || defaultHandle);
+  const [profilePic, setProfilePic] = useState(() => localStorage.getItem("ig_profile_pic") || "");
+  // La sessione (post caricati + ultima analisi) resta in localStorage così
+  // riaprendo il tab Analytics non serve ricaricare/rianalizzare da capo.
+  const [posts,     setPosts]     = useState(() => readJsonLS("ig_posts", []));
   const [loading,   setLoading]   = useState(false);
   const [step,      setStep]      = useState("");
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis,  setAnalysis]  = useState(() => localStorage.getItem("ig_analysis") || "");
+  const [analysis,  setAnalysis]  = useState(() => readJsonLS("ig_analysis_json", null));
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [error,     setError]     = useState("");
 
   const isConnected = !!(token && accountId);
 
-  function handleConnect({ token: t, accountId: id, username: u }) {
+  useEffect(() => {
+    try { localStorage.setItem("ig_posts", JSON.stringify(posts)); } catch {}
+  }, [posts]);
+
+  useEffect(() => {
+    try {
+      if (analysis) localStorage.setItem("ig_analysis_json", JSON.stringify(analysis));
+      else localStorage.removeItem("ig_analysis_json");
+    } catch {}
+  }, [analysis]);
+
+  function handleConnect({ token: t, accountId: id, username: u, profilePic: p }) {
     localStorage.setItem("ig_token", t);
     localStorage.setItem("ig_account_id", id);
     localStorage.setItem("ig_username", u || "");
+    localStorage.setItem("ig_profile_pic", p || "");
     setToken(t);
     setAccountId(id);
     setUsername(u || "");
+    setProfilePic(p || "");
   }
 
   function disconnect() {
-    ["ig_token", "ig_account_id", "ig_username", "ig_analysis"].forEach(k => localStorage.removeItem(k));
-    setToken(""); setAccountId(""); setUsername(defaultHandle);
-    setPosts([]); setAnalysis(""); setError("");
+    ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts"].forEach(k => localStorage.removeItem(k));
+    setToken(""); setAccountId(""); setUsername(defaultHandle); setProfilePic("");
+    setPosts([]); setAnalysis(null); setError("");
   }
 
   async function fetchPosts() {
     setLoading(true);
     setError("");
     setPosts([]);
-    setAnalysis("");
-    localStorage.removeItem("ig_analysis");
+    setAnalysis(null);
 
     try {
       setStep("Recupero ultimi 30 post…");
@@ -498,6 +693,36 @@ export default function InstagramAnalytics({ brand }) {
     setLoading(false);
   }
 
+  async function fetchPriorInsights() {
+    if (!brand?.id) return null;
+    try {
+      const res = await fetch(`/api/history?action=get_insights&project_id=${encodeURIComponent(brand.id)}`);
+      const d = await res.json();
+      return d.ok ? d.data : null;
+    } catch { return null; }
+  }
+
+  // Aggiorna la "memoria" di progetto (punti forza/debolezza, consigli, calendario
+  // post) con quanto emerso da questa analisi — è il loop di auto-apprendimento:
+  // ogni prossima analisi/strategia legge questa memoria prima di generare.
+  function mergeIntoProjectInsights(parsed) {
+    if (!brand?.id) return;
+    fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "merge_insights",
+        project_id: brand.id,
+        tips: parsed.corrections || [],
+        strengths: parsed.visual_storytelling?.strengths || [],
+        weaknesses: parsed.visual_storytelling?.weaknesses || [],
+        calendar_entries: (parsed.next_posts || []).map(p => ({
+          idea: p.idea, rationale: p.rationale, content_type: p.content_type, visual_scout_brief: p.visual_scout_brief,
+        })),
+      }),
+    }).catch(err => console.warn("[InstagramAnalytics] merge insights fallito:", err.message));
+  }
+
   async function analyze() {
     if (!posts.length) return;
     setAnalyzing(true);
@@ -516,46 +741,69 @@ export default function InstagramAnalytics({ brand }) {
       caption: (p.caption || "").substring(0, 200),
     }));
 
+    // Foto dei post con più engagement — Claude le vede davvero e analizza
+    // stile visivo/storytelling, non solo i numeri.
+    const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 6);
+    const imageUrls = topForVision.map(p => p.thumbnail_url || p.media_url).filter(Boolean);
+
+    const priorInsights = await fetchPriorInsights();
+    const priorCtx = priorInsights && (priorInsights.tips?.length || priorInsights.strengths?.length || priorInsights.weaknesses?.length)
+      ? `\n\nMEMORIA ACCUMULATA DA ANALISI PRECEDENTI DI QUESTO PROGETTO — non ripetere gli stessi identici consigli, verifica se sono stati applicati (confronta con i dati/immagini attuali) e approfondisci/evolvi:
+${priorInsights.strengths?.length ? `Punti di forza già confermati in passato: ${priorInsights.strengths.join(" | ")}` : ""}
+${priorInsights.weaknesses?.length ? `Debolezze già individuate in passato: ${priorInsights.weaknesses.join(" | ")}` : ""}
+${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.tips.join(" | ")}` : ""}`
+      : "";
+
     const brandCtx = brand?.name
       ? `\nBRAND: ${brand.name}${brand.sector ? ` | Settore: ${brand.sector}` : ""}${brand.tone ? ` | Tono: ${brand.tone}` : ""}${brand.description ? `\nDescrizione: ${brand.description}` : ""}`
       : "";
-    const system = `Sei un social media strategist esperto. Analizza i dati Instagram forniti e offri consigli strategici concreti basati sui dati reali.${brandCtx}
+
+    const system = `Sei un social media strategist ed esperto di direzione artistica/visual storytelling. Analizza i dati Instagram e le foto reali allegate, e offri consigli strategici concreti.${brandCtx}${priorCtx}
 
 REGOLE GENERALI:
 • Caption: max 3-4 righe. Prima frase = gancio evocativo. MAI "Benvenuti" o "Vi presentiamo".
 • Emoji: max 1-2 per post. CTA finale chiaro.
 • Hashtag: nel PRIMO COMMENTO, non nel caption.
 • Reel: B-roll 15-30s, testo overlay minimal, musica coerente con il tono del brand.
-• NEVER: foto stock pulite, tono corporate, urgency forzata.`;
+• NEVER: foto stock pulite, tono corporate, urgency forzata.
 
-    const userMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
+Rispondi SOLO con un oggetto JSON valido (no markdown fences, no testo fuori dal JSON), con questa struttura esatta:
+{
+  "patterns": { "summary": "analisi pattern vincenti con dati a supporto, in italiano", "winning_formats": ["formato1", "formato2"] },
+  "timing": { "summary": "analisi orari/giorni migliori confrontati con la fascia 18-23h", "best_slot": "es. 19:00-21:00" },
+  "content_pillars": ["tema1", "tema2", "tema3"],
+  "visual_storytelling": {
+    "style_description": "descrizione onesta dello stile visivo ricorrente nelle foto allegate (luce, palette, composizione, coerenza col brand)",
+    "recurring_elements": ["elemento1", "elemento2"],
+    "storytelling_pattern": "che storia raccontano i post in sequenza, se ce n'è una",
+    "strengths": ["punto di forza visivo 1", "punto di forza visivo 2"],
+    "weaknesses": ["cosa migliorare visivamente 1", "cosa migliorare visivamente 2"]
+  },
+  "corrections": ["abitudine da eliminare 1", "abitudine da eliminare 2"],
+  "next_posts": [
+    {
+      "idea": "titolo breve dell'idea",
+      "content_type": "Post | Reel | Carosello",
+      "rationale": "perché funzionerà, basato sui dati e sulle immagini analizzate",
+      "visual_scout_brief": "brief completo in italiano, pronto da inviare a Visual Scout per generare subito questo post: includi soggetto, location/ambientazione, mood ed eventuale formato"
+    }
+  ]
+}
+Genera esattamente 3 idee in "next_posts", diverse tra loro per soggetto/formato.`;
+
+    const userMsg = `Analizza i dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post) e le ${imageUrls.length} foto allegate dei post con più engagement:
 
 ${JSON.stringify(postsSummary, null, 2)}
-
-Fornisci:
-
-## 📊 Pattern Vincenti
-Quali tipi di contenuto e caption funzionano meglio, con dati a supporto.
-
-## ⏰ Timing Ottimale
-Orari/giorni con engagement più alto. Confronto con la fascia target 18-23h.
-
-## 🎯 Content Pillars
-I 3-4 temi di contenuto più efficaci identificati nei post reali.
-
-## 📅 Prossimi 7 Post — Piano Editoriale
-Per ogni post: tipo, giorno+ora consigliati, tema, bozza caption IT/EN bilingue con firma ✦, hashtag per il commento.
-
-## ⚠️ Cosa Correggere
-Pattern che abbassano le performance. Abitudini da eliminare.
 
 Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
 
     try {
-      const result = await callClaude(system, userMsg);
-      setAnalysis(result);
-      localStorage.setItem("ig_analysis", result);
-      saveToHistory({ project_id: brand?.id, type: "analytics", prompt: userMsg, result_json: { text: result, username } });
+      const raw = await callClaude(system, userMsg, imageUrls);
+      const parsed = parseJsonResponse(raw);
+      setAnalysis(parsed);
+      const saved = await saveToHistory({ project_id: brand?.id, type: "analytics", prompt: userMsg, result_json: parsed });
+      mergeIntoProjectInsights(parsed);
+      if (saved?.ok) setHistoryRefreshKey(k => k + 1);
     } catch (err) {
       setError("Errore analisi Claude: " + err.message);
     }
@@ -615,7 +863,11 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, ${IG_PINK}, #F77737, #FCAF45)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📱</div>
+            {profilePic ? (
+              <img src={profilePic} alt={username} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: `2px solid ${IG_PINK}55` }} />
+            ) : (
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, ${IG_PINK}, #F77737, #FCAF45)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📱</div>
+            )}
             <div>
               <div style={{ fontSize: 16, color: OFF_WHITE, fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
                 @{username}
@@ -710,14 +962,15 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
             </div>
           </div>
 
-          <AnalysisPanel text={analysis} />
+          <AnalysisPanel data={analysis} onSuggestBrief={onSuggestBrief} />
+          <PastAnalyses brand={brand} refreshKey={historyRefreshKey} onSuggestBrief={onSuggestBrief} />
 
           {!analysis && !analyzing && (
             <div style={{ ...card, textAlign: "center", padding: "40px 24px" }}>
               <div style={{ fontSize: 24, marginBottom: 12 }}>✦</div>
               <div style={{ fontSize: 13, color: OFF_WHITE, marginBottom: 6 }}>Analisi strategica pronta</div>
               <div style={{ fontSize: 11, color: WARM_GREY, marginBottom: 20 }}>
-                Claude analizzerà i tuoi {posts.length} post e genererà un piano editoriale personalizzato per @{username}.
+                Claude analizzerà dati e foto dei tuoi {posts.length} post — pattern, timing, stile visivo/storytelling — e proporrà idee pronte per il prossimo post su @{username}.
               </div>
               <button
                 onClick={analyze}

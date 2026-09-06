@@ -29,7 +29,7 @@ function Label({ children }) {
 export default function CanvaStudio() {
   const { activeBrand, updateBrand } = useBrand();
   const [canvaStatus, setCanvaStatus] = useState(null);
-  const [templates, setTemplates] = useState({ post: "", story: "", reel: "" });
+  const [templates, setTemplates] = useState({ post: "", story: "", reel: "", carousel: "" });
   const [savedMsg, setSavedMsg] = useState(false);
 
   const [caption, setCaption] = useState("");
@@ -40,7 +40,7 @@ export default function CanvaStudio() {
   const [createError, setCreateError] = useState("");
 
   useEffect(() => {
-    setTemplates(activeBrand?.canvaTemplates || { post: "", story: "", reel: "" });
+    setTemplates(activeBrand?.canvaTemplates || { post: "", story: "", reel: "", carousel: "" });
   }, [activeBrand?.id]);
 
   useEffect(() => {
@@ -167,7 +167,7 @@ export default function CanvaStudio() {
           </div>
 
           {FORMATS.map(f => (
-            <div key={f.id} style={{ marginBottom: f.id === "reel" ? 0 : 16 }}>
+            <div key={f.id} style={{ marginBottom: 16 }}>
               <Label>{f.icon} {f.label} — {f.desc}</Label>
               <input
                 className="cs-input"
@@ -178,6 +178,25 @@ export default function CanvaStudio() {
               />
             </div>
           ))}
+
+          <div style={{ borderTop: "1px solid #1C1C1C", paddingTop: 16 }}>
+            <Label>🖼 Carosello — Template Multi-Slide</Label>
+            <div style={{ fontSize: 11, color: "#3A3A3A", lineHeight: 1.6, marginBottom: 10 }}>
+              Un solo template con più slide, ognuna con un placeholder immagine e uno testo chiamati esattamente
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: CANVA_TEAL }}> Image_1</span>/
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: CANVA_TEAL }}>Testo_1</span>,
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: CANVA_TEAL }}> Image_2</span>/
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: CANVA_TEAL }}>Testo_2</span>, ecc.
+              (fino a 10 slide). Da Visual Scout → tab Post → "Crea Carosello Completo su Canva" compila tutte le slide in un click, senza crearle una per una.
+            </div>
+            <input
+              className="cs-input"
+              value={templates.carousel || ""}
+              onChange={e => setTemplates(t => ({ ...t, carousel: e.target.value }))}
+              placeholder="Template ID Carosello (es: DAF_xxxxx)"
+              style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+            />
+          </div>
         </SectionCard>
 
         {/* Quick create */}
