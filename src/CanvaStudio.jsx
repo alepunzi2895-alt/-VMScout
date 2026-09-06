@@ -26,6 +26,56 @@ function Label({ children }) {
   );
 }
 
+// Crea una bozza Canva vuota alla dimensione giusta (via Create Design API) —
+// risparmia solo il passo "nuovo design → imposta dimensioni". Collegare gli
+// elementi ai campi Autofill e pubblicare come Brand Template resta un
+// passaggio manuale nell'editor Canva: l'API di Canva non lo espone.
+function ScaffoldButton({ format }) {
+  const [state, setState] = useState("idle");
+  const [url, setUrl] = useState(null);
+  const [errMsg, setErrMsg] = useState("");
+
+  async function handleClick() {
+    setState("loading");
+    setErrMsg("");
+    try {
+      const res = await fetch(`/api/canva-scaffold?format=${format}`);
+      const data = await res.json();
+      if (data.ok) {
+        setUrl(data.editUrl);
+        setState("done");
+      } else if (data.error === "CANVA_NOT_CONNECTED") {
+        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+        setState("idle");
+      } else {
+        setErrMsg(data.message || "Errore durante la creazione della bozza.");
+        setState("error");
+        setTimeout(() => setState("idle"), 5000);
+      }
+    } catch (e) {
+      setErrMsg(e.message || "Errore di rete.");
+      setState("error");
+      setTimeout(() => setState("idle"), 5000);
+    }
+  }
+
+  if (state === "done" && url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        style={{ padding: "9px 14px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)", whiteSpace: "nowrap" }}>
+        ✓ Apri bozza →
+      </a>
+    );
+  }
+
+  return (
+    <button onClick={handleClick} disabled={state === "loading"} title={state === "error" ? errMsg : "Crea una bozza vuota alla dimensione giusta"}
+      style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'Montserrat', sans-serif", whiteSpace: "nowrap", opacity: state === "loading" ? 0.6 : 1 }}>
+      {state === "loading" ? "⏳ Creo…" : state === "error" ? "⚠ Riprova" : "✦ Crea bozza vuota"}
+    </button>
+  );
+}
+
 export default function CanvaStudio() {
   const { activeBrand, updateBrand } = useBrand();
   const [canvaStatus, setCanvaStatus] = useState(null);
@@ -169,13 +219,16 @@ export default function CanvaStudio() {
           {FORMATS.map(f => (
             <div key={f.id} style={{ marginBottom: 16 }}>
               <Label>{f.icon} {f.label} — {f.desc}</Label>
-              <input
-                className="cs-input"
-                value={templates[f.id] || ""}
-                onChange={e => setTemplates(t => ({ ...t, [f.id]: e.target.value }))}
-                placeholder={`Template ID per ${f.label} (es: DAF_xxxxx)`}
-                style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
-              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="cs-input"
+                  value={templates[f.id] || ""}
+                  onChange={e => setTemplates(t => ({ ...t, [f.id]: e.target.value }))}
+                  placeholder={`Template ID per ${f.label} (es: DAF_xxxxx)`}
+                  style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <ScaffoldButton format={f.id} />
+              </div>
             </div>
           ))}
 
@@ -189,13 +242,16 @@ export default function CanvaStudio() {
               <span style={{ fontFamily: "'JetBrains Mono', monospace", color: CANVA_TEAL }}>Testo_2</span>, ecc.
               (fino a 10 slide). Da Visual Scout → tab Post → "Crea Carosello Completo su Canva" compila tutte le slide in un click, senza crearle una per una.
             </div>
-            <input
-              className="cs-input"
-              value={templates.carousel || ""}
-              onChange={e => setTemplates(t => ({ ...t, carousel: e.target.value }))}
-              placeholder="Template ID Carosello (es: DAF_xxxxx)"
-              style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
-            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="cs-input"
+                value={templates.carousel || ""}
+                onChange={e => setTemplates(t => ({ ...t, carousel: e.target.value }))}
+                placeholder="Template ID Carosello (es: DAF_xxxxx)"
+                style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <ScaffoldButton format="carousel" />
+            </div>
           </div>
         </SectionCard>
 
