@@ -9,7 +9,7 @@ const TEST_URL = "https://images.pexels.com/photos/3155666/pexels-photo-3155666.
 
 async function getToken() {
   const db = getDb();
-  const r  = await db.execute("SELECT access_token FROM luxy_canva_auth WHERE id=1");
+  const r  = await db.execute("SELECT access_token FROM canva_auth WHERE id=1");
   if (!r.rows.length) throw new Error("NOT_CONNECTED");
   return r.rows[0].access_token;
 }
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const r = await fetch(`${CANVA_API_BASE}/url-asset-uploads`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "luxy-test.jpg", url: TEST_URL }),
+      body: JSON.stringify({ name: "vmscout-test.jpg", url: TEST_URL }),
     });
     const d = await r.json();
     urlUploadResult = { status: r.status, ok: r.ok, body: JSON.stringify(d).slice(0, 400) };

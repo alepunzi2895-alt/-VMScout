@@ -17,7 +17,7 @@ async function refreshAccessToken(db, refreshToken) {
   if (!data.access_token) throw new Error(data.message || "Token refresh fallito");
 
   await db.execute({
-    sql: `UPDATE luxy_canva_auth
+    sql: `UPDATE canva_auth
           SET access_token=?, expires_in=?, created_at=datetime('now')
           WHERE id=1`,
     args: [data.access_token, data.expires_in || 3600],
@@ -35,7 +35,7 @@ async function uploadImageFromUrl(imageUrl, accessToken) {
     const blob        = new Blob([buffer], { type: contentType });
 
     const form = new FormData();
-    form.append("asset", blob, "luxy-content.jpg");
+    form.append("asset", blob, "vmscout-content.jpg");
 
     const uploadRes = await fetch("https://api.canva.com/rest/v1/asset/uploads", {
       method:  "POST",
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
 
   try {
     authRow = await db.execute(
-      "SELECT access_token, refresh_token, expires_in, created_at FROM luxy_canva_auth WHERE id=1"
+      "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
     );
   } catch {
     return res.status(401).json({ error: "CANVA_NOT_CONNECTED", message: "Canva non connesso." });

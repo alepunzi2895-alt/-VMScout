@@ -1,10 +1,11 @@
-import { getDb } from "./db.js";
+import { getDb, ensureCanvaAuthTable } from "./db.js";
 
 const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 
 async function getToken(db) {
+  await ensureCanvaAuthTable(db);
   const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM luxy_canva_auth WHERE id=1"
+    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
   );
   if (!r.rows.length) {
     const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
@@ -28,7 +29,7 @@ async function getToken(db) {
     const td = await tr.json();
     if (td.access_token) {
       await db.execute({
-        sql: "UPDATE luxy_canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
+        sql: "UPDATE canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
         args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600],
       });
       return td.access_token;
@@ -50,7 +51,7 @@ function nameWithExt(name, url) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { url, name = "luxy-media" } = req.body;
+  const { url, name = "vmscout-media" } = req.body;
   if (!url) return res.status(400).json({ error: "Manca url" });
 
   const db = getDb();

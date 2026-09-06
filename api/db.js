@@ -11,3 +11,17 @@ export function getDb() {
   _client = createClient({ url, authToken });
   return _client;
 }
+
+// Crea la tabella token OAuth Canva se non esiste — idempotente, così nessun
+// endpoint dipende da una chiamata di init manuale separata.
+export async function ensureCanvaAuthTable(db) {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS canva_auth (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      expires_in INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+}

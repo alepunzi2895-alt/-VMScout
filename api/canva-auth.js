@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb, ensureCanvaAuthTable } from "./db.js";
 import crypto from "crypto";
 
 const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   if (action === "status") {
     try {
       const db = getDb();
-      const r = await db.execute("SELECT created_at FROM luxy_canva_auth WHERE id=1");
+      const r = await db.execute("SELECT created_at FROM canva_auth WHERE id=1");
       if (r.rows.length) return res.status(200).json({ connected: true, since: r.rows[0].created_at });
       return res.status(200).json({ connected: false });
     } catch {
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (action === "logout") {
     try {
       const db = getDb();
-      await db.execute("DELETE FROM luxy_canva_auth WHERE id=1");
+      await db.execute("DELETE FROM canva_auth WHERE id=1");
     } catch {}
     res.setHeader("Set-Cookie", "canva_verifier=; HttpOnly; Max-Age=0; Path=/");
     return res.status(200).json({ ok: true });
@@ -92,8 +92,9 @@ export default async function handler(req, res) {
 
       if (data.access_token) {
         const db = getDb();
+        await ensureCanvaAuthTable(db);
         await db.execute({
-          sql: `INSERT INTO luxy_canva_auth (id, access_token, refresh_token, expires_in)
+          sql: `INSERT INTO canva_auth (id, access_token, refresh_token, expires_in)
                 VALUES (1, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   access_token  = excluded.access_token,

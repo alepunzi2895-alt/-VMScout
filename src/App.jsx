@@ -1028,6 +1028,16 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 // ─────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────
+// Salva ogni domanda/risposta AI nello storico persistente (Turso) — fire-and-forget,
+// non deve mai bloccare o rompere l'esperienza in chat se il salvataggio fallisce.
+function saveToHistory({ project_id, type, prompt, result_json }) {
+  fetch("/api/history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
+  }).catch(err => console.warn("[VisualMarketingScout] salvataggio storico fallito:", err.message));
+}
+
 export default function VisualMarketingScout({ brand }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -1058,6 +1068,7 @@ export default function VisualMarketingScout({ brand }) {
         try {
           const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
           setMessages(prev => [...prev, { role: "assistant", content: parsed, type: "strategy" }]);
+          saveToHistory({ project_id: brand?.id, type: "strategy", prompt: userMsg, result_json: parsed });
         } catch { setMessages(prev => [...prev, { role: "assistant", content: raw, type: "text" }]); }
       } else {
         setMessages(prev => [...prev, { role: "assistant", content: "Non ho potuto elaborare la richiesta. Riprova con più dettagli.", type: "text" }]);
@@ -1068,7 +1079,7 @@ export default function VisualMarketingScout({ brand }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#EFE6D5", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
         @keyframes typingBounce { 0%,80%,100% { transform:translateY(0);opacity:.4 } 40% { transform:translateY(-6px);opacity:1 } }
@@ -1086,11 +1097,11 @@ export default function VisualMarketingScout({ brand }) {
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>◈ Visual Marketing Scout</div>
             <button onClick={() => setShowApiSetup(!showApiSetup)}
-              style={{ fontSize: 9, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(139,115,85,.2)", background: anyKey ? "rgba(0,150,0,.08)" : "rgba(139,115,85,.06)", color: anyKey ? "#2a7a2a" : "#8B7355", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
+              style={{ fontSize: 9, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(139,115,85,.3)", background: anyKey ? "rgba(90,186,90,.1)" : "rgba(139,115,85,.1)", color: anyKey ? "#5ABA5A" : "#B5A88A", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
               {anyKey ? "● API" : "○ API Setup"}
             </button>
           </div>
-          <h1 style={{ fontSize: messages.length ? 28 : 42, fontWeight: 400, color: "#2C2418", margin: 0, lineHeight: 1.15, transition: "font-size .4s ease" }}>
+          <h1 style={{ fontSize: messages.length ? 28 : 42, fontWeight: 400, color: "#F0EBE3", margin: 0, lineHeight: 1.15, transition: "font-size .4s ease" }}>
             Trova l'immagine giusta.<br /><em style={{ fontStyle: "italic", color: "#8B7355" }}>Quella vera.</em>
           </h1>
           {!messages.length && <p style={{ fontSize: 14, color: "#8B7355", marginTop: 16, fontFamily: "'DM Sans', sans-serif", maxWidth: 500, margin: "16px auto 0", lineHeight: 1.6 }}>
@@ -1127,7 +1138,7 @@ export default function VisualMarketingScout({ brand }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 32, animation: "fadeSlideUp .6s ease-out .2s both" }}>
             {EXAMPLES.map((ex, i) => (
               <button key={i} onClick={() => sendMessage(ex)}
-                style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(139,115,85,.2)", background: "rgba(139,115,85,.06)", color: "#5C4E3C", fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "left", maxWidth: 320 }}>
+                style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(139,115,85,.35)", background: "rgba(139,115,85,.14)", color: "#D9CCB8", fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "left", maxWidth: 320 }}>
                 {ex}
               </button>
             ))}
@@ -1165,7 +1176,7 @@ export default function VisualMarketingScout({ brand }) {
         </div>
 
         {/* Input */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px 20px 24px", background: "linear-gradient(to top, #EFE6D5 70%, transparent)", zIndex: 10 }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px 20px 24px", background: "linear-gradient(to top, #0D0D0D 70%, transparent)", zIndex: 10 }}>
           <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea className="vms-input" value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}

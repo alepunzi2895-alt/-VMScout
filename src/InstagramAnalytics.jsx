@@ -10,13 +10,33 @@ const IG_PINK   = "#E1306C";
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
+// Rimuove caratteri invisibili (newline, zero-width space, NBSP, ecc.) e prefissi/virgolette
+// che a volte restano attaccati quando si copia il token da Graph API Explorer.
+// Causa più comune dell'errore Facebook "Cannot parse access token".
+function sanitizeToken(raw) {
+  return (raw || "")
+    .replace(/^["'\s]+|["'\s]+$/g, "")
+    .replace(/^Bearer\s+/i, "")
+    .replace(/[\u200B\u200C\u200D\uFEFF\u00A0]/g, "") // zero-width/NBSP invisibili da copia-incolla
+    .replace(/\s+/g, "");
+}
+
 async function igCall(token, path, params = {}) {
   const res = await fetch("/api/instagram", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, path, params }),
+    body: JSON.stringify({ token: sanitizeToken(token), path, params }),
   });
   return res.json();
+}
+
+// Salva ogni analisi AI nello storico persistente (Turso) — fire-and-forget.
+function saveToHistory({ project_id, type, prompt, result_json }) {
+  fetch("/api/history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "save_request", project_id: project_id || null, type, prompt, result_json }),
+  }).catch(err => console.warn("[InstagramAnalytics] salvataggio storico fallito:", err.message));
 }
 
 async function callClaude(system, userMsg) {
@@ -88,6 +108,24 @@ function fmtDate(ts) {
 
 // ── Connect Panel ────────────────────────────────────────────────────────────
 
+function friendlyIgError(message) {
+  if (/cannot parse access token/i.test(message || "")) {
+    return `${message} — Il token non è nel formato atteso. Ricontrolla di aver copiato SOLO la stringa del token ` +
+      '(inizia con "EAA..."), senza spazi, a-capo o testo extra (es. "Bearer", virgolette). ' +
+      "Su Graph API Explorer usa l'icona di copia accanto al campo Access Token invece di selezionare il testo a mano.";
+  }
+  return message;
+}
+
+// Un token "IGAA..." viene dal nuovo flusso "Instagram API with Instagram Login" —
+// va usato solo su graph.instagram.com e non ha alcun concetto di Facebook Page,
+// quindi salta del tutto lo step "me/accounts". Un token "EAA..." è il vecchio
+// Graph API Explorer legato a una Facebook Page (serve individuare la Page e il
+// suo Instagram Business Account collegato).
+function isDirectIgToken(t) {
+  return /^IGAA/i.test(t);
+}
+
 function ConnectPanel({ onConnect }) {
   const [tokenInput, setTokenInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -95,49 +133,63 @@ function ConnectPanel({ onConnect }) {
   const [pages, setPages] = useState(null);
   const [selectedPageId, setSelectedPageId] = useState("");
 
-  async function handleLoadPages() {
-    const t = tokenInput.trim();
+  async function connectDirect(t) {
+    const res = await igCall(t, "me", { fields: "id,username,account_type" });
+    if (res.error) throw new Error(res.error.message);
+    if (!res.id) throw new Error("Impossibile leggere l'account Instagram da questo token.");
+    onConnect({ token: t, accountId: res.id, username: res.username });
+  }
+
+  async function loadPages(t) {
+    const res = await igCall(t, "me/accounts");
+    if (res.error) throw new Error(res.error.message);
+    if (!res.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
+    setPages(res.data);
+    setSelectedPageId(res.data[0].id);
+  }
+
+  async function connectWithPage(t) {
+    const page = pages.find(p => p.id === selectedPageId);
+    const pageToken = page.access_token || t;
+    const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username}" });
+    if (igData.error) throw new Error(igData.error.message);
+
+    const igUser = igData.instagram_business_account;
+    if (!igUser) throw new Error(
+      `Nessun account Instagram Business collegato alla Page "${page.name}". ` +
+      "Controlla: (1) il tuo account è Business/Creator su Instagram, " +
+      "(2) è collegato a questa Facebook Page da Impostazioni → Account collegati."
+    );
+
+    // Salva il token verificato (Page token se disponibile) — è quello che ha
+    // effettivamente accesso all'account IG Business, non il token utente generico.
+    onConnect({ token: pageToken, accountId: igUser.id, username: igUser.username });
+  }
+
+  async function handleSubmit() {
+    const t = sanitizeToken(tokenInput);
     if (!t) return;
     setLoading(true);
     setError("");
-    setPages(null);
-    setSelectedPageId("");
     try {
-      const res = await igCall(t, "me/accounts");
-      if (res.error) throw new Error(res.error.message);
-      if (!res.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
-      setPages(res.data);
-      setSelectedPageId(res.data[0].id);
+      if (pages && selectedPageId) {
+        await connectWithPage(t);
+      } else if (isDirectIgToken(t)) {
+        await connectDirect(t);
+      } else {
+        setPages(null);
+        setSelectedPageId("");
+        await loadPages(t);
+      }
     } catch (err) {
-      setError(err.message);
+      setError(friendlyIgError(err.message));
     }
     setLoading(false);
   }
 
-  async function handleConnect() {
-    const t = tokenInput.trim();
-    if (!t || !pages || !selectedPageId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const page = pages.find(p => p.id === selectedPageId);
-      const pageToken = page.access_token || t;
-      const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username}" });
-      if (igData.error) throw new Error(igData.error.message);
-
-      const igUser = igData.instagram_business_account;
-      if (!igUser) throw new Error(
-        `Nessun account Instagram Business collegato alla Page "${page.name}". ` +
-        "Controlla: (1) il tuo account è Business/Creator su Instagram, " +
-        "(2) è collegato a questa Facebook Page da Impostazioni → Account collegati."
-      );
-
-      onConnect({ token: t, accountId: igUser.id, username: igUser.username });
-    } catch (err) {
-      setError(err.message);
-    }
-    setLoading(false);
-  }
+  const buttonLabel = loading
+    ? "Verifica in corso…"
+    : pages ? "Connetti Account Instagram" : "Verifica e Connetti →";
 
   return (
     <div style={{ maxWidth: 640, margin: "60px auto", padding: "0 16px" }}>
@@ -153,13 +205,12 @@ function ConnectPanel({ onConnect }) {
 
       {/* Steps */}
       <div style={{ ...card, marginBottom: 24 }}>
-        <div style={{ ...label, marginBottom: 16 }}>Come ottenere il token</div>
+        <div style={{ ...label, marginBottom: 16 }}>Come ottenere il token (Instagram API with Instagram Login)</div>
         {[
-          ["1", "Vai su", "developers.facebook.com/tools/explorer"],
-          ["2", "Seleziona la tua app Facebook (o creane una gratuita)"],
-          ["3", 'Clicca "Generate Access Token" e aggiungi i permessi:', "instagram_basic  instagram_manage_insights  pages_show_list  pages_read_engagement"],
-          ["4", "Assicurati che il tuo account sia Business/Creator su Instagram e collegato alla tua Facebook Page (Instagram → Impostazioni → Account → Account collegati)"],
-          ["5", "Copia il token e incollalo qui sotto"],
+          ["1", "Vai su", "developers.facebook.com → la tua app → aggiungi il prodotto \"Instagram\""],
+          ["2", 'Nella sezione "Instagram API setup with Instagram login" collega il tuo account IG Business/Creator'],
+          ["3", "Genera un token con i permessi:", "instagram_business_basic  instagram_business_manage_insights"],
+          ["4", "Copia il token — inizia con \"IGAA…\" — e incollalo qui sotto (nessuno step aggiuntivo: niente Facebook Page da collegare)"],
         ].map(([n, text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
             <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${GOLD}20`, border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Montserrat', sans-serif", flexShrink: 0, marginTop: 1 }}>
@@ -172,7 +223,8 @@ function ConnectPanel({ onConnect }) {
           </div>
         ))}
         <div style={{ marginTop: 4, fontSize: 11, color: WARM_GREY, opacity: 0.6 }}>
-          Il token dura 60 giorni. Puoi generarne uno long-lived via Graph API Explorer → "Extend Token".
+          Il token "IGAA…" dura 60 giorni (long-lived) se generato con l'endpoint <code>ig_exchange_token</code>, altrimenti scade dopo 1 ora.
+          Hai ancora un vecchio token "EAA…" da Graph API Explorer? Funziona lo stesso — verrà chiesto di selezionare la Facebook Page collegata.
         </div>
       </div>
 
@@ -182,7 +234,7 @@ function ConnectPanel({ onConnect }) {
         <textarea
           value={tokenInput}
           onChange={e => { setTokenInput(e.target.value); setPages(null); setSelectedPageId(""); setError(""); }}
-          placeholder="EAAxxxxxxxxxxxxx..."
+          placeholder="IGAAxxxxxxxxxxxxx... (o EAAxxxxxxxxxxxxx per il vecchio flusso)"
           rows={3}
           style={{
             width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)",
@@ -190,6 +242,9 @@ function ConnectPanel({ onConnect }) {
             fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box",
           }}
         />
+        <div style={{ marginTop: 6, fontSize: 10, color: WARM_GREY, opacity: 0.7 }}>
+          Incolla solo il token (nessuno spazio, a-capo, "Bearer" o virgolette) — viene ripulito automaticamente, ma se il campo contiene altro testo la richiesta a Facebook fallirà.
+        </div>
 
         {/* Page selector — shown after loading pages */}
         {pages && pages.length > 0 && (
@@ -217,11 +272,11 @@ function ConnectPanel({ onConnect }) {
           </div>
         )}
         <button
-          onClick={pages ? handleConnect : handleLoadPages}
+          onClick={handleSubmit}
           disabled={loading || !tokenInput.trim()}
           style={{ ...goldBtn(loading || !tokenInput.trim()), marginTop: 14, width: "100%" }}
         >
-          {loading ? "Caricamento…" : pages ? "Connetti Account Instagram" : "Carica le tue Page →"}
+          {buttonLabel}
         </button>
       </div>
     </div>
@@ -419,9 +474,12 @@ export default function InstagramAnalytics({ brand }) {
       setStep(`Recupero insights per ${mediaList.length} post…`);
       const enriched = await Promise.all(
         mediaList.map(async (post) => {
+          // "impressions"/"video_views" sono metriche deprecate dalla Instagram Insights API
+          // (Meta risponde con errore "does not support this metric for this media product
+          // type" per gli account moderni) — sostituite da "views" per i contenuti video.
           const metric = post.media_type === "VIDEO"
-            ? "reach,impressions,saved,video_views"
-            : "reach,impressions,saved";
+            ? "reach,saved,views"
+            : "reach,saved";
           const ins = await igCall(token, `${post.id}/insights`, { metric });
           const insMap = {};
           if (ins.data) {
@@ -452,7 +510,7 @@ export default function InstagramAnalytics({ brand }) {
       likes: p.like_count || 0,
       commenti: p.comments_count || 0,
       reach: p.insights?.reach || 0,
-      impressioni: p.insights?.impressions || 0,
+      views: p.insights?.views || 0,
       saves: p.insights?.saved || 0,
       eng_pct: engRate(p).toFixed(2) + "%",
       caption: (p.caption || "").substring(0, 200),
@@ -497,6 +555,7 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
       const result = await callClaude(system, userMsg);
       setAnalysis(result);
       localStorage.setItem("ig_analysis", result);
+      saveToHistory({ project_id: brand?.id, type: "analytics", prompt: userMsg, result_json: { text: result, username } });
     } catch (err) {
       setError("Errore analisi Claude: " + err.message);
     }

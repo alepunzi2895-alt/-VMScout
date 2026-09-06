@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb, ensureCanvaAuthTable } from "./db.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -6,8 +6,9 @@ const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 // ─── helpers ────────────────────────────────────────────
 
 async function getToken(db) {
+  await ensureCanvaAuthTable(db);
   const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM luxy_canva_auth WHERE id=1"
+    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
   );
   if (!r.rows.length) {
     const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
@@ -28,24 +29,13 @@ async function getToken(db) {
     const td = await tr.json();
     if (td.access_token) {
       await db.execute({
-        sql: "UPDATE luxy_canva_auth SET access_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
+        sql: "UPDATE canva_auth SET access_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
         args: [td.access_token, td.expires_in || 3600],
       });
       return td.access_token;
     }
   }
   return row.access_token;
-}
-
-async function getTemplateId(db, format) {
-  const keyMap = { post: "canva_template_post", story: "canva_template_story", reel: "canva_template_reel" };
-  const key = keyMap[format] || keyMap.post;
-  try {
-    const r = await db.execute({ sql: "SELECT value FROM luxy_brand_memory WHERE key=?", args: [key] });
-    const val = r.rows[0]?.value || "";
-    if (!val || val.startsWith("INSERISCI") || val.startsWith("METTI")) return null;
-    return val;
-  } catch { return null; }
 }
 
 async function fetchPexelsUrl(query, vertical) {
@@ -66,7 +56,7 @@ async function uploadImageUrl(imageUrl, token) {
     const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "luxy-bg.jpg", url: imageUrl }),
+      body: JSON.stringify({ name: "vmscout-bg.jpg", url: imageUrl }),
     });
     const d = await r.json();
     if (!r.ok || !d.job?.id) return null;
@@ -105,7 +95,7 @@ export default async function handler(req, res) {
 
   try {
     const vertical = format === "story" || format === "reel";
-    const templateId = bodyTemplateId || await getTemplateId(db, format);
+    const templateId = bodyTemplateId;
 
     if (!templateId) {
       return res.status(400).json({

@@ -4,6 +4,7 @@ import Home from "./Home.jsx";
 import VisualMarketingScout from "./App.jsx";
 import InstagramAnalytics from "./InstagramAnalytics.jsx";
 import CanvaStudio from "./CanvaStudio.jsx";
+import History from "./History.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: "vmscout", label: "Visual Scout", icon: "🎯" },
   { id: "instagram", label: "Analytics", icon: "📊" },
   { id: "canva", label: "Canva Studio", icon: "✦" },
+  { id: "history", label: "Storico", icon: "🕘" },
 ];
 
 function Nav({ activeApp, setActiveApp }) {
@@ -143,6 +145,7 @@ function AppContent() {
         {activeApp === "vmscout" && <VisualMarketingScout brand={activeBrand} />}
         {activeApp === "instagram" && <InstagramAnalytics brand={activeBrand} />}
         {activeApp === "canva" && <CanvaStudio />}
+        {activeApp === "history" && <History brand={activeBrand} />}
       </div>
     </div>
   );
