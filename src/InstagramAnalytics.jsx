@@ -777,7 +777,10 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
 
     // Foto dei post con più engagement — Claude le vede davvero e analizza
     // stile visivo/storytelling, non solo i numeri.
-    const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 6);
+    // Meno immagini = meno tempo di elaborazione visiva per Claude (fetch+encode
+    // server-side + tempo di generazione) — 4 bastano per un'analisi visiva
+    // solida e riducono il rischio di timeout (504) sulla funzione serverless.
+    const topForVision = [...posts].sort((a, b) => engRate(b) - engRate(a)).slice(0, 4);
     const imageUrls = topForVision.map(p => p.thumbnail_url || p.media_url).filter(Boolean);
 
     const priorInsights = await fetchPriorInsights();
@@ -1065,7 +1068,8 @@ Usa sempre dati concreti. Mantieni tono lusso/evocativo.`;
 
           {analyzing && (
             <div style={{ ...card, textAlign: "center", padding: "40px 24px" }}>
-              <div style={{ fontSize: 11, color: WARM_GREY }}>Claude sta analizzando {posts.length} post…</div>
+              <div style={{ fontSize: 11, color: WARM_GREY }}>Claude sta analizzando {posts.length} post e le foto con più engagement…</div>
+              <div style={{ fontSize: 10, color: "#555", marginTop: 6 }}>Può richiedere fino a un minuto: analizza anche le immagini, non solo i numeri.</div>
             </div>
           )}
         </>

@@ -1,15 +1,22 @@
 // /api/chat.js — Vercel Serverless Function
 // Proxy sicuro per l'API Anthropic: la key resta server-side
 
-const MAX_IMAGES = 8;
+const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // limite Anthropic per immagine
+const IMAGE_FETCH_TIMEOUT_MS = 8000;
+const ANTHROPIC_TIMEOUT_MS = 45000; // margine sotto maxDuration:60 di vercel.json
 
 // Scarica ed encoda in base64 le immagini lato server (niente CORS, a differenza
 // di un fetch dal browser verso CDN come *.cdninstagram.com) così Claude può
 // analizzarle visivamente (stile, storytelling) insieme al testo della richiesta.
+// Timeout per immagine: una CDN lenta non deve far scadere l'intera richiesta —
+// le immagini vengono comunque scaricate in parallelo (Promise.all), quindi il
+// tempo totale della fase resta ~8s anche nel caso peggiore, non 8s × N.
 async function fetchImageBlock(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
   try {
-    const imgRes = await fetch(url);
+    const imgRes = await fetch(url, { signal: controller.signal });
     if (!imgRes.ok) return null;
     const contentType = (imgRes.headers.get("content-type") || "image/jpeg").split(";")[0];
     if (!contentType.startsWith("image/")) return null;
@@ -18,6 +25,8 @@ async function fetchImageBlock(url) {
     return { type: "image", source: { type: "base64", media_type: contentType, data: buf.toString("base64") } };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -46,20 +55,37 @@ export default async function handler(req, res) {
       }
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        system,
-        messages: finalMessages,
-      }),
-    });
+    // Timeout esplicito sulla chiamata Anthropic: se il gateway Vercel taglia la
+    // funzione a maxDuration (504, body vuoto/illeggibile) il client non capisce
+    // cos'è successo. Abortendo prima (con margine) restituiamo invece un JSON
+    // pulito con un messaggio comprensibile.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8192,
+          system,
+          messages: finalMessages,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err.name === "AbortError") {
+        return res.status(504).json({ error: "Claude sta impiegando troppo tempo a rispondere. Riprova (con meno immagini se il problema persiste)." });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
 
     const data = await response.json();
     return res.status(response.status).json(data);
