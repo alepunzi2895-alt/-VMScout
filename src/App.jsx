@@ -684,28 +684,33 @@ function defaultPhotoSource() {
   return Object.keys(PHOTO_SOURCES).find(k => PHOTO_SOURCES[k].apiUrl && API_KEYS[k]) || null;
 }
 
-function SlidePreviewImages({ query, orientation }) {
-  const sourceKey = defaultPhotoSource();
+function SlidePreviewImages({ query, orientation, sourceKey }) {
+  const src = PHOTO_SOURCES[sourceKey];
+  const canFetch = src?.apiUrl && API_KEYS[sourceKey];
   const [outcome, setOutcome] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!query || !sourceKey) return;
+    if (!query || !canFetch) { setOutcome(null); return; }
     let active = true;
     setLoading(true);
     fetchImages(query, orientation, sourceKey).then(o => { if (active) { setOutcome(o); setLoading(false); } });
     return () => { active = false; };
-  }, [query, orientation, sourceKey]);
+  }, [query, orientation, sourceKey, canFetch]);
 
-  if (!sourceKey) return null;
+  // Pinterest/Instagram non hanno un'API di ricerca pubblica (solo link,
+  // vedi PHOTO_SOURCES) — niente anteprima inline per quelle, resta il link
+  // già mostrato sopra in SlideSearchLinks.
+  if (!canFetch) return null;
+
   return (
     <div style={{ marginTop: 8 }}>
       {loading ? (
-        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Cerco immagini per "{query}"...</div>
+        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Cerco immagini per "{query}" su {src.name}...</div>
       ) : outcome?.results?.length ? (
         <ImageGrid images={outcome.results.slice(0, 3)} />
       ) : (
-        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Nessuna immagine trovata per "{query}"</div>
+        <div style={{ fontSize: 10, color: "#999", fontStyle: "italic" }}>Nessuna immagine trovata per "{query}" su {src.name}</div>
       )}
     </div>
   );
@@ -715,6 +720,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
   const { post_composer, orientation } = data;
   const [lang, setLang] = useState("it");
   const [platform, setPlatform] = useState("instagram");
+  const [selectedSource, setSelectedSource] = useState(() => defaultPhotoSource() || "unsplash");
 
   if (!post_composer?.length) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun post generato.</p>;
 
@@ -757,6 +763,18 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Anteprime foto da</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {Object.entries(PHOTO_SOURCES).map(([key, src]) => (
+            <button key={key} onClick={() => setSelectedSource(key)}
+              style={{ padding: "5px 14px", borderRadius: 8, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+              {src.name} {API_KEYS[key] ? "●" : ""}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
@@ -806,7 +824,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                     Cerca "{post.search_query}" su:
                   </div>
                   <SlideSearchLinks query={post.search_query} orientation={orientation} instagramHashtag={post.instagram_hashtag} />
-                  <SlidePreviewImages query={post.search_query} orientation={orientation} />
+                  <SlidePreviewImages query={post.search_query} orientation={orientation} sourceKey={selectedSource} />
                 </div>
               )}
 

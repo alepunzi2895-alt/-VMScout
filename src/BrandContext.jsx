@@ -56,6 +56,10 @@ function deleteProjectFromDb(id) {
   }).catch(err => console.warn("[BrandContext] delete progetto fallita:", err.message));
 }
 
+function isPristine(b) {
+  return !b?.sector && !b?.description && !b?.tone && !b?.instagramHandle && !b?.hashtags;
+}
+
 export function BrandProvider({ children }) {
   const [brands, setBrands] = useState(() => loadBrands() || [newBrand()]);
   const [activeBrandId, setActiveBrandId] = useState(
@@ -70,9 +74,27 @@ export function BrandProvider({ children }) {
     if (activeBrandId) localStorage.setItem("vmscout_active_brand", activeBrandId);
   }, [activeBrandId]);
 
-  // Al primo avvio, recupera i progetti salvati sul DB e integra quelli non
-  // ancora presenti in locale (es. da un altro browser/dispositivo).
+  // Il progetto di default veniva creato solo in locale — non passava mai da
+  // createBrand/updateBrand, quindi non arrivava MAI al DB finché l'utente non
+  // apriva "Modifica" e salvava qualcosa. Risultato: da un altro dispositivo/
+  // browser (localStorage vuoto) non c'era nulla da recuperare, nemmeno il
+  // progetto stesso. Sincronizza quindi anche lo stato iniziale al mount, non
+  // solo le modifiche esplicite — upsert idempotente, sicuro anche se il
+  // progetto era già su DB.
   useEffect(() => {
+    brands.forEach(syncProjectToDb);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al primo avvio, recupera i progetti salvati sul DB e integra quelli non
+  // ancora presenti in locale (es. da un altro browser/dispositivo). Se questo
+  // dispositivo non aveva ancora nulla di suo (solo il progetto di default,
+  // mai personalizzato, nessuna selezione attiva salvata) e troviamo progetti
+  // reali sul DB, li rendiamo attivi subito invece di lasciare selezionato il
+  // progetto vuoto appena creato in locale — altrimenti sembra che "non ci sia
+  // nulla di salvato" anche se i dati esistono, solo non selezionati.
+  useEffect(() => {
+    const wasFreshDevice = !activeBrandId && brands.length === 1 && isPristine(brands[0]);
     fetch("/api/history?action=projects")
       .then(r => r.json())
       .then(d => {
@@ -93,10 +115,13 @@ export function BrandProvider({ children }) {
               canvaTemplates: (() => { try { return JSON.parse(row.canva_templates || "{}"); } catch { return { post: "", story: "", reel: "" }; } })(),
               createdAt: row.created_at,
             }));
-          return remoteOnly.length ? [...prev, ...remoteOnly] : prev;
+          if (!remoteOnly.length) return prev;
+          if (wasFreshDevice) setActiveBrandId(remoteOnly[0].id);
+          return [...prev, ...remoteOnly];
         });
       })
       .catch(err => console.warn("[BrandContext] fetch progetti da DB fallita:", err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeBrand = brands.find(b => b.id === activeBrandId) || brands[0];
