@@ -74,10 +74,8 @@ export default function Home({ onNavigate }) {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080808", color: "#F0EBE3", fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box }
+    <div style={{ minHeight: "100vh", background: "#080808", color: "#F0EBE3", fontFamily: "'Space Grotesk', sans-serif", paddingBottom: 80 }}>
+      <style>{`        * { box-sizing: border-box }
         .home-tool-card:hover { border-color: rgba(201,169,110,0.35) !important; background: rgba(201,169,110,0.04) !important; }
         .home-brand-card:hover { border-color: rgba(201,169,110,0.3) !important; }
         .home-input:focus { outline: none; border-color: rgba(201,169,110,0.4) !important; }
@@ -86,10 +84,10 @@ export default function Home({ onNavigate }) {
 
       {/* Hero */}
       <div style={{ textAlign: "center", padding: "56px 24px 44px" }}>
-        <div style={{ fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", color: GOLD, marginBottom: 22, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", color: GOLD, marginBottom: 22, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
           ◈ VMScout
         </div>
-        <h1 style={{ fontSize: 44, fontWeight: 300, margin: "0 0 14px", fontFamily: "'Instrument Serif', serif", letterSpacing: "-0.01em", lineHeight: 1.1 }}>
+        <h1 style={{ fontSize: 44, fontWeight: 300, margin: "0 0 14px", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "-0.01em", lineHeight: 1.1 }}>
           Strategia visiva.<br />
           <em style={{ fontStyle: "italic", color: GOLD }}>Zero compromessi.</em>
         </h1>
@@ -103,17 +101,17 @@ export default function Home({ onNavigate }) {
         {/* ── Projects grid ── */}
         <div style={{ marginBottom: 36 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+            <span style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
               Progetti
             </span>
             <button onClick={() => setShowNew(v => !v)}
-              style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `1px solid ${GOLD}35`, background: "transparent", color: GOLD, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
+              style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `1px solid ${GOLD}35`, background: "transparent", color: GOLD, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
               + Nuovo
             </button>
           </div>
 
           {showNew && (
-            <div style={{ background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 12, padding: 14, marginBottom: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 16, padding: 14, marginBottom: 12, display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 autoFocus
                 className="home-input"
@@ -121,14 +119,14 @@ export default function Home({ onNavigate }) {
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") { setShowNew(false); setNewName(""); } }}
                 placeholder="Nome brand o progetto..."
-                style={{ flex: 1, background: "#1A1A1A", border: "1px solid #2A2A2A", borderRadius: 8, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}
+                style={{ flex: 1, background: "#1A1A1A", border: "1px solid #2A2A2A", borderRadius: 12, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif" }}
               />
               <button onClick={handleCreate}
-                style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: GOLD, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                style={{ padding: "8px 16px", borderRadius: 12, border: "none", background: GOLD, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
                 Crea
               </button>
               <button onClick={() => { setShowNew(false); setNewName(""); }}
-                style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 12, cursor: "pointer" }}>
+                style={{ padding: "8px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 12, cursor: "pointer" }}>
                 ✕
               </button>
             </div>
@@ -143,7 +141,7 @@ export default function Home({ onNavigate }) {
                   className="home-brand-card"
                   onClick={() => { setActiveBrandId(brand.id); if (editing) cancelEdit(); }}
                   style={{
-                    padding: "14px 16px", borderRadius: 12, cursor: "pointer",
+                    padding: "14px 16px", borderRadius: 16, cursor: "pointer",
                     border: `1px solid ${isActive ? GOLD + "55" : "#1E1E1E"}`,
                     background: isActive ? `${GOLD}07` : "#0C0C0C",
                     transition: "all 0.2s", position: "relative",
@@ -165,14 +163,14 @@ export default function Home({ onNavigate }) {
                     <button
                       title="Modifica progetto"
                       onClick={e => { e.stopPropagation(); startEdit(brand); }}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: "1px solid #262626", background: "#0C0C0C", color: "#888", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+                      style={{ width: 22, height: 22, borderRadius: 9, border: "1px solid #262626", background: "#0C0C0C", color: "#888", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
                       ✎
                     </button>
                     {brands.length > 1 && (
                       <button
                         title="Elimina progetto"
                         onClick={e => { e.stopPropagation(); removeBrand(brand); }}
-                        style={{ width: 22, height: 22, borderRadius: 6, border: "1px solid #3A2020", background: "#0C0C0C", color: "#B06060", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+                        style={{ width: 22, height: 22, borderRadius: 9, border: "1px solid #3A2020", background: "#0C0C0C", color: "#B06060", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
                         🗑
                       </button>
                     )}
@@ -185,10 +183,10 @@ export default function Home({ onNavigate }) {
 
         {/* ── Active brand card ── */}
         {activeBrand && (
-          <div style={{ background: "#0C0C0C", border: `1px solid ${GOLD}20`, borderRadius: 16, padding: "22px 24px", marginBottom: 32 }}>
+          <div style={{ background: "#0C0C0C", border: `1px solid ${GOLD}20`, borderRadius: 20, padding: "22px 24px", marginBottom: 32 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: editing ? 20 : 16 }}>
               <div>
-                <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#444", marginBottom: 5, fontFamily: "'Montserrat', sans-serif" }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#444", marginBottom: 5, fontFamily: "'Space Grotesk', sans-serif" }}>
                   Progetto attivo
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 600, color: "#E8E0D8" }}>{activeBrand.name}</div>
@@ -196,12 +194,12 @@ export default function Home({ onNavigate }) {
               <div style={{ display: "flex", gap: 8 }}>
                 {editing && (
                   <button onClick={cancelEdit}
-                    style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 11, cursor: "pointer" }}>
+                    style={{ padding: "6px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 11, cursor: "pointer" }}>
                     Annulla
                   </button>
                 )}
                 <button onClick={editing ? saveEdit : startEdit}
-                  style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${editing ? GOLD + "80" : "#2A2A2A"}`, background: editing ? GOLD : "transparent", color: editing ? "#000" : "#777", fontSize: 11, cursor: "pointer", fontWeight: 600, fontFamily: "'Montserrat', sans-serif", transition: "all 0.2s" }}>
+                  style={{ padding: "6px 14px", borderRadius: 12, border: `1px solid ${editing ? GOLD + "80" : "#2A2A2A"}`, background: editing ? GOLD : "transparent", color: editing ? "#000" : "#777", fontSize: 11, cursor: "pointer", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}>
                   {editing ? "✓ Salva" : "Modifica"}
                 </button>
               </div>
@@ -225,7 +223,7 @@ export default function Home({ onNavigate }) {
 
         {/* ── Quick access tools ── */}
         <div>
-          <div style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, marginBottom: 14 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, marginBottom: 14 }}>
             Strumenti
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
@@ -234,10 +232,10 @@ export default function Home({ onNavigate }) {
                 key={t.id}
                 className="home-tool-card"
                 onClick={() => onNavigate(t.id)}
-                style={{ padding: "22px 18px", borderRadius: 14, border: "1px solid #1A1A1A", background: "#0C0C0C", textAlign: "left", cursor: "pointer", transition: "all 0.2s" }}
+                style={{ padding: "22px 18px", borderRadius: 18, border: "1px solid #1A1A1A", background: "#0C0C0C", textAlign: "left", cursor: "pointer", transition: "all 0.2s" }}
               >
                 <div style={{ fontSize: 24, marginBottom: 10, height: 24 }}>{t.icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#C8C0B8", marginBottom: 7, fontFamily: "'Montserrat', sans-serif" }}>{t.title}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#C8C0B8", marginBottom: 7, fontFamily: "'Space Grotesk', sans-serif" }}>{t.title}</div>
                 <div style={{ fontSize: 11, color: "#454540", lineHeight: 1.6 }}>{t.desc}</div>
               </button>
             ))}
@@ -271,7 +269,7 @@ function BrandSummary({ brand }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {fields.map(f => (
         <div key={f.label} style={{ display: "flex", gap: 14 }}>
-          <span style={{ fontSize: 10, color: "#444", width: 80, flexShrink: 0, paddingTop: 2, fontFamily: "'Montserrat', sans-serif", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          <span style={{ fontSize: 10, color: "#444", width: 80, flexShrink: 0, paddingTop: 2, fontFamily: "'Space Grotesk', sans-serif", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             {f.label}
           </span>
           <span style={{ fontSize: 13, color: "#8A8278", lineHeight: 1.5 }}>{f.value}</span>
@@ -305,17 +303,17 @@ function LogoField({ draft, onChange }) {
     <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14 }}>
       <BrandAvatar brand={draft} size={48} radius={12} />
       <div style={{ flex: 1 }}>
-        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 6 }}>
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 6 }}>
           Logo / foto progetto
         </label>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "#141414", color: "#A0988E", fontSize: 11, cursor: busy ? "wait" : "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+          <label style={{ padding: "7px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "#141414", color: "#A0988E", fontSize: 11, cursor: busy ? "wait" : "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
             {busy ? "Carico…" : draft.logo ? "Sostituisci" : "Carica immagine"}
             <input type="file" accept="image/*" onChange={handleFile} disabled={busy} style={{ display: "none" }} />
           </label>
           {draft.logo && (
             <button type="button" onClick={() => onChange({ ...draft, logo: "" })}
-              style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "transparent", color: "#666", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "7px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#666", fontSize: 11, cursor: "pointer" }}>
               Rimuovi
             </button>
           )}
@@ -329,13 +327,13 @@ function LogoField({ draft, onChange }) {
 
 function BrandForm({ draft, onChange }) {
   const inputStyle = {
-    width: "100%", background: "#141414", border: "1px solid #2A2A2A", borderRadius: 8,
-    padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif",
+    width: "100%", background: "#141414", border: "1px solid #2A2A2A", borderRadius: 12,
+    padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif",
     outline: "none",
   };
   const labelStyle = {
     fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em",
-    fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 6,
+    fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 6,
   };
   const field = (key, label, placeholder, type = "text") => (
     <div key={key} style={{ display: "flex", flexDirection: "column" }}>

@@ -50,7 +50,7 @@ export function EngagementTrendChart({ data }) {
           <title>{`${d.label}: ${d.value.toFixed(1)}% engagement`}</title>
         </circle>
       ))}
-      <text x={x(data.length - 1)} y={Math.max(y(last.value) - 10, 10)} textAnchor="end" fontSize="11" fontWeight="700" fill={GOLD} fontFamily="'Montserrat', sans-serif">
+      <text x={x(data.length - 1)} y={Math.max(y(last.value) - 10, 10)} textAnchor="end" fontSize="11" fontWeight="700" fill={GOLD} fontFamily="'Space Grotesk', sans-serif">
         {last.value.toFixed(1)}%
       </text>
       <text x={x(0)} y={H - 4} textAnchor="start" fontSize="9" fill={MUTED} fontFamily="'JetBrains Mono', monospace">{data[0].label}</text>
@@ -85,7 +85,7 @@ export function MiniBarChart({ data, highlightBest = false }) {
               <title>{`${d.label}: ${d.value.toFixed(1)}% engagement medio${d.count != null ? ` (${d.count} post)` : ""}`}</title>
             </rect>
             {d.value > 0 && (
-              <text x={cx} y={barY - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily="'Montserrat', sans-serif">
+              <text x={cx} y={barY - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily="'Space Grotesk', sans-serif">
                 {d.value.toFixed(1)}%
               </text>
             )}

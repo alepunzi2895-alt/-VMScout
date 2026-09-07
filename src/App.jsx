@@ -230,7 +230,7 @@ function PaletteStrip({ hex = [], names = [] }) {
     <div style={{ display: "flex", gap: 6, margin: "12px 0 8px" }}>
       {hex.map((c, i) => (
         <div key={i} style={{ textAlign: "center" }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: c, border: "2px solid rgba(0,0,0,0.08)", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} />
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: c, border: "2px solid rgba(0,0,0,0.08)", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} />
           <div style={{ fontSize: 9, marginTop: 4, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", textTransform: "uppercase", maxWidth: 54, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {names[i] || c}
           </div>
@@ -245,7 +245,7 @@ function ImageGrid({ images }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, margin: "10px 0" }}>
       {images.slice(0, 6).map((img, i) => (
-        <div key={i} style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", position: "relative", background: "#111" }}>
+        <div key={i} style={{ borderRadius: 12, overflow: "hidden", aspectRatio: "1", position: "relative", background: "#111" }}>
           <img src={img.thumb} alt={img.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} loading="lazy" />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "18px 5px 5px", background: "linear-gradient(transparent, rgba(0,0,0,0.7))", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
             <span style={{ fontSize: 7, color: "rgba(255,255,255,0.7)", fontFamily: "'JetBrains Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "55%" }}>{img.author}</span>
@@ -266,7 +266,7 @@ function CopyButton({ text, label = "Copia" }) {
   const [copied, setCopied] = useState(false);
   return (
     <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      style={{ width: "100%", padding: "7px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", background: copied ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+      style={{ width: "100%", padding: "7px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", background: copied ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Grotesk', sans-serif" }}>
       {copied ? "✓ Copiato!" : label}
     </button>
   );
@@ -303,7 +303,7 @@ function CanvaUploadBtn({ url }) {
     }
   }
 
-  const base = { padding: "4px 8px", borderRadius: 5, fontSize: 9, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", cursor: "pointer", border: "none", display: "flex", alignItems: "center", gap: 3 };
+  const base = { padding: "4px 8px", borderRadius: 8, fontSize: 9, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", cursor: "pointer", border: "none", display: "flex", alignItems: "center", gap: 3 };
   if (status === "done") return <span style={{ ...base, background: "#3A7A3A", color: "#9EE49E" }}>✓ Canva</span>;
   if (status === "error") return <span title={errMsg} style={{ ...base, background: "#7A3A3A", color: "#E49E9E", cursor: "help" }}>⚠ Err</span>;
   return (
@@ -410,10 +410,10 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 16, padding: 22, fontFamily: "'DM Sans', sans-serif", color: "#F0EBE3" }}
+        style={{ width: "100%", maxWidth: 480, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 20, padding: 22, fontFamily: "'Space Grotesk', sans-serif", color: "#F0EBE3" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
             ✦ Crea design in Canva
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
@@ -424,33 +424,33 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {CANVA_QD_FORMATS.map(f => (
             <button key={f.id} onClick={() => { setFormat(f.id); setDesignUrl(null); }}
-              style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 8, cursor: "pointer", border: `1px solid ${format === f.id ? "#00C4CC70" : "#1E1E1E"}`, background: format === f.id ? "rgba(0,196,204,0.1)" : "transparent", color: format === f.id ? "#00C4CC" : "#555", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+              style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 12, cursor: "pointer", border: `1px solid ${format === f.id ? "#00C4CC70" : "#1E1E1E"}`, background: format === f.id ? "rgba(0,196,204,0.1)" : "transparent", color: format === f.id ? "#00C4CC" : "#555", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
               {f.label}
             </button>
           ))}
         </div>
 
         {!templateId && (
-          <div style={{ padding: "9px 12px", borderRadius: 9, background: "rgba(201,169,110,0.08)", border: "1px solid rgba(201,169,110,0.2)", color: "#C9A96E", fontSize: 11, marginBottom: 14, lineHeight: 1.5 }}>
+          <div style={{ padding: "9px 12px", borderRadius: 13, background: "rgba(201,169,110,0.08)", border: "1px solid rgba(201,169,110,0.2)", color: "#C9A96E", fontSize: 11, marginBottom: 14, lineHeight: 1.5 }}>
             Nessun Template ID per "{fmt?.label}" — impostalo in Canva Studio.
           </div>
         )}
 
         {/* Caption */}
-        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 5 }}>Caption</label>
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>Caption</label>
         <textarea value={captionText} onChange={e => setCaptionText(e.target.value)} rows={3}
-          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", marginBottom: 12 }} />
+          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 12 }} />
 
         {/* Query */}
-        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 5 }}>Query foto</label>
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>Query foto</label>
         <input value={queryText} onChange={e => setQueryText(e.target.value)}
-          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }} />
+          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 10 }} />
 
         {/* Sorgente + immagini suggerite */}
         <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
           {Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]).map(([k, s]) => (
             <button key={k} onClick={() => setSource(k)}
-              style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${source === k ? "#8B7355" : "#222"}`, background: source === k ? "rgba(139,115,85,0.15)" : "transparent", color: source === k ? "#C9A96E" : "#555", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>
+              style={{ padding: "4px 10px", borderRadius: 10, border: `1px solid ${source === k ? "#8B7355" : "#222"}`, background: source === k ? "rgba(139,115,85,0.15)" : "transparent", color: source === k ? "#C9A96E" : "#555", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>
               {s.name}
             </button>
           ))}
@@ -461,19 +461,19 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 14 }}>
           <button onClick={() => setSelectedImg(null)}
-            style={{ aspectRatio: "1", borderRadius: 8, border: `2px solid ${selectedImg === null ? "#00C4CC" : "#222"}`, background: "#141414", color: selectedImg === null ? "#00C4CC" : "#555", fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, padding: 4 }}>
+            style={{ aspectRatio: "1", borderRadius: 12, border: `2px solid ${selectedImg === null ? "#00C4CC" : "#222"}`, background: "#141414", color: selectedImg === null ? "#00C4CC" : "#555", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, padding: 4 }}>
             🔀 Auto
           </button>
           {imgLoading && !images?.length
             ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ aspectRatio: "1", borderRadius: 8, background: "#141414" }} />
+                <div key={i} style={{ aspectRatio: "1", borderRadius: 12, background: "#141414" }} />
               ))
             : (images || []).slice(0, 5).map((img, i) => {
                 const url = img.full || img.thumb;
                 const active = selectedImg === url;
                 return (
                   <button key={img.id || i} onClick={() => setSelectedImg(url)}
-                    style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${active ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
+                    style={{ aspectRatio: "1", borderRadius: 12, overflow: "hidden", padding: 0, border: `2px solid ${active ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
                     <img src={img.thumb} alt={img.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: active ? 1 : 0.85 }} loading="lazy" />
                   </button>
                 );
@@ -481,17 +481,17 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         </div>
 
         {error && (
-          <div style={{ padding: "9px 12px", borderRadius: 9, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>
+          <div style={{ padding: "9px 12px", borderRadius: 13, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>
         )}
 
         {designUrl ? (
           <a href={designUrl} target="_blank" rel="noopener noreferrer"
-            style={{ display: "block", padding: "12px", borderRadius: 9, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700, fontFamily: "'Montserrat', sans-serif" }}>
+            style={{ display: "block", padding: "12px", borderRadius: 13, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>
             ✓ Apri design in Canva →
           </a>
         ) : (
           <button onClick={handleCreate} disabled={creating || !templateId || !captionText.trim()}
-            style={{ width: "100%", padding: "12px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: creating || !templateId || !captionText.trim() ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Montserrat', sans-serif", opacity: creating || !templateId || !captionText.trim() ? 0.5 : 1 }}>
+            style={{ width: "100%", padding: "12px", borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: creating || !templateId || !captionText.trim() ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: creating || !templateId || !captionText.trim() ? 0.5 : 1 }}>
             {creating ? "⏳ Creo design…" : "✦ Crea Design in Canva"}
           </button>
         )}
@@ -507,7 +507,7 @@ function CanvaDesignButton({ caption, cta, query, orientation, canvaTemplates })
   return (
     <>
       <button onClick={() => setOpen(true)}
-        style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+        style={{ padding: "7px 12px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
         ✦ Crea design
       </button>
       <CanvaQuickDesignModal
@@ -535,7 +535,7 @@ function CanvaCarouselBtn({ slides, canvaTemplates }) {
   if (!templateId) {
     return (
       <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, Image_2/Testo_2, ...)'
-        style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "help", userSelect: "none" }}>
+        style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
         ✦ Configura template carosello per crearlo in un click
       </span>
     );
@@ -544,7 +544,7 @@ function CanvaCarouselBtn({ slides, canvaTemplates }) {
   if (state === "done" && url) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer"
-        style={{ padding: "9px 16px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 700, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
+        style={{ padding: "9px 16px", borderRadius: 12, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 700, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
         ✓ Apri Carosello in Canva →
       </a>
     );
@@ -580,7 +580,7 @@ function CanvaCarouselBtn({ slides, canvaTemplates }) {
 
   return (
     <button onClick={handleCreate} disabled={state === "loading"} title={state === "error" ? errMsg : undefined}
-      style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+      style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}>
       {state === "loading" ? "⏳ Compongo il carosello…" : state === "error" ? "⚠ Riprova" : `✦ Crea Carosello Completo su Canva (${slides.length} slide)`}
     </button>
   );
@@ -620,14 +620,14 @@ function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <a href={url} target="_blank" rel="noopener noreferrer"
-          style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(139,115,85,0.06)", borderRadius: 10, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(139,115,85,0.12)", fontSize: 13 }}>
-          <span style={{ width: 24, height: 24, borderRadius: 6, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
+          style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(139,115,85,0.06)", borderRadius: 14, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(139,115,85,0.12)", fontSize: 13 }}>
+          <span style={{ width: 24, height: 24, borderRadius: 9, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
           <span style={{ fontStyle: "italic", opacity: 0.85 }}>"{query}"</span>
           <span style={{ marginLeft: "auto", fontSize: 16, opacity: 0.4 }}>↗</span>
         </a>
         {canFetch && (
           <button onClick={handleToggle}
-            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.2)", background: expanded ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>
+            style={{ padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.2)", background: expanded ? "rgba(139,115,85,0.1)" : "transparent", color: "#8B7355", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>
             {loading ? "..." : expanded ? "Nascondi" : "Mostra"}
           </button>
         )}
@@ -669,8 +669,8 @@ function VideoQueryCard({ query, sourceKey }) {
   return (
     <div>
       <a href={src.webUrl(query)} target="_blank" rel="noopener noreferrer"
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(26,26,46,0.05)", borderRadius: 10, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(26,26,46,0.1)", fontSize: 13 }}>
-        <span style={{ width: 24, height: 24, borderRadius: 6, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(26,26,46,0.05)", borderRadius: 14, textDecoration: "none", color: "#3D3225", border: "1px solid rgba(26,26,46,0.1)", fontSize: 13 }}>
+        <span style={{ width: 24, height: 24, borderRadius: 9, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{src.icon}</span>
         <span style={{ fontStyle: "italic", opacity: 0.85 }}>"{query}"</span>
         <span style={{ marginLeft: "auto", fontSize: 14, opacity: 0.4 }}>▶</span>
       </a>
@@ -680,7 +680,7 @@ function VideoQueryCard({ query, sourceKey }) {
         ) : videos && videos.length > 0 ? (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 8, paddingBottom: 2 }}>
             {videos.slice(0, 3).map(v => (
-              <div key={v.id} style={{ width: 110, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
+              <div key={v.id} style={{ width: 110, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
                 <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
                 <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 10 }}>↗</a>
               </div>
@@ -721,7 +721,7 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
         <PaletteStrip hex={strategy.palette_hex} names={strategy.palette} />
       </div>
 
-      <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 12, padding: "14px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
+      <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 16, padding: "14px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
         <SectionLabel>Direzione Artistica</SectionLabel>
         <div style={{ fontSize: 13, color: "#3D3225", lineHeight: 1.6 }}>
           <strong>Stile:</strong> {direction.style}<br />
@@ -740,7 +740,7 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {Object.entries(PHOTO_SOURCES).map(([key, src]) => (
           <button key={key} onClick={() => setSelectedSource(key)}
-            style={{ padding: "6px 16px", borderRadius: 8, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            style={{ padding: "6px 16px", borderRadius: 12, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             {src.name} {API_KEYS[key] ? "●" : ""}
           </button>
         ))}
@@ -760,22 +760,22 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
         </div>
       </div>
 
-      <div style={{ padding: "10px 14px", background: "rgba(180,60,60,0.06)", borderRadius: 10, border: "1px solid rgba(180,60,60,0.12)", marginBottom: 18 }}>
+      <div style={{ padding: "10px 14px", background: "rgba(180,60,60,0.06)", borderRadius: 14, border: "1px solid rgba(180,60,60,0.12)", marginBottom: 18 }}>
         <SectionLabel color="#B43C3C">✕ Evita queste query</SectionLabel>
         {queries.avoid.map((q, i) => <div key={i} style={{ fontSize: 12, color: "#8B5A5A", fontStyle: "italic", padding: "2px 0" }}>"{q}"</div>)}
       </div>
 
       {video_queries?.primary && (
-        <div style={{ padding: "18px", background: "linear-gradient(135deg, rgba(26,26,46,0.04), rgba(26,26,46,0.08))", borderRadius: 14, border: "1px solid rgba(26,26,46,0.1)" }}>
+        <div style={{ padding: "18px", background: "linear-gradient(135deg, rgba(26,26,46,0.04), rgba(26,26,46,0.08))", borderRadius: 18, border: "1px solid rgba(26,26,46,0.1)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #1A1A2E, #2D2D4A)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>▶</span>
+            <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #1A1A2E, #2D2D4A)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>▶</span>
             <SectionLabel color="#1A1A2E">Video & Footage</SectionLabel>
           </div>
-          {video_queries.style_notes && <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 14px", fontStyle: "italic", padding: "8px 12px", background: "rgba(255,255,255,0.5)", borderRadius: 8, borderLeft: "3px solid #1A1A2E" }}>{video_queries.style_notes}</p>}
+          {video_queries.style_notes && <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 14px", fontStyle: "italic", padding: "8px 12px", background: "rgba(255,255,255,0.5)", borderRadius: 12, borderLeft: "3px solid #1A1A2E" }}>{video_queries.style_notes}</p>}
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
               <button key={key} onClick={() => setSelectedVideoSource(key)}
-                style={{ padding: "5px 14px", borderRadius: 8, border: selectedVideoSource === key ? "2px solid #1A1A2E" : "2px solid rgba(26,26,46,0.12)", background: selectedVideoSource === key ? "rgba(26,26,46,0.1)" : "transparent", color: selectedVideoSource === key ? "#1A1A2E" : "#666", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                style={{ padding: "5px 14px", borderRadius: 12, border: selectedVideoSource === key ? "2px solid #1A1A2E" : "2px solid rgba(26,26,46,0.12)", background: selectedVideoSource === key ? "rgba(26,26,46,0.1)" : "transparent", color: selectedVideoSource === key ? "#1A1A2E" : "#666", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                 {src.name}
               </button>
             ))}
@@ -830,7 +830,7 @@ function SlideSearchLinks({ query, orientation, instagramHashtag }) {
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {sources.filter(s => s.key !== "instagram").map(src => (
           <a key={src.key} href={src.webUrl(query, orientation)} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(139,115,85,0.15)", textDecoration: "none", fontSize: 9, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s", background: "transparent" }}
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 9, border: "1px solid rgba(139,115,85,0.15)", textDecoration: "none", fontSize: 9, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s", background: "transparent" }}
             onMouseEnter={e => { e.currentTarget.style.background = src.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = src.color; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8B7355"; e.currentTarget.style.borderColor = "rgba(139,115,85,0.15)"; }}>
             <span style={{ width: 14, height: 14, borderRadius: 3, background: src.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, flexShrink: 0 }}>{src.icon}</span>
@@ -840,13 +840,13 @@ function SlideSearchLinks({ query, orientation, instagramHashtag }) {
       </div>
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         <a href={PHOTO_SOURCES.instagram.webUrl(query)} target="_blank" rel="noopener noreferrer"
-          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 9, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
           <span style={{ width: 14, height: 14, borderRadius: 3, background: "#E1306C", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, fontWeight: 700, flexShrink: 0 }}>IG</span>
           Instagram (ispirazione)
         </a>
         {igHashtag && (
           <a href={`https://www.instagram.com/explore/tags/${encodeURIComponent(igHashtag)}/`} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 9, border: "1px solid rgba(225,48,108,0.25)", textDecoration: "none", fontSize: 9, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace", background: "rgba(225,48,108,0.05)" }}>
             #{igHashtag}
           </a>
         )}
@@ -938,7 +938,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
+        <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
       </div>
 
@@ -947,7 +947,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {Object.entries(PHOTO_SOURCES).map(([key, src]) => (
             <button key={key} onClick={() => setSelectedSource(key)}
-              style={{ padding: "5px 14px", borderRadius: 8, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+              style={{ padding: "5px 14px", borderRadius: 12, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
               {src.name} {API_KEYS[key] ? "●" : ""}
             </button>
           ))}
@@ -955,19 +955,19 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 14 }}>
           {LANGS.map(l => (
             <button key={l.id} onClick={() => setLang(l.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Grotesk', sans-serif" }}>
               {l.flag} {l.label}
             </button>
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 10 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 14 }}>
           {PLATFORMS.map(p => (
             <button key={p.id} onClick={() => setPlatform(p.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: platform === p.id ? "#FBF8F3" : "transparent", boxShadow: platform === p.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: platform === p.id ? p.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: platform === p.id ? "#FBF8F3" : "transparent", boxShadow: platform === p.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: platform === p.id ? p.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Grotesk', sans-serif" }}>
               {p.icon} {p.label}
             </button>
           ))}
@@ -989,15 +989,15 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
           const hashtags = getHashtags(post);
 
           return (
-            <div key={`${i}-${lang}-${platform}`} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, overflow: "hidden", transition: "all 0.3s" }}>
+            <div key={`${i}-${lang}-${platform}`} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 18, overflow: "hidden", transition: "all 0.3s" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
                 <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
                 <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
                 {post.slide_number === 1 && (
-                  <span style={{ fontSize: 9, color: "#A67C3D", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, background: "rgba(166,124,61,0.12)" }}>Copertina</span>
+                  <span style={{ fontSize: 9, color: "#A67C3D", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, background: "rgba(166,124,61,0.12)" }}>Copertina</span>
                 )}
                 {post.hook_type && (
-                  <span title="Tipo di hook (prima riga)" style={{ fontSize: 9, color: "#7C6A9B", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, background: "rgba(124,106,155,0.12)" }}>hook: {post.hook_type}</span>
+                  <span title="Tipo di hook (prima riga)" style={{ fontSize: 9, color: "#7C6A9B", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, background: "rgba(124,106,155,0.12)" }}>hook: {post.hook_type}</span>
                 )}
               </div>
 
@@ -1012,7 +1012,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
               )}
 
               <div style={{ padding: "14px 16px" }}>
-                <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 8, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
+                <div style={{ fontSize: 12, color: "#6B5B45", fontStyle: "italic", marginBottom: 12, padding: "8px 12px", background: "rgba(139,115,85,0.04)", borderRadius: 12, borderLeft: "3px solid rgba(139,115,85,0.2)", lineHeight: 1.55 }}>
                   📷 {post.visual_description}
                 </div>
 
@@ -1023,7 +1023,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                 {hashtags.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: platform === "instagram" ? "rgba(225,48,108,0.1)" : "rgba(24,119,242,0.1)", color: platform === "instagram" ? "#E1306C" : "#1877F2", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: platform === "instagram" ? "rgba(225,48,108,0.1)" : "rgba(24,119,242,0.1)", color: platform === "instagram" ? "#E1306C" : "#1877F2", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
                         {platform === "instagram" ? "IG" : "FB"} × {hashtags.length}
                       </span>
                     </div>
@@ -1036,7 +1036,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                 )}
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
-                  {cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 6, background: "rgba(139,115,85,0.08)" }}>CTA: {cta}</span>}
+                  {cta && <span style={{ fontSize: 11, fontWeight: 600, color: "#8B7355", padding: "4px 10px", borderRadius: 9, background: "rgba(139,115,85,0.08)" }}>CTA: {cta}</span>}
                   {post.platform_tip && <span style={{ fontSize: 10, color: "#999", fontStyle: "italic", maxWidth: 220 }}>💡 {post.platform_tip}</span>}
                 </div>
               </div>
@@ -1047,7 +1047,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                 </div>
                 <CanvaDesignButton caption={getCaption(post)} cta={cta} query={post.search_query || ""} orientation={orientation} canvaTemplates={brand?.canvaTemplates} />
                 <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
-                  style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                  style={{ padding: "7px 14px", borderRadius: 12, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap" }}>
                   {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
                 </button>
               </div>
@@ -1094,7 +1094,7 @@ function SceneVideoPlayer({ query, sourceKey }) {
     return (
       <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
         {Object.entries(VIDEO_SOURCES).map(([key, s]) => (
-          <a key={key} href={s.webUrl(query)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(26,26,46,0.12)", textDecoration: "none", fontSize: 9, color: sourceKey === key ? "#fff" : "#666", background: sourceKey === key ? s.color : "transparent", fontFamily: "'JetBrains Mono', monospace" }}>{s.name}</a>
+          <a key={key} href={s.webUrl(query)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 9, border: "1px solid rgba(26,26,46,0.12)", textDecoration: "none", fontSize: 9, color: sourceKey === key ? "#fff" : "#666", background: sourceKey === key ? s.color : "transparent", fontFamily: "'JetBrains Mono', monospace" }}>{s.name}</a>
         ))}
       </div>
     );
@@ -1107,7 +1107,7 @@ function SceneVideoPlayer({ query, sourceKey }) {
       ) : videos && videos.length > 0 ? (
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {videos.slice(0,3).map(v => (
-            <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 8, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
+            <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
               <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace" }}>{v.author || "Creator"}</div>
               <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 12 }}>↗</a>
@@ -1147,24 +1147,24 @@ function VideoTab({ data }) {
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #1A1A2E, #4A1942)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎬</span>
+        <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #1A1A2E, #4A1942)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎬</span>
         <SectionLabel color="#1A1A2E">Video Storytelling</SectionLabel>
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
           {LANGS.map(l => (
             <button key={l.id} onClick={() => setLang(l.id)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
               {l.flag} {l.label}
             </button>
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 10 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
           {Object.entries(VIDEO_SOURCES).map(([key, src]) => (
             <button key={key} onClick={() => setVideoSource(key)}
-              style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: videoSource === key ? "#FBF8F3" : "transparent", boxShadow: videoSource === key ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: videoSource === key ? src.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: videoSource === key ? "#FBF8F3" : "transparent", boxShadow: videoSource === key ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: videoSource === key ? src.color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
               {src.name}
             </button>
           ))}
@@ -1173,31 +1173,31 @@ function VideoTab({ data }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {[{ l: "Durata", v: vs.duration }, { l: "Aspect", v: vs.aspect_ratio }, { l: "Musica", v: vs.music_mood }].filter(m => m.v).map((m, i) => (
-          <div key={i} style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(26,26,46,0.06)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 11, color: "#3D3225" }}>
+          <div key={i} style={{ padding: "6px 12px", borderRadius: 12, background: "rgba(26,26,46,0.06)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 11, color: "#3D3225" }}>
             <span style={{ fontWeight: 700, opacity: 0.5, marginRight: 4 }}>{m.l}:</span>{m.v}
           </div>
         ))}
       </div>
 
-      {vs.concept && <p style={{ fontSize: 13, lineHeight: 1.6, color: "#3D3225", margin: "0 0 18px", padding: "10px 14px", background: "rgba(26,26,46,0.04)", borderRadius: 10, borderLeft: "3px solid #1A1A2E", fontStyle: "italic" }}>{ml(vs.concept)}</p>}
+      {vs.concept && <p style={{ fontSize: 13, lineHeight: 1.6, color: "#3D3225", margin: "0 0 18px", padding: "10px 14px", background: "rgba(26,26,46,0.04)", borderRadius: 14, borderLeft: "3px solid #1A1A2E", fontStyle: "italic" }}>{ml(vs.concept)}</p>}
 
       <div style={{ position: "relative", paddingLeft: 22 }}>
         <div style={{ position: "absolute", left: 8, top: 0, bottom: 0, width: 2, background: "linear-gradient(to bottom, #1A1A2E, rgba(26,26,46,0.1))", borderRadius: 1 }} />
         {vs.scenes.map((s, i) => (
           <div key={i} style={{ position: "relative", marginBottom: i < vs.scenes.length - 1 ? 16 : 0, paddingLeft: 18 }}>
             <div style={{ position: "absolute", left: -6, top: 12, width: 10, height: 10, borderRadius: "50%", background: i === 0 ? "#E1306C" : i === vs.scenes.length - 1 ? "#1A1A2E" : "#8B7355", border: "2px solid #F5F0E8" }} />
-            <div style={{ background: "#FBF8F3", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ background: "#FBF8F3", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 16, padding: "12px 14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#1A1A2E", fontFamily: "'JetBrains Mono', monospace" }}>SC.{String(s.scene_number).padStart(2, "0")}</span>
-                <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(26,26,46,0.06)", color: "#666", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{s.duration}</span>
-                <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(139,115,85,0.08)", color: "#8B7355", textTransform: "uppercase", fontWeight: 600 }}>{s.footage_type}</span>
+                <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: "rgba(26,26,46,0.06)", color: "#666", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{s.duration}</span>
+                <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: "rgba(139,115,85,0.08)", color: "#8B7355", textTransform: "uppercase", fontWeight: 600 }}>{s.footage_type}</span>
                 {s.transition && <span style={{ marginLeft: "auto", fontSize: 9, color: "#999", fontFamily: "'JetBrains Mono', monospace" }}>→ {s.transition}</span>}
               </div>
 
               <p style={{ fontSize: 12.5, lineHeight: 1.55, color: "#3D3225", margin: "0 0 8px" }}>{ml(s.description)}</p>
 
               {ml(s.text_overlay) && (
-                <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 6, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>
+                <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 9, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>
                   {ml(s.text_overlay)}
                 </div>
               )}
@@ -1216,7 +1216,7 @@ function VideoTab({ data }) {
       </div>
 
       {vs.audio_notes && (
-        <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(26,26,46,0.04)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 12, color: "#3D3225", lineHeight: 1.55 }}>
+        <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 14, background: "rgba(26,26,46,0.04)", border: "1px solid rgba(26,26,46,0.08)", fontSize: 12, color: "#3D3225", lineHeight: 1.55 }}>
           <span style={{ fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#1A1A2E", display: "block", marginBottom: 4 }}>🎵 Sound Design</span>
           {ml(vs.audio_notes)}
         </div>
@@ -1239,17 +1239,17 @@ function EditorialTab({ data }) {
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #8B7355, #6B5B45)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📅</span>
+        <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #8B7355, #6B5B45)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📅</span>
         <SectionLabel>Piano Editoriale Settimanale</SectionLabel>
       </div>
 
-      <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
+      <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 16, padding: "12px 16px", marginBottom: 18, borderLeft: "3px solid #8B7355" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 4 }}>Focus Strategico</div>
             <div style={{ fontSize: 13.5, color: "#3D3225", fontWeight: 500 }}>{plan.weekly_focus}</div>
           </div>
-          <div style={{ fontSize: 10, fontWeight: 700, background: "rgba(139,115,85,0.1)", padding: "3px 8px", borderRadius: 4, color: "#8B7355" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, background: "rgba(139,115,85,0.1)", padding: "3px 8px", borderRadius: 6, color: "#8B7355" }}>
             DURATA: {plan.duration_context || "1 Settimana"}
           </div>
         </div>
@@ -1257,20 +1257,20 @@ function EditorialTab({ data }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {plan.days.map((d, i) => (
-          <div key={i} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 14 }}>
+          <div key={i} style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 16, padding: "12px 14px", display: "flex", gap: 14 }}>
             <div style={{ width: 45, textAlign: "center", borderRight: "1px solid rgba(139,115,85,0.1)", paddingRight: 10, flexShrink: 0 }}>
               <div style={{ fontSize: 9, color: "#8B7355", fontWeight: 700, textTransform: "uppercase" }}>{d.day?.includes("Settimana") ? "WP" : d.day?.substring(0, 3)}</div>
-              <div style={{ fontSize: 16, fontWeight: 400, color: "#2C2418", fontFamily: "'Instrument Serif', serif" }}>{i + 1}</div>
+              <div style={{ fontSize: 16, fontWeight: 400, color: "#2C2418", fontFamily: "'Space Grotesk', sans-serif" }}>{i + 1}</div>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: d.content_type?.toLowerCase().includes("reel") ? "rgba(225,48,108,0.1)" : "rgba(139,115,85,0.1)", color: d.content_type?.toLowerCase().includes("reel") ? "#E1306C" : "#8B7355", fontWeight: 700 }}>{d.content_type}</span>
-                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(60,100,180,0.1)", color: "#3C64B4", fontWeight: 700 }}>{d.best_time}</span>
-                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(180,60,60,0.1)", color: "#B43C3C", fontWeight: 700 }}>{d.goal}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: d.content_type?.toLowerCase().includes("reel") ? "rgba(225,48,108,0.1)" : "rgba(139,115,85,0.1)", color: d.content_type?.toLowerCase().includes("reel") ? "#E1306C" : "#8B7355", fontWeight: 700 }}>{d.content_type}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: "rgba(60,100,180,0.1)", color: "#3C64B4", fontWeight: 700 }}>{d.best_time}</span>
+                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: "rgba(180,60,60,0.1)", color: "#B43C3C", fontWeight: 700 }}>{d.goal}</span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2418", marginBottom: 4 }}>{d.topic}</div>
               {d.story_reel_hint && (
-                <div style={{ fontSize: 11, background: "rgba(0,0,0,0.03)", padding: "6px 10px", borderRadius: 8, margin: "6px 0", color: "#6B5B45", borderLeft: "2px solid #E1306C" }}>
+                <div style={{ fontSize: 11, background: "rgba(0,0,0,0.03)", padding: "6px 10px", borderRadius: 12, margin: "6px 0", color: "#6B5B45", borderLeft: "2px solid #E1306C" }}>
                   <span style={{ fontWeight: 700, fontSize: 9, display: "block", marginBottom: 2 }}>⚡ SUGGERIMENTO ECOISTEMA (Reel/Story):</span>
                   {d.story_reel_hint}
                 </div>
@@ -1333,10 +1333,10 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 
   return (
     <div style={{ animation: "fadeSlideUp 0.5s ease-out" }}>
-      <div style={{ display: "flex", gap: 4, marginBottom: 18, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 12 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 18, padding: 3, background: "rgba(139,115,85,0.06)", borderRadius: 16 }}>
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{ flex: 1, padding: "8px 12px", borderRadius: 9, border: "none", background: activeTab === tab.id ? "#FBF8F3" : "transparent", boxShadow: activeTab === tab.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", color: activeTab === tab.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans', sans-serif" }}>
+            style={{ flex: 1, padding: "8px 12px", borderRadius: 13, border: "none", background: activeTab === tab.id ? "#FBF8F3" : "transparent", boxShadow: activeTab === tab.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", color: activeTab === tab.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Grotesk', sans-serif" }}>
             {tab.icon} {tab.label}
           </button>
         ))}
@@ -1349,7 +1349,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 
       <details style={{ marginTop: 18 }}>
         <summary style={{ fontSize: 11, color: "#8B7355", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" }}>{"{ }"} Mostra JSON per API</summary>
-        <pre style={{ marginTop: 8, padding: 14, background: "#1E1B16", color: "#C4B99A", borderRadius: 10, fontSize: 10, lineHeight: 1.5, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", maxHeight: 300 }}>
+        <pre style={{ marginTop: 8, padding: 14, background: "#1E1B16", color: "#C4B99A", borderRadius: 14, fontSize: 10, lineHeight: 1.5, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", maxHeight: 300 }}>
           {JSON.stringify(data, null, 2)}
         </pre>
       </details>
@@ -1486,10 +1486,8 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "'Instrument Serif', Georgia, serif", position: "relative" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
-        @keyframes typingBounce { 0%,80%,100% { transform:translateY(0);opacity:.4 } 40% { transform:translateY(-6px);opacity:1 } }
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "'Space Grotesk', Georgia, serif", position: "relative" }}>
+      <style>{`        @keyframes typingBounce { 0%,80%,100% { transform:translateY(0);opacity:.4 } 40% { transform:translateY(-6px);opacity:1 } }
         @keyframes fadeSlideUp { from { opacity:0;transform:translateY(12px) } to { opacity:1;transform:translateY(0) } }
         .vms-input:focus { outline:none; box-shadow:0 0 0 2px rgba(139,115,85,.3) }
         .vms-input::placeholder { color:#B5A88A }
@@ -1504,20 +1502,20 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>◈ Visual Marketing Scout</div>
             <button onClick={() => setShowApiSetup(!showApiSetup)}
-              style={{ fontSize: 9, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(139,115,85,.3)", background: anyKey ? "rgba(90,186,90,.1)" : "rgba(139,115,85,.1)", color: anyKey ? "#5ABA5A" : "#B5A88A", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
+              style={{ fontSize: 9, padding: "3px 10px", borderRadius: 9, border: "1px solid rgba(139,115,85,.3)", background: anyKey ? "rgba(90,186,90,.1)" : "rgba(139,115,85,.1)", color: anyKey ? "#5ABA5A" : "#B5A88A", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
               {anyKey ? "● API" : "○ API Setup"}
             </button>
           </div>
           <h1 style={{ fontSize: messages.length ? 28 : 42, fontWeight: 400, color: "#F0EBE3", margin: 0, lineHeight: 1.15, transition: "font-size .4s ease" }}>
             Trova l'immagine giusta.<br /><em style={{ fontStyle: "italic", color: "#8B7355" }}>Quella vera.</em>
           </h1>
-          {!messages.length && <p style={{ fontSize: 14, color: "#8B7355", marginTop: 16, fontFamily: "'DM Sans', sans-serif", maxWidth: 500, margin: "16px auto 0", lineHeight: 1.6 }}>
+          {!messages.length && <p style={{ fontSize: 14, color: "#8B7355", marginTop: 16, fontFamily: "'Space Grotesk', sans-serif", maxWidth: 500, margin: "16px auto 0", lineHeight: 1.6 }}>
             Descrivi il tuo obiettivo di marketing. Riceverai strategia visiva, caption pronte per i post, storyboard video e query per Unsplash, Pexels e Pixabay.
           </p>}
         </header>
 
         {showApiSetup && (
-          <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 14, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'DM Sans', sans-serif" }}>
+          <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 18, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'Space Grotesk', sans-serif" }}>
             <SectionLabel>🔑 API Keys — Anteprima Immagini</SectionLabel>
             <p style={{ fontSize: 12, color: "#6B5B45", marginBottom: 14, lineHeight: 1.5, marginTop: 0 }}>
               Senza keys l'app funziona comunque — i link aprono le ricerche sui siti. Con le keys attivi le anteprime inline delle foto.
@@ -1534,7 +1532,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
                 </div>
                 <input type="password" placeholder={`Incolla ${label}...`} defaultValue={API_KEYS[key]}
                   onChange={e => { API_KEYS[key] = e.target.value; }}
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,.2)", background: "#F5F0E8", fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#3D3225" }} />
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(139,115,85,.2)", background: "#F5F0E8", fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#3D3225" }} />
               </div>
             ))}
             <div style={{ fontSize: 10, color: "#999", marginTop: 8, lineHeight: 1.4 }}>Le keys restano solo nel browser e non vengono salvate su nessun server.</div>
@@ -1545,7 +1543,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 32, animation: "fadeSlideUp .6s ease-out .2s both" }}>
             {EXAMPLES.map((ex, i) => (
               <button key={i} onClick={() => sendMessage(ex)}
-                style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(139,115,85,.35)", background: "rgba(139,115,85,.14)", color: "#D9CCB8", fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "left", maxWidth: 320 }}>
+                style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(139,115,85,.35)", background: "rgba(139,115,85,.14)", color: "#D9CCB8", fontSize: 12, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", textAlign: "left", maxWidth: 320 }}>
                 {ex}
               </button>
             ))}
@@ -1557,7 +1555,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
             <div key={i} style={{ marginBottom: 20, animation: "fadeSlideUp .4s ease-out" }}>
               {msg.role === "user" ? (
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <div style={{ maxWidth: "85%", padding: "12px 18px", borderRadius: "18px 18px 4px 18px", background: "#3D3225", color: "#F0E8D8", fontSize: 14, lineHeight: 1.55, fontFamily: "'DM Sans', sans-serif" }}>{msg.content}</div>
+                  <div style={{ maxWidth: "85%", padding: "12px 18px", borderRadius: "18px 18px 4px 18px", background: "#3D3225", color: "#F0E8D8", fontSize: 14, lineHeight: 1.55, fontFamily: "'Space Grotesk', sans-serif" }}>{msg.content}</div>
                 </div>
               ) : (
                 <div style={{ maxWidth: "95%" }}>
@@ -1570,7 +1568,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
                       </button>
                     )}
                   </div>
-                  <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
+                  <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'Space Grotesk', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
                     {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} brand={brand} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
                   </div>
                 </div>
@@ -1583,7 +1581,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
               <div style={{ display: "inline-block", padding: "14px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)" }}>
                 <TypingDots />
-                <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'DM Sans', sans-serif", marginTop: 4 }}>Strategia, caption e storyboard in arrivo...</div>
+                <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif", marginTop: 4 }}>Strategia, caption e storyboard in arrivo...</div>
               </div>
             </div>
           )}
@@ -1596,10 +1594,10 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
             <textarea className="vms-input" value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               placeholder="Descrivi il tuo obiettivo di marketing..." rows={1} disabled={loading}
-              style={{ flex: 1, padding: "14px 18px", borderRadius: 16, border: "1.5px solid rgba(139,115,85,.2)", background: "#FFFCF5", fontSize: 14, fontFamily: "'DM Sans', sans-serif", color: "#2C2418", resize: "none", lineHeight: 1.5 }}
+              style={{ flex: 1, padding: "14px 18px", borderRadius: 20, border: "1.5px solid rgba(139,115,85,.2)", background: "#FFFCF5", fontSize: 14, fontFamily: "'Space Grotesk', sans-serif", color: "#2C2418", resize: "none", lineHeight: 1.5 }}
               onInput={e => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
             <button onClick={() => sendMessage()} disabled={loading || !input.trim()}
-              style={{ width: 48, height: 48, borderRadius: 14, border: "none", background: loading || !input.trim() ? "rgba(139,115,85,.15)" : "#3D3225", color: loading || !input.trim() ? "#B5A88A" : "#F0E8D8", fontSize: 20, cursor: loading || !input.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              style={{ width: 48, height: 48, borderRadius: 18, border: "none", background: loading || !input.trim() ? "rgba(139,115,85,.15)" : "#3D3225", color: loading || !input.trim() ? "#B5A88A" : "#F0E8D8", fontSize: 20, cursor: loading || !input.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               ↑
             </button>
           </div>

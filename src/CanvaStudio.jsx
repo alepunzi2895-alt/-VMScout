@@ -13,7 +13,7 @@ const FORMATS = [
 
 function SectionCard({ children, style = {} }) {
   return (
-    <div style={{ background: "#0C0C0C", border: "1px solid #1C1C1C", borderRadius: 16, padding: 24, ...style }}>
+    <div style={{ background: "#0C0C0C", border: "1px solid #1C1C1C", borderRadius: 20, padding: 24, ...style }}>
       {children}
     </div>
   );
@@ -21,7 +21,7 @@ function SectionCard({ children, style = {} }) {
 
 function Label({ children }) {
   return (
-    <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, marginBottom: 6 }}>
+    <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, marginBottom: 6 }}>
       {children}
     </div>
   );
@@ -63,7 +63,7 @@ function ScaffoldButton({ format }) {
   if (state === "done" && url) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer"
-        style={{ padding: "9px 14px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)", whiteSpace: "nowrap" }}>
+        style={{ padding: "9px 14px", borderRadius: 12, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)", whiteSpace: "nowrap" }}>
         ✓ Apri bozza →
       </a>
     );
@@ -71,7 +71,7 @@ function ScaffoldButton({ format }) {
 
   return (
     <button onClick={handleClick} disabled={state === "loading"} title={state === "error" ? errMsg : "Crea una bozza vuota alla dimensione giusta"}
-      style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'Montserrat', sans-serif", whiteSpace: "nowrap", opacity: state === "loading" ? 0.6 : 1 }}>
+      style={{ padding: "9px 14px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap", opacity: state === "loading" ? 0.6 : 1 }}>
       {state === "loading" ? "⏳ Creo…" : state === "error" ? "⚠ Riprova" : "✦ Crea bozza vuota"}
     </button>
   );
@@ -140,10 +140,8 @@ export default function CanvaStudio() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080808", color: "#F0EBE3", fontFamily: "'DM Sans', sans-serif", padding: "44px 20px 80px" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box }
+    <div style={{ minHeight: "100vh", background: "#080808", color: "#F0EBE3", fontFamily: "'Space Grotesk', sans-serif", padding: "44px 20px 80px" }}>
+      <style>{`        * { box-sizing: border-box }
         .cs-input:focus { outline: none; border-color: rgba(0,196,204,0.4) !important; }
         .cs-input::placeholder { color: #3A3A3A; }
       `}</style>
@@ -152,10 +150,10 @@ export default function CanvaStudio() {
 
         {/* Header */}
         <div style={{ marginBottom: 36 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", color: CANVA_TEAL, marginBottom: 10, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", color: CANVA_TEAL, marginBottom: 10, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
             <CanvaMark size={16} /> Canva Studio
           </div>
-          <h2 style={{ fontSize: 30, fontWeight: 300, margin: "0 0 8px", fontFamily: "'Instrument Serif', serif" }}>
+          <h2 style={{ fontSize: 30, fontWeight: 300, margin: "0 0 8px", fontFamily: "'Space Grotesk', sans-serif" }}>
             Gestisci i tuoi template
           </h2>
           {activeBrand && (
@@ -184,13 +182,13 @@ export default function CanvaStudio() {
             {canvaStatus !== "connected" ? (
               <button
                 onClick={() => window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700")}
-                style={{ padding: "9px 18px", borderRadius: 9, border: `1px solid ${CANVA_TEAL}45`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", whiteSpace: "nowrap" }}>
+                style={{ padding: "9px 18px", borderRadius: 13, border: `1px solid ${CANVA_TEAL}45`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap" }}>
                 Connetti Canva →
               </button>
             ) : (
               <button
                 onClick={() => fetch("/api/canva-auth?action=logout").then(() => setCanvaStatus("disconnected"))}
-                style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #2A2A2A", background: "transparent", color: "#444", fontSize: 11, cursor: "pointer" }}>
+                style={{ padding: "8px 14px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#444", fontSize: 11, cursor: "pointer" }}>
                 Disconnetti
               </button>
             )}
@@ -212,7 +210,7 @@ export default function CanvaStudio() {
               </div>
             </div>
             <button onClick={saveTemplates}
-              style={{ padding: "8px 18px", borderRadius: 9, border: `1px solid ${savedMsg ? "#3A7A3A70" : GOLD + "35"}`, background: savedMsg ? "#3A7A3A15" : "transparent", color: savedMsg ? "#5ABA5A" : GOLD, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", whiteSpace: "nowrap", transition: "all 0.25s" }}>
+              style={{ padding: "8px 18px", borderRadius: 13, border: `1px solid ${savedMsg ? "#3A7A3A70" : GOLD + "35"}`, background: savedMsg ? "#3A7A3A15" : "transparent", color: savedMsg ? "#5ABA5A" : GOLD, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap", transition: "all 0.25s" }}>
               {savedMsg ? "✓ Salvato" : "Salva"}
             </button>
           </div>
@@ -226,7 +224,7 @@ export default function CanvaStudio() {
                   value={templates[f.id] || ""}
                   onChange={e => setTemplates(t => ({ ...t, [f.id]: e.target.value }))}
                   placeholder={`Template ID per ${f.label} (es: DAF_xxxxx)`}
-                  style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+                  style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
                 />
                 <ScaffoldButton format={f.id} />
               </div>
@@ -249,7 +247,7 @@ export default function CanvaStudio() {
                 value={templates.carousel || ""}
                 onChange={e => setTemplates(t => ({ ...t, carousel: e.target.value }))}
                 placeholder="Template ID Carosello (es: DAF_xxxxx)"
-                style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
+                style={{ flex: 1, background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}
               />
               <ScaffoldButton format="carousel" />
             </div>
@@ -267,7 +265,7 @@ export default function CanvaStudio() {
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             {FORMATS.map(f => (
               <button key={f.id} onClick={() => { setFormat(f.id); setDesignUrl(null); setCreateError(""); }}
-                style={{ flex: 1, padding: "8px 4px", fontSize: 11, borderRadius: 9, cursor: "pointer", border: `1px solid ${format === f.id ? CANVA_TEAL + "70" : "#1E1E1E"}`, background: format === f.id ? `${CANVA_TEAL}12` : "transparent", color: format === f.id ? CANVA_TEAL : "#444", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
+                style={{ flex: 1, padding: "8px 4px", fontSize: 11, borderRadius: 13, cursor: "pointer", border: `1px solid ${format === f.id ? CANVA_TEAL + "70" : "#1E1E1E"}`, background: format === f.id ? `${CANVA_TEAL}12` : "transparent", color: format === f.id ? CANVA_TEAL : "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
                 {f.icon} {f.label.split(" ")[0]}
               </button>
             ))}
@@ -279,7 +277,7 @@ export default function CanvaStudio() {
             onChange={e => setCaption(e.target.value)}
             placeholder="Caption del post (testo che apparirà nel template)..."
             rows={3}
-            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "10px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", marginBottom: 10 }}
+            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "10px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 10 }}
           />
 
           <input
@@ -287,11 +285,11 @@ export default function CanvaStudio() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Query foto sfondo — max 3 parole EN (es: luxury villa ibiza)"
-            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 14 }}
+            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 14 }}
           />
 
           {createError && (
-            <div style={{ padding: "10px 14px", borderRadius: 9, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ padding: "10px 14px", borderRadius: 13, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
               {createError}
             </div>
           )}
@@ -299,17 +297,17 @@ export default function CanvaStudio() {
           {designUrl ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <a href={designUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", padding: "12px 16px", borderRadius: 9, textDecoration: "none", textAlign: "center", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 600, fontFamily: "'Montserrat', sans-serif" }}>
+                style={{ display: "block", padding: "12px 16px", borderRadius: 13, textDecoration: "none", textAlign: "center", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }}>
                 ✓ Apri design in Canva →
               </a>
               <button onClick={() => { setDesignUrl(null); setCaption(""); setQuery(""); setCreateError(""); }}
-                style={{ padding: "8px", borderRadius: 8, border: "1px solid #1E1E1E", background: "transparent", color: "#444", fontSize: 11, cursor: "pointer" }}>
+                style={{ padding: "8px", borderRadius: 12, border: "1px solid #1E1E1E", background: "transparent", color: "#444", fontSize: 11, cursor: "pointer" }}>
                 Crea un altro
               </button>
             </div>
           ) : (
             <button onClick={handleCreate} disabled={creating || !caption.trim()}
-              style={{ width: "100%", padding: "12px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: creating || !caption.trim() ? "not-allowed" : "pointer", border: `1px solid ${CANVA_TEAL}45`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontFamily: "'Montserrat', sans-serif", opacity: creating || !caption.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "opacity 0.2s" }}>
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 13, fontSize: 13, fontWeight: 600, cursor: creating || !caption.trim() ? "not-allowed" : "pointer", border: `1px solid ${CANVA_TEAL}45`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontFamily: "'Space Grotesk', sans-serif", opacity: creating || !caption.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "opacity 0.2s" }}>
               {creating ? "⏳ Creo design…" : "✦ Crea Design in Canva"}
             </button>
           )}

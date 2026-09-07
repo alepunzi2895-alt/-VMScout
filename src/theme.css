@@ -1,0 +1,96 @@
+/* ─────────────────────────────────────────────────
+   VMScout — tema globale
+   Refresh "futuristico e tondeggiante": font Space Grotesk, angoli più morbidi,
+   glow discreti, scrollbar/selezione curate. I componenti usano stili inline
+   (niente Tailwind): qui stanno solo le basi globali e i token condivisi.
+   ───────────────────────────────────────────────── */
+
+:root {
+  /* raggi — scala tondeggiante */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  --font-ui: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --gold: #C9A96E;
+  --gold-soft: #8B7355;
+  --ink-dark: #0D0D0D;
+  --ink-darker: #080808;
+
+  --glow-gold: 0 0 0 1px rgba(201,169,110,0.14), 0 8px 30px -8px rgba(201,169,110,0.22);
+  --glow-pink: 0 0 0 1px rgba(225,48,108,0.18), 0 8px 34px -10px rgba(225,48,108,0.35);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background: #050505;
+  /* alone futuristico dietro le superfici scure */
+  background-image:
+    radial-gradient(1100px 620px at 12% -8%, rgba(201,169,110,0.10), transparent 60%),
+    radial-gradient(900px 560px at 92% 6%, rgba(225,48,108,0.08), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Space Grotesk ha un'ottica più stretta: tarature globali leggere */
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+button, input, textarea, select {
+  font-family: inherit;
+}
+
+/* focus ring coerente e morbido */
+:focus-visible {
+  outline: 2px solid rgba(201,169,110,0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(201,169,110,0.30);
+  color: #fff;
+}
+
+/* scrollbar sottile e a tema */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201,169,110,0.35) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(201,169,110,0.28);
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(201,169,110,0.5); background-clip: content-box; }
+
+/* transizioni morbide di default su elementi interattivi */
+a, button { transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease, transform .12s ease, filter .15s ease; }
+button:not(:disabled):hover { filter: brightness(1.09); }
+button:not(:disabled):active { transform: scale(0.98); }
+
+/* campi: focus glow morbido e coerente */
+input:focus, textarea:focus, select:focus {
+  box-shadow: 0 0 0 3px rgba(201,169,110,0.12);
+}
+
+img { -webkit-user-drag: none; user-select: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  a, button { transition: none; }
+}

@@ -6,7 +6,7 @@ export default function BrandAvatar({ brand, size = 24, radius, active = true })
   const base = {
     width: size, height: size, borderRadius: r, flexShrink: 0,
     display: "flex", alignItems: "center", justifyContent: "center",
-    overflow: "hidden", fontFamily: "'Montserrat', sans-serif", fontWeight: 700,
+    overflow: "hidden", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700,
   };
   if (brand?.logo) {
     return (

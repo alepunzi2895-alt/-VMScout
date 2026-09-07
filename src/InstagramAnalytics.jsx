@@ -154,7 +154,7 @@ function parseJsonResponse(raw) {
 const card = {
   background: CARD_BG,
   border: "1px solid rgba(201,169,110,0.12)",
-  borderRadius: 10,
+  borderRadius: 14,
   padding: "20px 24px",
 };
 
@@ -163,7 +163,7 @@ const label = {
   letterSpacing: "0.2em",
   textTransform: "uppercase",
   color: WARM_GREY,
-  fontFamily: "'Montserrat', sans-serif",
+  fontFamily: "'Space Grotesk', sans-serif",
   fontWeight: 600,
 };
 
@@ -171,11 +171,11 @@ const goldBtn = (disabled) => ({
   background: disabled ? "#2a2a2a" : `linear-gradient(135deg, ${GOLD}, #A8813F)`,
   color: disabled ? WARM_GREY : DARK,
   border: "none",
-  borderRadius: 6,
+  borderRadius: 9,
   padding: "10px 22px",
   fontSize: 11,
   fontWeight: 700,
-  fontFamily: "'Montserrat', sans-serif",
+  fontFamily: "'Space Grotesk', sans-serif",
   letterSpacing: "0.1em",
   textTransform: "uppercase",
   cursor: disabled ? "not-allowed" : "pointer",
@@ -328,12 +328,12 @@ function ConnectPanel({ onConnect }) {
           ["4", "Copia il token — inizia con \"IGAA…\" — e incollalo qui sotto (nessuno step aggiuntivo: niente Facebook Page da collegare)"],
         ].map(([n, text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
-            <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${GOLD}20`, border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Montserrat', sans-serif", flexShrink: 0, marginTop: 1 }}>
+            <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${GOLD}20`, border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", flexShrink: 0, marginTop: 1 }}>
               {n}
             </span>
             <div style={{ fontSize: 13, color: WARM_GREY, lineHeight: 1.6 }}>
               {text}
-              {code && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 11, color: GOLD, background: "#0a0a0a", padding: "4px 8px", borderRadius: 4, display: "inline-block" }}>{code}</div>}
+              {code && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 11, color: GOLD, background: "#0a0a0a", padding: "4px 8px", borderRadius: 6, display: "inline-block" }}>{code}</div>}
             </div>
           </div>
         ))}
@@ -353,7 +353,7 @@ function ConnectPanel({ onConnect }) {
           rows={3}
           style={{
             width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)",
-            borderRadius: 6, color: OFF_WHITE, padding: "10px 12px", fontSize: 12,
+            borderRadius: 9, color: OFF_WHITE, padding: "10px 12px", fontSize: 12,
             fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box",
           }}
         />
@@ -370,8 +370,8 @@ function ConnectPanel({ onConnect }) {
               onChange={e => setSelectedPageId(e.target.value)}
               style={{
                 width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.3)",
-                borderRadius: 6, color: OFF_WHITE, padding: "10px 12px", fontSize: 13,
-                fontFamily: "'Montserrat', sans-serif", outline: "none", cursor: "pointer",
+                borderRadius: 9, color: OFF_WHITE, padding: "10px 12px", fontSize: 13,
+                fontFamily: "'Space Grotesk', sans-serif", outline: "none", cursor: "pointer",
               }}
             >
               {pages.map(p => (
@@ -382,7 +382,7 @@ function ConnectPanel({ onConnect }) {
         )}
 
         {error && (
-          <div style={{ marginTop: 10, padding: "8px 12px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 6, color: "#ff7070", fontSize: 12 }}>
+          <div style={{ marginTop: 10, padding: "8px 12px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 9, color: "#ff7070", fontSize: 12 }}>
             {error}
           </div>
         )}
@@ -403,10 +403,10 @@ function ConnectPanel({ onConnect }) {
 function StatCard({ label: lbl, value, sub }) {
   return (
     <div style={{ ...card, textAlign: "center" }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: WARM_GREY, fontFamily: "'Montserrat', sans-serif", fontWeight: 600, marginBottom: 10 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: WARM_GREY, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, marginBottom: 10 }}>
         {lbl}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", marginBottom: 4 }}>
+      <div style={{ fontSize: 26, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 4 }}>
         {value}
       </div>
       {sub && <div style={{ fontSize: 11, color: WARM_GREY }}>{sub}</div>}
@@ -421,13 +421,13 @@ function PostRow({ post, rank }) {
   const thumb = post.thumbnail_url || post.media_url;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderBottom: "1px solid rgba(201,169,110,0.08)" }}>
-      <div style={{ fontSize: 12, color: WARM_GREY, minWidth: 20, textAlign: "center", fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
+      <div style={{ fontSize: 12, color: WARM_GREY, minWidth: 20, textAlign: "center", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }}>
         #{rank}
       </div>
       {thumb ? (
-        <img src={thumb} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
+        <img src={thumb} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 9, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
       ) : (
-        <div style={{ width: 48, height: 48, borderRadius: 6, background: CARD2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 9, background: CARD2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
           {post.media_type === "VIDEO" ? "🎬" : post.media_type === "CAROUSEL_ALBUM" ? "🖼" : "📸"}
         </div>
       )}
@@ -444,7 +444,7 @@ function PostRow({ post, rank }) {
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif" }}>{eng}%</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif" }}>{eng}%</div>
         <div style={{ fontSize: 10, color: WARM_GREY }}>engagement</div>
         <div style={{ fontSize: 10, color: WARM_GREY, marginTop: 2 }}>
           ❤ {post.like_count || 0} · 💬 {post.comments_count || 0} · 🔖 {post.insights?.saved || 0}
@@ -484,9 +484,9 @@ function AllPostsRow({ post }) {
     <div style={{ padding: "12px 0", borderBottom: "1px solid rgba(201,169,110,0.08)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
         {thumb ? (
-          <img src={thumb} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
+          <img src={thumb} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 9, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
         ) : (
-          <div style={{ width: 40, height: 40, borderRadius: 6, background: CARD2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 9, background: CARD2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>
             {isVideo ? "🎬" : post.media_type === "CAROUSEL_ALBUM" ? "🖼" : "📸"}
           </div>
         )}
@@ -502,7 +502,7 @@ function AllPostsRow({ post }) {
           </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif" }}>{engRate(post).toFixed(1)}%</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif" }}>{engRate(post).toFixed(1)}%</div>
           {post.permalink && (
             <a href={post.permalink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: IG_PINK, textDecoration: "none" }}>apri ↗</a>
           )}
@@ -512,8 +512,8 @@ function AllPostsRow({ post }) {
         {cols.map(c => {
           const v = metric(post, c.key);
           return (
-            <div key={c.key} style={{ textAlign: "center", background: CARD2, borderRadius: 5, padding: "5px 2px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: v ? OFF_WHITE : "#555", fontFamily: "'Montserrat', sans-serif" }}>{v ? fmtNum(v) : "—"}</div>
+            <div key={c.key} style={{ textAlign: "center", background: CARD2, borderRadius: 8, padding: "5px 2px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: v ? OFF_WHITE : "#555", fontFamily: "'Space Grotesk', sans-serif" }}>{v ? fmtNum(v) : "—"}</div>
               <div style={{ fontSize: 7.5, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>{c.label}</div>
             </div>
           );
@@ -534,14 +534,14 @@ function AllPostsList({ posts }) {
   return (
     <div style={{ ...card, marginBottom: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: open ? 12 : 0 }}>
-        <button onClick={() => setOpen(o => !o)} style={{ background: "none", border: "none", color: OFF_WHITE, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", padding: 0 }}>
+        <button onClick={() => setOpen(o => !o)} style={{ background: "none", border: "none", color: OFF_WHITE, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", padding: 0 }}>
           {open ? "▾" : "▸"} Tutti i post ({posts.length})
         </button>
         {open && (
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {POST_SORTS.map(s => (
               <button key={s.id} onClick={() => setSort(s.id)}
-                style={{ padding: "4px 9px", borderRadius: 6, border: `1px solid ${sort === s.id ? GOLD : "#2a2a2a"}`, background: sort === s.id ? `${GOLD}18` : "transparent", color: sort === s.id ? GOLD : WARM_GREY, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                style={{ padding: "4px 9px", borderRadius: 9, border: `1px solid ${sort === s.id ? GOLD : "#2a2a2a"}`, background: sort === s.id ? `${GOLD}18` : "transparent", color: sort === s.id ? GOLD : WARM_GREY, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
                 {s.label}
               </button>
             ))}
@@ -564,7 +564,7 @@ function DemographicBars({ title, results, mapLabel }) {
   const max = Math.max(...rows.map(r => r.value), 1);
   return (
     <div style={{ flex: 1, minWidth: 180 }}>
-      <div style={{ fontSize: 10, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>{title}</div>
+      <div style={{ fontSize: 10, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>{title}</div>
       {rows.map(r => (
         <div key={r.label} style={{ marginBottom: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: OFF_WHITE, marginBottom: 2 }}>
@@ -597,8 +597,8 @@ function AccountOverviewPanel({ account }) {
       <div style={{ ...label, marginBottom: 14 }}>👤 Panoramica Account</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: hasDemographics ? 20 : 0 }}>
         {tiles.map(t => (
-          <div key={t.label} style={{ background: CARD2, borderRadius: 8, padding: "12px 10px", textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif" }}>{fmtNum(t.value)}</div>
+          <div key={t.label} style={{ background: CARD2, borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif" }}>{fmtNum(t.value)}</div>
             <div style={{ fontSize: 9, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3 }}>{t.label}</div>
           </div>
         ))}
@@ -686,7 +686,7 @@ function ChipList({ items, color = GOLD }) {
 function AnalysisSection({ title, children }) {
   return (
     <div style={{ marginBottom: 26 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif", marginBottom: 10 }}>{title}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 10 }}>{title}</div>
       {children}
     </div>
   );
@@ -694,15 +694,15 @@ function AnalysisSection({ title, children }) {
 
 function NextPostCard({ post, onSuggestBrief, saved, onMarkUsed }) {
   return (
-    <div style={{ background: CARD2, border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 }}>
+    <div style={{ background: CARD2, border: "1px solid rgba(201,169,110,0.15)", borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: OFF_WHITE }}>{post.idea}</div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {post.hook_type && (
-            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(124,106,155,0.18)", color: "#9E8FBF", fontWeight: 700, whiteSpace: "nowrap" }}>{post.hook_type}</span>
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: "rgba(124,106,155,0.18)", color: "#9E8FBF", fontWeight: 700, whiteSpace: "nowrap" }}>{post.hook_type}</span>
           )}
           {post.content_type && (
-            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{post.content_type}</span>
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{post.content_type}</span>
           )}
         </div>
       </div>
@@ -730,7 +730,7 @@ function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Cl
       <div style={{ ...label, marginBottom: 20 }}>{title}</div>
 
       {data._visualUnavailable && (
-        <div style={{ fontSize: 11, color: "#E4A050", background: "#E4A05012", border: "1px solid #E4A05030", borderRadius: 8, padding: "8px 12px", marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: "#E4A050", background: "#E4A05012", border: "1px solid #E4A05030", borderRadius: 12, padding: "8px 12px", marginBottom: 20 }}>
           ⚠ Analisi visiva non disponibile questa volta (il resto dell'analisi è comunque completo) — riprova più tardi.
         </div>
       )}
@@ -745,7 +745,7 @@ function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Cl
       {timing?.summary && (
         <AnalysisSection title="⏰ Timing Ottimale">
           <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{timing.summary}</p>
-          {timing.best_slot && <div style={{ marginTop: 8, display: "inline-block", fontSize: 12, fontWeight: 700, color: GOLD, background: `${GOLD}15`, padding: "4px 12px", borderRadius: 6 }}>{timing.best_slot}</div>}
+          {timing.best_slot && <div style={{ marginTop: 8, display: "inline-block", fontSize: 12, fontWeight: 700, color: GOLD, background: `${GOLD}15`, padding: "4px 12px", borderRadius: 9 }}>{timing.best_slot}</div>}
         </AnalysisSection>
       )}
 
@@ -848,11 +848,11 @@ function PastAnalyses({ brand, refreshKey, onSuggestBrief }) {
                   <div style={{ fontSize: 11, color: WARM_GREY }}>{fmtDateTime(item.created_at)}</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => setExpandedId(expanded ? null : item.id)}
-                      style={{ fontSize: 10, color: GOLD, background: "transparent", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                      style={{ fontSize: 10, color: GOLD, background: "transparent", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 9, padding: "3px 8px", cursor: "pointer" }}>
                       {expanded ? "Nascondi" : "Dettagli"}
                     </button>
                     <button onClick={() => handleDelete(item.id)}
-                      style={{ fontSize: 10, color: "#E47070", background: "transparent", border: "1px solid rgba(180,60,60,0.25)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                      style={{ fontSize: 10, color: "#E47070", background: "transparent", border: "1px solid rgba(180,60,60,0.25)", borderRadius: 9, padding: "3px 8px", cursor: "pointer" }}>
                       Elimina
                     </button>
                   </div>
@@ -1222,7 +1222,7 @@ REGOLE FERREE:
               <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, ${IG_PINK}, #F77737, #FCAF45)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📱</div>
             )}
             <div>
-              <div style={{ fontSize: 16, color: OFF_WHITE, fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
+              <div style={{ fontSize: 16, color: OFF_WHITE, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }}>
                 @{username}
               </div>
               <div style={{ fontSize: 10, color: WARM_GREY, letterSpacing: "0.1em" }}>
@@ -1250,7 +1250,7 @@ REGOLE FERREE:
           )}
           <button
             onClick={disconnect}
-            style={{ background: "transparent", border: "1px solid #333", borderRadius: 6, color: WARM_GREY, padding: "10px 16px", fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.08em" }}
+            style={{ background: "transparent", border: "1px solid #333", borderRadius: 9, color: WARM_GREY, padding: "10px 16px", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "0.08em" }}
           >
             Disconnetti
           </button>
@@ -1259,7 +1259,7 @@ REGOLE FERREE:
 
       {/* Error */}
       {error && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 8, color: "#ff7070", fontSize: 12 }}>
+        <div style={{ marginBottom: 20, padding: "10px 14px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 12, color: "#ff7070", fontSize: 12 }}>
           {error}
         </div>
       )}

@@ -10,7 +10,7 @@ const IG_PINK   = "#E1306C";
 const card = {
   background: CARD_BG,
   border: "1px solid rgba(201,169,110,0.12)",
-  borderRadius: 10,
+  borderRadius: 14,
   padding: "20px 24px",
 };
 
@@ -19,7 +19,7 @@ const label = {
   letterSpacing: "0.2em",
   textTransform: "uppercase",
   color: WARM_GREY,
-  fontFamily: "'Montserrat', sans-serif",
+  fontFamily: "'Space Grotesk', sans-serif",
   fontWeight: 600,
 };
 
@@ -36,14 +36,14 @@ const STATUS_META = {
 function CalendarEntry({ entry, onSuggestBrief, onMarkUsed }) {
   const meta = STATUS_META[entry.status] || STATUS_META.suggerito;
   return (
-    <div style={{ background: "#1A1A1A", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 }}>
+    <div style={{ background: "#1A1A1A", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: OFF_WHITE }}>{entry.idea}</div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {entry.content_type && (
-            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{entry.content_type}</span>
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{entry.content_type}</span>
           )}
-          <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${meta.color}18`, color: meta.color, fontWeight: 700, whiteSpace: "nowrap" }}>{meta.label}</span>
+          <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 6, background: `${meta.color}18`, color: meta.color, fontWeight: 700, whiteSpace: "nowrap" }}>{meta.label}</span>
         </div>
       </div>
       {entry.rationale && <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.5, marginBottom: 10 }}>{entry.rationale}</div>}
@@ -51,7 +51,7 @@ function CalendarEntry({ entry, onSuggestBrief, onMarkUsed }) {
         <span style={{ fontSize: 10, color: "#555" }}>{fmtDateTime(entry.created_at)}</span>
         <button
           onClick={() => { onSuggestBrief(entry.visual_scout_brief || entry.idea); onMarkUsed(entry.id); }}
-          style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.05em" }}
+          style={{ padding: "7px 14px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "0.05em" }}
         >
           🎯 Genera con Visual Scout
         </button>
@@ -99,7 +99,7 @@ export default function Dashboard({ brand, onSuggestBrief }) {
   return (
     <div style={{ background: DARK, minHeight: "100vh", padding: "32px 24px 60px", maxWidth: 900, margin: "0 auto" }}>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: GOLD, marginBottom: 8, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: GOLD, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
           🧭 Dashboard
         </div>
         <div style={{ fontSize: 20, color: OFF_WHITE, fontWeight: 600 }}>
@@ -119,7 +119,7 @@ export default function Dashboard({ brand, onSuggestBrief }) {
       {loading && brand?.id && <div style={{ color: WARM_GREY, fontSize: 13 }}>Caricamento…</div>}
 
       {error && (
-        <div style={{ padding: "10px 14px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 8, color: "#ff7070", fontSize: 12, marginBottom: 16 }}>
+        <div style={{ padding: "10px 14px", background: "#2a1010", border: "1px solid #ff444440", borderRadius: 12, color: "#ff7070", fontSize: 12, marginBottom: 16 }}>
           {error}
         </div>
       )}
