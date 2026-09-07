@@ -490,6 +490,20 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
               })}
         </div>
 
+        {/* URL immagine incollato (Pinterest, sito, ecc.) */}
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>
+          oppure incolla un URL immagine
+        </label>
+        <input
+          value={selectedImg && /^https?:\/\//i.test(selectedImg) && !(images || []).some(x => (x.full || x.thumb) === selectedImg) ? selectedImg : ""}
+          onChange={e => setSelectedImg(e.target.value.trim() || null)}
+          placeholder="https://i.pinimg.com/originals/….jpg"
+          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "8px 12px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 4 }}
+        />
+        <div style={{ fontSize: 9, color: "#3A3A3A", marginBottom: 14 }}>
+          Su Pinterest: tasto destro sull'immagine → "Copia indirizzo immagine" (deve finire in .jpg/.png).
+        </div>
+
         {error && (
           <div style={{ padding: "9px 12px", borderRadius: 13, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>
         )}
@@ -572,20 +586,28 @@ function RowImagePicker({ query, imageUrl, onPick }) {
         )}
       </div>
       {openGrid && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginTop: 6 }}>
-          {loading && !imgs?.length
-            ? Array.from({ length: 4 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 7, background: "#141414" }} />)
-            : (imgs || []).slice(0, 8).map((img, i) => {
-                const u = img.full || img.thumb;
-                return (
-                  <button key={img.id || i} type="button" onClick={() => { onPick(u); setOpenGrid(false); }}
-                    style={{ aspectRatio: "1", borderRadius: 7, overflow: "hidden", padding: 0, border: `2px solid ${imageUrl === u ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
-                    <img src={img.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
-                  </button>
-                );
-              })}
-          {!loading && imgs && !imgs.length && <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#555" }}>Nessun risultato per "{query}".</div>}
-        </div>
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginTop: 6 }}>
+            {loading && !imgs?.length
+              ? Array.from({ length: 4 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 7, background: "#141414" }} />)
+              : (imgs || []).slice(0, 8).map((img, i) => {
+                  const u = img.full || img.thumb;
+                  return (
+                    <button key={img.id || i} type="button" onClick={() => { onPick(u); setOpenGrid(false); }}
+                      style={{ aspectRatio: "1", borderRadius: 7, overflow: "hidden", padding: 0, border: `2px solid ${imageUrl === u ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
+                      <img src={img.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                    </button>
+                  );
+                })}
+            {!loading && imgs && !imgs.length && <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#555" }}>Nessun risultato per "{query}".</div>}
+          </div>
+          <input
+            value={imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : ""}
+            onChange={e => onPick(e.target.value.trim() || null)}
+            placeholder="…o incolla un URL immagine (Pinterest: tasto destro → Copia indirizzo immagine)"
+            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 8, padding: "6px 9px", color: "#F0EBE3", fontSize: 10.5, fontFamily: "'Space Grotesk', sans-serif", marginTop: 6 }}
+          />
+        </>
       )}
     </div>
   );
