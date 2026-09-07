@@ -31,6 +31,8 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
   Storico di ogni domanda/risposta AI, per progetto. **Non è più un tab a sé stante**: vive dentro ogni sezione che lo genera (vedi §5).
 - **`project_insights`**: `project_id` (PK), `data` (JSON: `{ tips[], strengths[], weaknesses[], calendar[] }`), `updated_at`
   La "memoria" del progetto: cresce a ogni analisi Instagram (§5) e viene letta da Visual Scout e Analytics prima di ogni nuova generazione (loop di auto-apprendimento).
+- **`canva_designs`**: `id`, `project_id`, `kind` (`design` | `carousel`), `format`, `title`, `design_url`, `thumb_url` (foto principale usata), `slides`, `created_at`
+  Storico dei design Canva creati dall'app. Il frontend chiama `save_design` dopo ogni `/api/canva-create` / `/api/canva-carousel` riuscito (helper in `src/canvaDesigns.js`). Renderizzato nella galleria "Design creati" di Canva Studio (`CreatedDesignsPanel`) e riusabile come pagina nel `CarouselComposer` (via `thumb_url`).
 - **`canva_auth`**: `id` (fisso a 1), `access_token`, `refresh_token`, `expires_in`, `created_at` — token OAuth Canva.
 
 *Vedi `api/history.js` per lo schema completo delle prime tre tabelle e `api/db.js` (`ensureCanvaAuthTable`) per la quarta.*
@@ -42,7 +44,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | File | Rotta | Descrizione |
 |------|-------|-------------|
 | `api/chat.js` | `POST /api/chat` | Proxy Anthropic. Accetta anche `images: [url,...]` opzionale: le scarica e le converte in base64 lato server (niente CORS) per l'analisi visiva |
-| `api/history.js` | `GET/POST/DELETE /api/history?action=...` | CRUD progetti, storico richieste AI, memoria di progetto (`projects`, `save_project`, `delete_project`, `save_request`, `history`, `delete_request`, `get_insights`, `merge_insights`, `update_calendar_status`, `stats`) |
+| `api/history.js` | `GET/POST/DELETE /api/history?action=...` | CRUD progetti, storico richieste AI, memoria di progetto, storico design Canva (`projects`, `save_project`, `delete_project`, `save_request`, `history`, `delete_request`, `get_insights`, `merge_insights`, `update_calendar_status`, `stats`, `save_design`, `designs`, `delete_design`) |
 | `api/instagram.js` | `POST /api/instagram` | Proxy Instagram/Facebook Graph API — vedi §6 per il routing token |
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
@@ -112,7 +114,9 @@ Meta espone **due famiglie di access token non intercambiabili tra host**:
 - **Foto**: usare sempre sia Pexels che Pixabay per diversità. Per i caroselli ogni slide deve avere una `search_query` diversa.
 - **Query di ricerca immagini**: preferire soggetti/location ampiamente taggati nelle stock library invece di nomi di luogo di nicchia (spesso restituiscono 0 risultati). `fetchImages`/`fetchVideos` in `App.jsx` fanno comunque un retry automatico allargando la query (tolgono l'ultima parola progressivamente) se la ricerca esatta non trova nulla — vedi `broadenAttempts()`. Ogni `search_query` generata dal system prompt deve essere **globalmente unica** in tutta la risposta (non solo all'interno della singola sezione).
 - **Canva senza template fissi per-slide**: `api/canva-carousel.js` compila un intero carosello in una sola chiamata usando un template con placeholder ripetuti `Image_N`/`Testo_N` (configurato una volta in Canva Studio), invece di richiedere un design per slide.
-- **Crea design da suggerimento (Visual Scout)**: ogni slide del Post Composer ha il pulsante "✦ Crea design" → `CanvaQuickDesignModal` (portale su `document.body`, dark). Precompilata con caption/query/cta della slide; l'utente sceglie formato (post/story/reel) e UNA foto suggerita (grid da `fetchImages`) o lascia "🔀 Auto". Invia a `/api/canva-create` con `imageUrl` = foto scelta.
+- **Crea design da suggerimento (Visual Scout)**: ogni slide del Post Composer ha il pulsante "✦ Crea design" → `CanvaQuickDesignModal` (portale, dark). Precompilata con caption/query/cta; l'utente sceglie formato e UNA foto suggerita o "🔀 Auto". Invia a `/api/canva-create` con `imageUrl`; al successo salva in `canva_designs`.
+- **Composer carosello (Visual Scout)**: `CarouselComposer` (era `CanvaCarouselBtn`) — modale con le slide di partenza editabili + aggiungi/rimuovi/riordina pagine, foto per pagina (`RowImagePicker`), e "+ Da design creato" che aggiunge una pagina riusando `thumb_url`+`title` di un design in `canva_designs`. Max 10 pagine → `/api/canva-carousel` → salva in `canva_designs` (`kind: "carousel"`).
+- **Canva Studio = libreria**: non c'è più "Crea design rapido"; al suo posto `CreatedDesignsPanel` (galleria dei `canva_designs` del progetto, con apri/elimina). La creazione vive in Visual Scout.
 - **Toolkit framework marketing**: `src/marketingFrameworks.js` esporta `MARKETING_TOOLKIT` (Visual Scout) e `MARKETING_TOOLKIT_BRIEF` (Analytics) — distillato compatto delle skill in `.claude/skills/` (hook, AIDA/PAS/BAB, architetture carosello, struttura short-form video, content pillar, psicologia della persuasione, value equation, JTBD, test angoli). È iniettato **solo come input** nei system prompt (non allunga l'output → non tocca i limiti di concisione/timeout). Il modello deve applicare i framework in silenzio, senza nominarli nell'output e senza scarsità/urgenza finte. Aggiornare il distillato se si aggiornano le skill upstream.
 
 ---

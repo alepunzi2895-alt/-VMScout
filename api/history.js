@@ -35,6 +35,17 @@ async function ensureTables(db) {
       data TEXT NOT NULL,
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
+    `CREATE TABLE IF NOT EXISTS canva_designs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id TEXT,
+      kind TEXT,
+      format TEXT,
+      title TEXT,
+      design_url TEXT NOT NULL,
+      thumb_url TEXT,
+      slides INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
   ], "write");
 
   // Colonne aggiunte dopo la creazione iniziale della tabella: ALTER lazy,
@@ -95,6 +106,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: "Manca id" });
       await db.execute({ sql: "DELETE FROM projects WHERE id=?", args: [id] });
       await db.execute({ sql: "DELETE FROM requests WHERE project_id=?", args: [id] });
+      await db.execute({ sql: "DELETE FROM canva_designs WHERE project_id=?", args: [id] });
       return res.status(200).json({ ok: true });
     }
 
@@ -127,6 +139,35 @@ export default async function handler(req, res) {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: "Manca id" });
       await db.execute({ sql: "DELETE FROM requests WHERE id=?", args: [id] });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ─── CANVA DESIGNS (design creati dall'app, per progetto) ──────
+    if (action === "save_design" && req.method === "POST") {
+      const { project_id, kind, format, title, design_url, thumb_url, slides } = req.body;
+      if (!design_url) return res.status(400).json({ error: "Manca design_url" });
+      const result = await db.execute({
+        sql: "INSERT INTO canva_designs (project_id, kind, format, title, design_url, thumb_url, slides) VALUES (?,?,?,?,?,?,?)",
+        args: [project_id || null, kind || "design", format || null, title || null, design_url, thumb_url || null, slides != null ? Number(slides) : null],
+      });
+      return res.status(200).json({ ok: true, id: Number(result.lastInsertRowid) });
+    }
+
+    if (action === "designs" && req.method === "GET") {
+      const { project_id, limit } = req.query;
+      let sql = "SELECT * FROM canva_designs";
+      const args = [];
+      if (project_id) { sql += " WHERE project_id = ?"; args.push(project_id); }
+      sql += " ORDER BY created_at DESC LIMIT ?";
+      args.push(Number(limit) || 60);
+      const rows = await db.execute({ sql, args });
+      return res.status(200).json({ ok: true, data: rows.rows });
+    }
+
+    if (action === "delete_design" && req.method === "DELETE") {
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ error: "Manca id" });
+      await db.execute({ sql: "DELETE FROM canva_designs WHERE id=?", args: [id] });
       return res.status(200).json({ ok: true });
     }
 

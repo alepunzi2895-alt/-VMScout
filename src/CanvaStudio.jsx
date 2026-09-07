@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useBrand } from "./BrandContext.jsx";
 import CanvaMark from "./CanvaMark.jsx";
+import { listCanvaDesigns, deleteCanvaDesign } from "./canvaDesigns";
 
 const GOLD = "#C9A96E";
 const CANVA_TEAL = "#00C4CC";
@@ -83,13 +84,6 @@ export default function CanvaStudio() {
   const [templates, setTemplates] = useState({ post: "", story: "", reel: "", carousel: "" });
   const [savedMsg, setSavedMsg] = useState(false);
 
-  const [caption, setCaption] = useState("");
-  const [query, setQuery] = useState("");
-  const [format, setFormat] = useState("post");
-  const [creating, setCreating] = useState(false);
-  const [designUrl, setDesignUrl] = useState(null);
-  const [createError, setCreateError] = useState("");
-
   useEffect(() => {
     setTemplates(activeBrand?.canvaTemplates || { post: "", story: "", reel: "", carousel: "" });
   }, [activeBrand?.id]);
@@ -105,38 +99,6 @@ export default function CanvaStudio() {
     updateBrand(activeBrand.id, { canvaTemplates: templates });
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 2200);
-  }
-
-  async function handleCreate() {
-    if (!caption.trim()) return;
-    const templateId = templates[format];
-    if (!templateId) {
-      setCreateError(`Configura prima il Template ID per "${FORMATS.find(f => f.id === format)?.label}" qui sopra.`);
-      return;
-    }
-    setCreating(true);
-    setDesignUrl(null);
-    setCreateError("");
-    try {
-      const res = await fetch("/api/canva-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caption: caption.trim(), search_query: query.trim(), format, templateId }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setDesignUrl(data.url);
-      } else if (data.error === "CANVA_NOT_CONNECTED") {
-        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-        setCreateError("Connetti il tuo account Canva nella finestra appena aperta, poi riprova.");
-      } else {
-        setCreateError(data.message || "Errore durante la creazione del design.");
-      }
-    } catch (e) {
-      setCreateError(e.message || "Errore di rete.");
-    } finally {
-      setCreating(false);
-    }
   }
 
   return (
@@ -255,65 +217,84 @@ export default function CanvaStudio() {
           </div>
         </SectionCard>
 
-        {/* Quick create */}
+        {/* Design creati dall'app */}
         <SectionCard>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#D0C8C0", marginBottom: 5 }}>Crea design rapido</div>
-          <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 20, lineHeight: 1.6 }}>
-            Scrivi la caption e una query per la foto di sfondo → VMScout cerca l'immagine su Pexels, la carica in Canva e apre il template compilato.
-          </div>
-
-          {/* Format selector */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {FORMATS.map(f => (
-              <button key={f.id} onClick={() => { setFormat(f.id); setDesignUrl(null); setCreateError(""); }}
-                style={{ flex: 1, padding: "8px 4px", fontSize: 11, borderRadius: 13, cursor: "pointer", border: `1px solid ${format === f.id ? CANVA_TEAL + "70" : "#1E1E1E"}`, background: format === f.id ? `${CANVA_TEAL}12` : "transparent", color: format === f.id ? CANVA_TEAL : "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
-                {f.icon} {f.label.split(" ")[0]}
-              </button>
-            ))}
-          </div>
-
-          <textarea
-            className="cs-input"
-            value={caption}
-            onChange={e => setCaption(e.target.value)}
-            placeholder="Caption del post (testo che apparirà nel template)..."
-            rows={3}
-            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "10px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 10 }}
-          />
-
-          <input
-            className="cs-input"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Query foto sfondo — max 3 parole EN (es: luxury villa ibiza)"
-            style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 13px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 14 }}
-          />
-
-          {createError && (
-            <div style={{ padding: "10px 14px", borderRadius: 13, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
-              {createError}
-            </div>
-          )}
-
-          {designUrl ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <a href={designUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", padding: "12px 16px", borderRadius: 13, textDecoration: "none", textAlign: "center", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }}>
-                ✓ Apri design in Canva →
-              </a>
-              <button onClick={() => { setDesignUrl(null); setCaption(""); setQuery(""); setCreateError(""); }}
-                style={{ padding: "8px", borderRadius: 12, border: "1px solid #1E1E1E", background: "transparent", color: "#444", fontSize: 11, cursor: "pointer" }}>
-                Crea un altro
-              </button>
-            </div>
-          ) : (
-            <button onClick={handleCreate} disabled={creating || !caption.trim()}
-              style={{ width: "100%", padding: "12px 16px", borderRadius: 13, fontSize: 13, fontWeight: 600, cursor: creating || !caption.trim() ? "not-allowed" : "pointer", border: `1px solid ${CANVA_TEAL}45`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontFamily: "'Space Grotesk', sans-serif", opacity: creating || !caption.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "opacity 0.2s" }}>
-              {creating ? "⏳ Creo design…" : "✦ Crea Design in Canva"}
-            </button>
-          )}
+          <CreatedDesignsPanel brand={activeBrand} />
         </SectionCard>
 
+      </div>
+    </div>
+  );
+}
+
+// Galleria di tutto ciò che è stato creato su Canva tramite l'app (per progetto):
+// singoli design da Visual Scout e caroselli. Sostituisce il vecchio blocco
+// "Crea design rapido" — la creazione ora vive accanto a ogni suggerimento in
+// Visual Scout.
+function CreatedDesignsPanel({ brand }) {
+  const [designs, setDesigns] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  async function load() {
+    setDesigns(null);
+    setDesigns(await listCanvaDesigns(brand?.id));
+  }
+
+  useEffect(() => { load(); }, [brand?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function remove(id) {
+    if (!window.confirm("Rimuovere questo design dalla lista? (il design resta su Canva)")) return;
+    setBusyId(id);
+    await deleteCanvaDesign(id);
+    setDesigns(d => (d || []).filter(x => x.id !== id));
+    setBusyId(null);
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#D0C8C0" }}>Design creati — {brand?.name || "Progetto"}</div>
+        <button onClick={load} style={{ padding: "5px 10px", borderRadius: 10, border: "1px solid #2A2A2A", background: "transparent", color: "#777", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+          ↻ Aggiorna
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 18, lineHeight: 1.6 }}>
+        Tutto ciò che hai creato su Canva da VMScout. I singoli design si creano col pulsante <span style={{ color: CANVA_TEAL }}>✦ Crea design</span> accanto a ogni slide in Visual Scout.
+      </div>
+
+      {designs === null && <div style={{ fontSize: 12, color: "#555" }}>Carico…</div>}
+      {designs && !designs.length && (
+        <div style={{ fontSize: 12, color: "#555", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
+          Ancora nessun design creato per questo progetto.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+        {(designs || []).map(d => (
+          <div key={d.id} style={{ border: "1px solid #1C1C1C", borderRadius: 14, overflow: "hidden", background: "#0E0E0E", position: "relative" }}>
+            <div style={{ aspectRatio: "1", background: "#141414", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {d.thumb_url
+                ? <img src={d.thumb_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontSize: 22 }}>{d.kind === "carousel" ? "🖼" : "✦"}</span>}
+            </div>
+            <div style={{ padding: "9px 10px" }}>
+              <div style={{ fontSize: 11, color: "#D0C8C0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title || "Design"}</div>
+              <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>
+                {d.kind === "carousel" ? `Carosello · ${d.slides || "?"} pagine` : (d.format || "design")} · {new Date(d.created_at + "Z").toLocaleDateString("it-IT")}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <a href={d.design_url} target="_blank" rel="noopener noreferrer"
+                  style={{ flex: 1, textAlign: "center", padding: "6px", borderRadius: 8, textDecoration: "none", border: `1px solid ${CANVA_TEAL}40`, background: `${CANVA_TEAL}12`, color: CANVA_TEAL, fontSize: 10, fontWeight: 600 }}>
+                  Apri ↗
+                </a>
+                <button onClick={() => remove(d.id)} disabled={busyId === d.id}
+                  style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #3A2020", background: "transparent", color: "#B06060", fontSize: 10, cursor: "pointer" }}>
+                  🗑
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

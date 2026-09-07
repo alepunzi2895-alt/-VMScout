@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { MARKETING_TOOLKIT } from "./marketingFrameworks";
+import { saveCanvaDesign, listCanvaDesigns } from "./canvaDesigns";
 
 // Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
 // "solo JSON": invece di assumere che l'intera stringa ripulita sia JSON puro,
@@ -324,7 +325,7 @@ const CANVA_QD_FORMATS = [
 // caption e query arrivano già dal suggerimento, l'utente sceglie il formato e
 // UNA delle foto suggerite (o lascia la ricerca automatica), poi il backend
 // carica quell'immagine e compila il template Canva.
-function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation, canvaTemplates }) {
+function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation, canvaTemplates, projectId }) {
   const [format, setFormat] = useState("post");
   const [captionText, setCaptionText] = useState(caption || "");
   const [queryText, setQueryText] = useState(query || "");
@@ -388,6 +389,14 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
       const data = await res.json();
       if (data.ok) {
         setDesignUrl(data.url);
+        saveCanvaDesign({
+          project_id: projectId || null,
+          kind: "design",
+          format,
+          title: captionText.trim().slice(0, 80) || "Design",
+          design_url: data.url,
+          thumb_url: selectedImg || data.imageUrl || null,
+        });
       } else if (data.error === "CANVA_NOT_CONNECTED") {
         window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
         setError("Connetti Canva nella finestra aperta, poi riprova.");
@@ -502,7 +511,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
 }
 
 // Pulsante per-slide che apre CanvaQuickDesignModal.
-function CanvaDesignButton({ caption, cta, query, orientation, canvaTemplates }) {
+function CanvaDesignButton({ caption, cta, query, orientation, canvaTemplates, projectId }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -518,73 +527,255 @@ function CanvaDesignButton({ caption, cta, query, orientation, canvaTemplates })
         query={query}
         orientation={orientation}
         canvaTemplates={canvaTemplates}
+        projectId={projectId}
       />
     </>
   );
 }
 
-// Compone l'INTERO carosello (tutte le slide di post_composer) in un solo
-// design Canva: niente più un design per slide da creare a mano — il backend
-// cerca/carica le immagini e compila un template con placeholder ripetuti.
-function CanvaCarouselBtn({ slides, canvaTemplates }) {
+const CAROUSEL_MAX_PAGES = 10;
+
+// Selettore foto compatto per una riga del composer carosello: mostra la foto
+// scelta o "Auto", ed espande una griglia di risultati per la query della riga.
+function RowImagePicker({ query, imageUrl, onPick }) {
+  const [openGrid, setOpenGrid] = useState(false);
+  const [imgs, setImgs] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const source = defaultPhotoSource() || "pexels";
+
+  useEffect(() => {
+    if (!openGrid) return;
+    const q = (query || "").trim();
+    if (!q) { setImgs([]); return; }
+    let active = true;
+    setLoading(true);
+    fetchImages(q, "portrait", source).then(o => { if (active) { setImgs(o?.results || []); setLoading(false); } });
+    return () => { active = false; };
+  }, [openGrid, query, source]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, overflow: "hidden", background: "#141414", border: "1px solid #262626", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#555" }}>
+          {imageUrl ? <img src={imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "auto"}
+        </div>
+        <button type="button" onClick={() => setOpenGrid(v => !v)}
+          style={{ padding: "5px 9px", borderRadius: 8, border: "1px solid #262626", background: "transparent", color: "#888", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+          {openGrid ? "Chiudi" : "🔎 Foto"}
+        </button>
+        {imageUrl && (
+          <button type="button" onClick={() => onPick(null)}
+            style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid #262626", background: "transparent", color: "#666", fontSize: 10, cursor: "pointer" }}>
+            ✕ auto
+          </button>
+        )}
+      </div>
+      {openGrid && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginTop: 6 }}>
+          {loading && !imgs?.length
+            ? Array.from({ length: 4 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 7, background: "#141414" }} />)
+            : (imgs || []).slice(0, 8).map((img, i) => {
+                const u = img.full || img.thumb;
+                return (
+                  <button key={img.id || i} type="button" onClick={() => { onPick(u); setOpenGrid(false); }}
+                    style={{ aspectRatio: "1", borderRadius: 7, overflow: "hidden", padding: 0, border: `2px solid ${imageUrl === u ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
+                    <img src={img.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                  </button>
+                );
+              })}
+          {!loading && imgs && !imgs.length && <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#555" }}>Nessun risultato per "{query}".</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Composer del carosello: parte dalle slide di Visual Scout, ma si possono
+// aggiungere/rimuovere/riordinare pagine, cambiare foto per pagina e inserire
+// una pagina da un design Canva già creato (ne riusa foto + titolo). Un solo
+// autofill del template carosello.
+function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
+  const templateId = canvaTemplates?.carousel || "";
+  const [open, setOpen] = useState(false);
+  const [pages, setPages] = useState([]);
   const [state, setState] = useState("idle");
   const [url, setUrl] = useState(null);
   const [errMsg, setErrMsg] = useState("");
-  const templateId = canvaTemplates?.carousel || "";
+  const [savedDesigns, setSavedDesigns] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  if (!templateId) {
-    return (
-      <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, Image_2/Testo_2, ...)'
-        style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
-        ✦ Configura template carosello per crearlo in un click
-      </span>
-    );
+  useEffect(() => {
+    if (!open) return;
+    setPages((initialSlides || []).map(s => ({
+      caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null,
+    })));
+    setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function patch(i, key, val) {
+    setPages(p => p.map((row, idx) => idx === i ? { ...row, [key]: val } : row));
   }
+  function move(i, dir) {
+    setPages(p => {
+      const j = i + dir;
+      if (j < 0 || j >= p.length) return p;
+      const next = [...p];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+  function removeRow(i) { setPages(p => p.filter((_, idx) => idx !== i)); }
+  function addBlank() { setPages(p => p.length >= CAROUSEL_MAX_PAGES ? p : [...p, { caption: "", search_query: "", image_url: null }]); }
 
-  if (state === "done" && url) {
-    return (
-      <a href={url} target="_blank" rel="noopener noreferrer"
-        style={{ padding: "9px 16px", borderRadius: 12, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 700, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
-        ✓ Apri Carosello in Canva →
-      </a>
-    );
+  async function openDesignPicker() {
+    setPickerOpen(true);
+    if (savedDesigns === null) setSavedDesigns(await listCanvaDesigns(projectId));
+  }
+  function addFromDesign(d) {
+    setPages(p => p.length >= CAROUSEL_MAX_PAGES ? p : [...p, {
+      caption: d.title || "", search_query: "", image_url: d.thumb_url || null, from_design: d.id,
+    }]);
+    setPickerOpen(false);
   }
 
   async function handleCreate() {
-    setState("loading");
-    setErrMsg("");
+    setState("loading"); setErrMsg("");
     try {
       const res = await fetch("/api/canva-carousel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slides, templateId, format: "post" }),
+        body: JSON.stringify({
+          slides: pages.map(p => ({ caption: p.caption, search_query: p.search_query, image_url: p.image_url || undefined })),
+          templateId, format: "post",
+        }),
       });
       const data = await res.json();
       if (data.ok) {
-        setUrl(data.url);
-        setState("done");
+        setUrl(data.url); setState("done");
+        saveCanvaDesign({
+          project_id: projectId || null, kind: "carousel", format: "carousel",
+          title: `Carosello ${pages.length} pagine`, design_url: data.url,
+          thumb_url: (pages.find(p => p.image_url)?.image_url) || data.imageUrls?.[0] || null,
+          slides: pages.length,
+        });
       } else if (data.error === "CANVA_NOT_CONNECTED") {
         window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
         setState("idle");
       } else {
         setErrMsg(data.message || "Errore durante la creazione del carosello.");
-        setState("error");
-        setTimeout(() => setState("idle"), 5000);
+        setState("idle");
       }
     } catch (e) {
-      setErrMsg(e.message || "Errore di rete.");
-      setState("error");
-      setTimeout(() => setState("idle"), 5000);
+      setErrMsg(e.message || "Errore di rete."); setState("idle");
     }
   }
 
+  if (!templateId) {
+    return (
+      <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, ...)'
+        style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
+        ✦ Configura template carosello in Canva Studio
+      </span>
+    );
+  }
+
   return (
-    <button onClick={handleCreate} disabled={state === "loading"} title={state === "error" ? errMsg : undefined}
-      style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}>
-      {state === "loading" ? "⏳ Compongo il carosello…" : state === "error" ? "⚠ Riprova" : `✦ Crea Carosello Completo su Canva (${slides.length} slide)`}
-    </button>
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
+        ✦ Componi carosello su Canva ({(initialSlides || []).length} slide)
+      </button>
+
+      {open && createPortal(
+        <div onClick={() => setOpen(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 4000, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 560, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 20, padding: 22, fontFamily: "'Space Grotesk', sans-serif", color: "#F0EBE3" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontWeight: 600 }}>✦ Componi carosello</div>
+              <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 16 }}>{pages.length} pagine · max {CAROUSEL_MAX_PAGES}. Riordina, cambia foto, aggiungi pagine.</div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+              {pages.map((row, i) => (
+                <div key={i} style={{ border: "1px solid #1E1E1E", borderRadius: 12, padding: 12, background: "#0E0E0E" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#8B7355", letterSpacing: "0.08em" }}>
+                      PAGINA {i + 1}{row.from_design ? " · da design creato" : ""}
+                    </span>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={miniBtn}>↑</button>
+                      <button type="button" onClick={() => move(i, 1)} disabled={i === pages.length - 1} style={miniBtn}>↓</button>
+                      <button type="button" onClick={() => removeRow(i)} style={{ ...miniBtn, color: "#B06060", borderColor: "#3A2020" }}>✕</button>
+                    </div>
+                  </div>
+                  <textarea value={row.caption} onChange={e => patch(i, "caption", e.target.value)} rows={2} placeholder="Testo della slide…"
+                    style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
+                  <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query foto (EN, max 3 parole)"
+                    style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+                  <RowImagePicker query={row.search_query} imageUrl={row.image_url} onPick={u => patch(i, "image_url", u)} />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+              <button type="button" onClick={addBlank} disabled={pages.length >= CAROUSEL_MAX_PAGES}
+                style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #2A2A2A", background: "transparent", color: "#A0988E", fontSize: 11, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", opacity: pages.length >= CAROUSEL_MAX_PAGES ? 0.4 : 1 }}>
+                + Pagina vuota
+              </button>
+              <button type="button" onClick={openDesignPicker} disabled={pages.length >= CAROUSEL_MAX_PAGES}
+                style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #2A2A2A", background: "transparent", color: "#A0988E", fontSize: 11, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", opacity: pages.length >= CAROUSEL_MAX_PAGES ? 0.4 : 1 }}>
+                + Da design creato
+              </button>
+            </div>
+
+            {pickerOpen && (
+              <div style={{ border: "1px solid #1E1E1E", borderRadius: 12, padding: 10, marginBottom: 14, maxHeight: 220, overflowY: "auto" }}>
+                <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Design creati dall'app</div>
+                {savedDesigns === null && <div style={{ fontSize: 11, color: "#555" }}>Carico…</div>}
+                {savedDesigns && !savedDesigns.length && <div style={{ fontSize: 11, color: "#555" }}>Nessun design ancora creato.</div>}
+                {(savedDesigns || []).map(d => (
+                  <button key={d.id} type="button" onClick={() => addFromDesign(d)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: 7, borderRadius: 8, border: "1px solid transparent", background: "transparent", cursor: "pointer", color: "#D0C8C0" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 6, overflow: "hidden", background: "#141414", flexShrink: 0 }}>
+                      {d.thumb_url && <img src={d.thumb_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title || "Design"}</div>
+                      <div style={{ fontSize: 9, color: "#555" }}>{d.kind === "carousel" ? "Carosello" : d.format || "design"} · {new Date(d.created_at + "Z").toLocaleDateString("it-IT")}</div>
+                    </div>
+                    <span style={{ fontSize: 10, color: "#00C4CC" }}>+ aggiungi</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {errMsg && <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{errMsg}</div>}
+
+            {state === "done" && url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", padding: "12px", borderRadius: 12, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700 }}>
+                ✓ Apri carosello in Canva →
+              </a>
+            ) : (
+              <button onClick={handleCreate} disabled={state === "loading" || !pages.length}
+                style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !pages.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !pages.length ? 0.5 : 1 }}>
+                {state === "loading" ? "⏳ Compongo il carosello…" : `✦ Crea carosello (${pages.length} pagine)`}
+              </button>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
+
+const miniBtn = {
+  width: 24, height: 24, borderRadius: 7, border: "1px solid #262626", background: "#0C0C0C",
+  color: "#888", fontSize: 11, cursor: "pointer", lineHeight: 1, padding: 0, fontFamily: "'Space Grotesk', sans-serif",
+};
 
 function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
   const src = PHOTO_SOURCES[sourceKey];
@@ -1045,7 +1236,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
                 </div>
-                <CanvaDesignButton caption={getCaption(post)} cta={cta} query={post.search_query || ""} orientation={orientation} canvaTemplates={brand?.canvaTemplates} />
+                <CanvaDesignButton caption={getCaption(post)} cta={cta} query={post.search_query || ""} orientation={orientation} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} />
                 <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
                   style={{ padding: "7px 14px", borderRadius: 12, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap" }}>
                   {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
@@ -1061,9 +1252,10 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       </div>
 
       <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-        <CanvaCarouselBtn
-          slides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
+        <CarouselComposer
+          initialSlides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
           canvaTemplates={brand?.canvaTemplates}
+          projectId={brand?.id}
         />
       </div>
     </div>

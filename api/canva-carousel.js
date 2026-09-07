@@ -147,6 +147,7 @@ export default async function handler(req, res) {
       url: af.designUrl,
       slidesFilled: assetIds.filter(Boolean).length,
       totalSlides: usedSlides.length,
+      imageUrls: imageUrls.filter(Boolean),
     });
 
   } catch (err) {
