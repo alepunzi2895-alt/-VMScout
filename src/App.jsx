@@ -88,7 +88,10 @@ const PHOTO_SOURCES = {
     webUrl: (q, o) => `https://unsplash.com/s/photos/${encodeURIComponent(q)}${o ? `?orientation=${o}` : ""}`,
     apiUrl: (q, o) => `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=6&content_filter=high${o ? `&orientation=${o}` : ""}`,
     headers: () => ({ Authorization: `Client-ID ${API_KEYS.unsplash}` }),
-    parse: (d) => (d.results || []).map(r => ({ id: r.id, thumb: r.urls?.small, full: r.urls?.full || r.urls?.regular, alt: r.alt_description, author: r.user?.name, link: r.links?.html })),
+    // `full` serve anche per l'upload su Canva: NON usare urls.full/urls.raw
+    // (foto a piena risoluzione, 6000px+ multi-MB → Canva va in timeout).
+    // urls.regular è ~1080px; se c'è urls.raw chiediamo 1600px via imgix.
+    parse: (d) => (d.results || []).map(r => ({ id: r.id, thumb: r.urls?.small, full: (r.urls?.raw ? `${r.urls.raw}&w=1600&q=80&fm=jpg&fit=max` : r.urls?.regular), alt: r.alt_description, author: r.user?.name, link: r.links?.html })),
   },
   pexels: {
     name: "Pexels", icon: "P", color: "#05A081",
@@ -390,6 +393,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
       const data = await res.json();
       if (data.ok) {
         setDesignUrl(data.url);
+        if (data.imageWarning) setError("⚠ Design creato, ma lo sfondo non è stato caricato: " + data.imageWarning);
         saveCanvaDesign({
           project_id: projectId || null,
           kind: "design",
@@ -675,6 +679,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
       const data = await res.json();
       if (data.ok) {
         setUrl(data.url); setState("done");
+        if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
         saveCanvaDesign({
           project_id: projectId || null, kind: "carousel", format: "carousel",
           title: `Carosello ${pages.length} pagine`, design_url: data.url,

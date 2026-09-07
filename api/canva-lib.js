@@ -9,6 +9,56 @@
 
 const CANVA_API = "https://api.canva.com/rest/v1";
 
+// Canva `url-asset-uploads` fallisce / va in timeout su file enormi: il caso
+// tipico è Unsplash `urls.full`/`urls.raw` = foto a piena risoluzione (6000px+,
+// molti MB). Unsplash serve via imgix, quindi basta chiedere una versione
+// ridimensionata con i suoi parametri. (wsrv.nl come proxy si è rivelato
+// inaffidabile su alcune foto → niente proxy, solo normalizzazione host-aware.)
+function sizedImageUrl(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname === "images.unsplash.com") {
+      u.searchParams.set("w", "1600");
+      u.searchParams.set("q", "80");
+      u.searchParams.set("fm", "jpg");
+      u.searchParams.set("fit", "max");
+      return u.toString();
+    }
+  } catch { /* URL non parsabile: usala com'è */ }
+  return url;
+}
+
+// Carica un'immagine su Canva da URL (job asincrono) e ne restituisce l'asset_id.
+// Prova prima la versione normalizzata/ridimensionata, poi l'URL grezzo.
+export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
+  if (!url) return { assetId: null, error: "URL immagine mancante" };
+  const candidates = [...new Set([sizedImageUrl(url), url])];
+  for (const candidate of candidates) {
+    try {
+      const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: String(name).slice(0, 255), url: candidate }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d?.job?.id) continue;
+
+      const jobId = d.job.id;
+      const deadline = Date.now() + 28_000;
+      let job = d.job;
+      while ((job.status === "in_progress" || job.status === "pending") && Date.now() < deadline) {
+        await new Promise(res => setTimeout(res, 1500));
+        const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
+        job = (await poll.json().catch(() => ({})))?.job ?? job;
+      }
+      if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
+      // job fallito: se era il candidato proxato, prova col grezzo
+    } catch { /* prova il candidato successivo */ }
+  }
+  return { assetId: null, error: "Canva non è riuscita a caricare l'immagine dall'URL (formato non supportato, file troppo grande o URL non pubblico)." };
+}
+
 // L'utente spesso incolla un pezzo di URL Canva
 // (es. "DAHUh-jxeuU/dsxKa-nws_k9rmxg1CENfg" da canva.com/design/<id>/<token>/view).
 // Un ID valido è un singolo segmento: teniamo solo la prima parte prima di

@@ -4,7 +4,7 @@
 // Image_1..N / Testo_1..N, invece di dover creare/compilare un design per slide.
 
 import { getDb, ensureCanvaAuthTable } from "./db.js";
-import { runAutofill, trimTrailingPages } from "./canva-lib.js";
+import { runAutofill, trimTrailingPages, uploadUrlAsset } from "./canva-lib.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -55,33 +55,6 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
-// Upload via URL-based job (stesso approccio di canva-upload.js / canva-create.js)
-async function uploadImageUrl(imageUrl, token, name) {
-  try {
-    const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name, url: imageUrl }),
-    });
-    const d = await r.json();
-    if (!r.ok || !d.job?.id) return null;
-
-    const jobId    = d.job.id;
-    const deadline = Date.now() + 20_000;
-    let job = d.job;
-    while (job.status === "in_progress" && Date.now() < deadline) {
-      await new Promise(res => setTimeout(res, 1500));
-      const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const pd = await poll.json();
-      job = pd.job ?? job;
-    }
-
-    return job.status === "success" ? (job.asset?.id || null) : null;
-  } catch { return null; }
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
@@ -114,7 +87,9 @@ export default async function handler(req, res) {
 
     // 2. Upload in parallelo di tutte le immagini trovate
     const assetIds = await Promise.all(
-      imageUrls.map((url, i) => url ? uploadImageUrl(url, token, `vmscout-slide-${i + 1}.jpg`) : Promise.resolve(null))
+      imageUrls.map(async (url, i) =>
+        url ? (await uploadUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.jpg` })).assetId : null
+      )
     );
 
     // 3. Un solo autofill con tutti i placeholder Image_N / Testo_N / Caption_N compilati
@@ -151,12 +126,14 @@ export default async function handler(req, res) {
       if (trim.ok && trim.designUrl) finalUrl = trim.designUrl;
     }
 
+    const missingImages = usedSlides.length - assetIds.filter(Boolean).length;
     return res.status(200).json({
       ok: true,
       url: finalUrl,
       slidesFilled: assetIds.filter(Boolean).length,
       totalSlides: usedSlides.length,
       imageUrls: imageUrls.filter(Boolean),
+      imageWarning: missingImages > 0 ? `${missingImages} sfondo/i non caricato/i su Canva (immagine troppo grande o URL non pubblico).` : null,
     });
 
   } catch (err) {

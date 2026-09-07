@@ -1,5 +1,5 @@
 import { getDb, ensureCanvaAuthTable } from "./db.js";
-import { runAutofill } from "./canva-lib.js";
+import { runAutofill, uploadUrlAsset } from "./canva-lib.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -51,33 +51,6 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
-// Upload via URL-based job (same approach as canva-upload.js)
-async function uploadImageUrl(imageUrl, token) {
-  try {
-    const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "vmscout-bg.jpg", url: imageUrl }),
-    });
-    const d = await r.json();
-    if (!r.ok || !d.job?.id) return null;
-
-    const jobId   = d.job.id;
-    const deadline = Date.now() + 20_000;
-    let job = d.job;
-    while (job.status === "in_progress" && Date.now() < deadline) {
-      await new Promise(res => setTimeout(res, 1500));
-      const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const pd = await poll.json();
-      job = pd.job ?? job;
-    }
-
-    return job.status === "success" ? (job.asset?.id || null) : null;
-  } catch { return null; }
-}
-
 // ─── handler ────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -111,7 +84,8 @@ export default async function handler(req, res) {
     const imageUrl = bodyImageUrl || (search_query ? await fetchPexelsUrl(search_query, vertical) : null);
 
     // 2. Upload image to Canva and wait for asset_id
-    const assetId = imageUrl ? await uploadImageUrl(imageUrl, token) : null;
+    const up = imageUrl ? await uploadUrlAsset({ token, url: imageUrl, name: "vmscout-bg.jpg" }) : { assetId: null };
+    const assetId = up.assetId;
 
     // 3. Autofill template with text + image
     const autofillData = {};
@@ -136,7 +110,12 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ ok: true, url: af.designUrl, imageUrl: imageUrl || null });
+    return res.status(200).json({
+      ok: true,
+      url: af.designUrl,
+      imageUrl: imageUrl || null,
+      imageWarning: imageUrl && !assetId ? (up.error || "Immagine non caricata su Canva.") : null,
+    });
 
   } catch (err) {
     console.error("[canva-create]", err);
