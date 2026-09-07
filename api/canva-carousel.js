@@ -4,7 +4,7 @@
 // Image_1..N / Testo_1..N, invece di dover creare/compilare un design per slide.
 
 import { getDb, ensureCanvaAuthTable } from "./db.js";
-import { runAutofill } from "./canva-lib.js";
+import { runAutofill, trimTrailingPages } from "./canva-lib.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -142,9 +142,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // Il template carosello ha un numero FISSO di pagine (Image_1..N/Testo_1..N).
+    // Se questo carosello ha meno slide, elimina le pagine in coda così il
+    // risultato è dinamico (4 slide → 4 pagine). Best-effort.
+    let finalUrl = af.designUrl;
+    if (af.designId) {
+      const trim = await trimTrailingPages({ token, designId: af.designId, keep: usedSlides.length });
+      if (trim.ok && trim.designUrl) finalUrl = trim.designUrl;
+    }
+
     return res.status(200).json({
       ok: true,
-      url: af.designUrl,
+      url: finalUrl,
       slidesFilled: assetIds.filter(Boolean).length,
       totalSlides: usedSlides.length,
       imageUrls: imageUrls.filter(Boolean),

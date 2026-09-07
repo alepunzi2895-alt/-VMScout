@@ -63,11 +63,20 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 
 ### Autofill — `api/canva-lib.js` `runAutofill()` (condiviso da canva-create / canva-carousel / canva-export)
 Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ `Unknown endpoint`). Flusso corrente:
-1. `POST /v1/autofills` con `{type:"create_from_brand_template", brand_template_id, data, title}` → job async
-2. Poll `GET /v1/autofills/{jobId}` ogni 1.5s finché `status=success` (ceiling 35s per stare sotto `maxDuration:60`)
-3. Risultato in `job.result.design` (o `job.design`) → `{id, url}`
+1. `GET /v1/brand-templates/{id}/dataset` → filtra `data` ai soli campi definiti (Canva rifiuta chiavi sconosciute)
+2. `POST /v1/autofills` con `{type:"create_from_brand_template", brand_template_id, data, title}` → job async
+3. Poll `GET /v1/autofills/{jobId}` ogni 1.5s finché `status=success` (ceiling 35s per stare sotto `maxDuration:60`)
+4. Risultato in `job.result.design` (o `job.design`) → `{id, url}`
 
-> Serve un ID di **Brand Template** (design pubblicato come "Modello del brand", URL `canva.com/brand-templates/<ID>`), **non** l'ID di un design. `cleanTemplateId()` normalizza gli incolla sporchi (URL interi, `id/token`, virgolette) tenendo il primo segmento. L'autofill richiede piano Canva **Enterprise** (trial sui piani a pagamento durante lo sviluppo).
+> Serve un ID di **Brand Template** (design pubblicato come "Modello del brand", URL `canva.com/brand-templates/<ID>`), **non** l'ID di un design. `cleanTemplateId()` normalizza gli incolla sporchi. L'autofill richiede piano Canva **Enterprise** (trial sui piani a pagamento durante lo sviluppo).
+
+### Campi autofill attesi dai template (configurati 2026-09-07 via Canva MCP)
+- **post / story / reel** (`EAHUiCrR7F8` / `EAHUiIqblm4` / `EAHUiDPEzhU`): `Immagine_Sfondo` (image, elemento full-bleed dietro al testo) + `Testo_Post` (text).
+- **carosello** (`EAHUiOe8TUA`): template a **6 pagine**, `Image_1`/`Testo_1` … `Image_6`/`Testo_6`. Placeholder immagine = asset Canva `MAHUiKsKVxs` (grigio). L'utente può ridisegnare liberamente i template in Canva purché NON rinomini i campi Dati.
+- Il tagging si fa via MCP: `read-design(designUrl, open_transaction)` → `edit-design` (`insert_fill` + `layer_element back` + `update_autofill_field`) → `commit` → `publish-brand-template(designId)` (mantiene lo stesso brand template ID). L'utente deve prima aprire il template nell'editor Canva perché esista un design editabile.
+
+### Carosello dinamico — `trimTrailingPages()` in `canva-lib.js`
+Il template carosello ha 6 pagine fisse. Dopo l'autofill, `canva-carousel.js` chiama `trimTrailingPages({token, designId, keep: nSlide})` → **Design Merge API** (`POST /v1/merges`, `type:"modify_existing_design"`, `operations:[{type:"delete_pages", page_numbers:[keep+1..total]}]`, poll `GET /v1/merges/{jobId}`) per eliminare le pagine oltre il numero di slide. Best-effort: se fallisce il carosello resta valido con pagine vuote in coda. Scope OAuth VMScout: `design:content:write asset:write design:meta:read` (già presenti).
 
 ---
 

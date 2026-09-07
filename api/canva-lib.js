@@ -114,3 +114,51 @@ export async function runAutofill({ token, templateId, data, title }) {
   const designUrl = design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
   return { ok: true, designId, designUrl };
 }
+
+// Elimina le pagine in coda a un design (Design Merge API, preview). Serve al
+// carosello: il template ha N pagine fisse (Image_1..N/Testo_1..N), ma se
+// l'utente compone meno slide le pagine extra restano con il placeholder.
+// Best-effort: se fallisce, il design resta comunque valido (solo con qualche
+// pagina vuota in coda). Richiede scope design:content:write + design:meta:read.
+export async function trimTrailingPages({ token, designId, keep }) {
+  if (!designId || !keep || keep < 1) return { ok: false, trimmed: 0 };
+  try {
+    const dRes = await fetch(`${CANVA_API}/designs/${designId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const dJson = await dRes.json().catch(() => ({}));
+    const total = dJson?.design?.page_count ?? dJson?.page_count ?? null;
+    if (!total || total <= keep) return { ok: true, trimmed: 0 };
+
+    const pageNumbers = [];
+    for (let p = keep + 1; p <= total; p++) pageNumbers.push(p);
+
+    const mRes = await fetch(`${CANVA_API}/merges`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "modify_existing_design",
+        design_id: designId,
+        operations: [{ type: "delete_pages", page_numbers: pageNumbers }],
+      }),
+    });
+    const mJson = await mRes.json().catch(() => ({}));
+    if (!mRes.ok) return { ok: false, trimmed: 0, error: mJson.message || mJson.error };
+
+    let job = mJson.job ?? mJson;
+    const jobId = job.id;
+    const deadline = Date.now() + 15_000;
+    while (jobId && (job.status === "in_progress" || job.status === "pending") && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 1500));
+      const pRes = await fetch(`${CANVA_API}/merges/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
+      job = (await pRes.json().catch(() => ({}))).job ?? job;
+    }
+    const rd = job.result?.design ?? job.design ?? null;
+    return {
+      ok: job.status === "success",
+      trimmed: pageNumbers.length,
+      designUrl: rd?.url || null,
+      designId: rd?.id || null,
+    };
+  } catch (e) {
+    return { ok: false, trimmed: 0, error: e.message };
+  }
+}
