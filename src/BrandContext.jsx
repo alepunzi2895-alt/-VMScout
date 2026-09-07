@@ -15,6 +15,7 @@ const newBrand = (name = "Il Mio Brand") => ({
   language: "it",
   instagramHandle: "",
   hashtags: "",
+  logo: "",            // data URL (immagine/logo del progetto, ridimensionata client-side)
   canvaTemplates: { post: "", story: "", reel: "" },
   createdAt: new Date().toISOString(),
 });
@@ -43,6 +44,7 @@ function syncProjectToDb(brand) {
       tone: brand.tone,
       instagramHandle: brand.instagramHandle,
       hashtags: brand.hashtags,
+      logo: brand.logo || "",
       canvaTemplates: brand.canvaTemplates,
     }),
   }).catch(err => console.warn("[BrandContext] sync progetto fallita:", err.message));
@@ -112,6 +114,7 @@ export function BrandProvider({ children }) {
               language: "it",
               instagramHandle: row.instagram_handle || "",
               hashtags: row.hashtags || "",
+              logo: row.logo || "",
               canvaTemplates: (() => { try { return JSON.parse(row.canva_templates || "{}"); } catch { return { post: "", story: "", reel: "" }; } })(),
               createdAt: row.created_at,
             }));

@@ -36,6 +36,12 @@ async function ensureTables(db) {
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
   ], "write");
+
+  // Colonne aggiunte dopo la creazione iniziale della tabella: ALTER lazy,
+  // idempotente (SQLite lancia "duplicate column name" se già presente).
+  for (const col of ["logo TEXT"]) {
+    try { await db.execute(`ALTER TABLE projects ADD COLUMN ${col}`); } catch { /* già presente */ }
+  }
 }
 
 const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [] };
@@ -69,17 +75,17 @@ export default async function handler(req, res) {
     }
 
     if (action === "save_project" && req.method === "POST") {
-      const { id, name, sector, description, tone, instagramHandle, hashtags, canvaTemplates } = req.body;
+      const { id, name, sector, description, tone, instagramHandle, hashtags, logo, canvaTemplates } = req.body;
       if (!id || !name) return res.status(400).json({ error: "Mancano id o name" });
       await db.execute({
-        sql: `INSERT INTO projects (id, name, sector, description, tone, instagram_handle, hashtags, canva_templates, updated_at)
-              VALUES (?,?,?,?,?,?,?,?, datetime('now'))
+        sql: `INSERT INTO projects (id, name, sector, description, tone, instagram_handle, hashtags, logo, canva_templates, updated_at)
+              VALUES (?,?,?,?,?,?,?,?,?, datetime('now'))
               ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, sector=excluded.sector, description=excluded.description,
                 tone=excluded.tone, instagram_handle=excluded.instagram_handle,
-                hashtags=excluded.hashtags, canva_templates=excluded.canva_templates,
+                hashtags=excluded.hashtags, logo=excluded.logo, canva_templates=excluded.canva_templates,
                 updated_at=excluded.updated_at`,
-        args: [id, name, sector || "", description || "", tone || "", instagramHandle || "", hashtags || "", JSON.stringify(canvaTemplates || {})],
+        args: [id, name, sector || "", description || "", tone || "", instagramHandle || "", hashtags || "", logo || "", JSON.stringify(canvaTemplates || {})],
       });
       return res.status(200).json({ ok: true });
     }

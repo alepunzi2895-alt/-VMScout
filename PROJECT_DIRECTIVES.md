@@ -25,8 +25,8 @@ Queste direttive devono essere lette prima di ogni operazione sul progetto e agg
 
 Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) dagli endpoint stessi al primo utilizzo — non serve alcuna chiamata di init manuale. `scripts/init_db.js` è disponibile solo come bootstrap opzionale.
 
-- **`projects`**: `id`, `name`, `sector`, `description`, `tone`, `instagram_handle`, `hashtags`, `canva_templates` (JSON), `created_at`, `updated_at`
-  Specchio server-side dei progetti/brand gestiti in `BrandContext.jsx` (che resta la fonte di verità immediata via `localStorage`; il DB è lo storico durevole cross-browser).
+- **`projects`**: `id`, `name`, `sector`, `description`, `tone`, `instagram_handle`, `hashtags`, `logo` (data URL, immagine/logo del progetto ridimensionata client-side a 320px), `canva_templates` (JSON), `created_at`, `updated_at`
+  Specchio server-side dei progetti/brand gestiti in `BrandContext.jsx` (che resta la fonte di verità immediata via `localStorage`; il DB è lo storico durevole cross-browser). Le colonne aggiunte dopo il `CREATE TABLE` iniziale (es. `logo`) sono create con `ALTER TABLE` lazy e idempotente in `ensureTables()` di `api/history.js`. Logo/edit/elimina progetto si gestiscono dalle card della griglia "Progetti" in `Home.jsx` (`BrandAvatar.jsx` = avatar con logo o iniziale; `fileToResizedDataURL` = resize client-side).
 - **`requests`**: `id`, `project_id`, `type` (`strategy` | `analytics`), `prompt`, `result_json`, `created_at`
   Storico di ogni domanda/risposta AI, per progetto. **Non è più un tab a sé stante**: vive dentro ogni sezione che lo genera (vedi §5).
 - **`project_insights`**: `project_id` (PK), `data` (JSON: `{ tips[], strengths[], weaknesses[], calendar[] }`), `updated_at`
@@ -46,7 +46,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/instagram.js` | `POST /api/instagram` | Proxy Instagram/Facebook Graph API — vedi §6 per il routing token |
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
-| `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide (caption + foto Pexels) |
+| `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, e `imageUrl` opzionale — se il client passa `imageUrl` (foto suggerita scelta a mano nella modale di Visual Scout) si usa quella, altrimenti fallback su ricerca Pexels dalla `search_query` |
 | `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone un **carosello intero** in un solo design: upload di tutte le immagini delle slide + un solo autofill su un template con placeholder ripetuti (vedi §7) |
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
@@ -86,20 +86,26 @@ Meta espone **due famiglie di access token non intercambiabili tra host**:
 
 `src/InstagramAnalytics.jsx` sanifica il token in input (spazi, a-capo, caratteri invisibili da copia-incolla, prefisso `"Bearer "`, virgolette) sia lato client (`sanitizeToken`) sia lato server (difesa in profondità in `api/instagram.js`).
 
-**Metriche Insights**: `impressions` e `video_views` sono deprecate per gli account moderni. Usare `reach,saved` per foto/caroselli e `reach,saved,views` per video/reel.
+**Metriche Insights**: `impressions` e `video_views` sono deprecate per gli account moderni. Instagram fallisce l'**intera** chiamata insights se una sola metrica non è valida per quel media/account → `fetchPostInsights()` prova il set esteso (`reach,saved,likes,comments,shares,total_interactions,profile_visits,follows` + `views` per i video) e ricade su quello minimo garantito (`reach,saved` / `+views`). `engRate()` usa `total_interactions` ufficiale, con fallback ricostruito dai singoli campi.
 
-**Analisi visiva**: `analyze()` allega come immagini (via `images` in `api/chat.js`) le foto (`thumbnail_url`/`media_url`) dei post con più engagement, così Claude analizza davvero stile visivo/storytelling, non solo i numeri. L'output è JSON strutturato (non più markdown libero) con `patterns`, `timing`, `content_pillars`, `visual_storytelling` (style/recurring_elements/storytelling_pattern/strengths/weaknesses), `corrections`, `next_posts[]` (ognuna con `visual_scout_brief` pronto per l'handoff). Vedi `AnalysisPanel` in `InstagramAnalytics.jsx` per il renderer.
+**Panoramica account**: `fetchAccountOverview()` legge `followers_count,media_count,follows_count` + (best-effort, non blocca il flusso post) `reach`/`profile_views` a 28gg (`period=days_28&metric_type=total_value`) e `follower_demographics` con `breakdown=country|age|gender` (richiede >100 follower + `instagram_business_manage_insights`). Reso da `AccountOverviewPanel`. Salvato in `localStorage` (`ig_account`).
+
+**Lista post**: `AllPostsList` mostra **tutti** i post con ordinamento (data ↓ default, data ↑, engagement, reach, interazioni) e le metriche estese per post. La Top 5 per engagement resta separata.
+
+**Analisi visiva**: `analyze()` allega come immagini (via `images` in `api/chat.js`) le foto (`thumbnail_url`/`media_url`) dei post con più engagement, così Claude analizza davvero stile visivo/storytelling, non solo i numeri. `postsSummary` include ora anche `condivisioni`, `interazioni_tot`, `visite_profilo`, `nuovi_follow`; il system prompt riceve `accountCtx` (follower, reach 28gg, top paesi/età). L'output è JSON strutturato con `patterns`, `timing`, `content_pillars`, `visual_storytelling`, `corrections`, `next_posts[]` (ognuna con `hook_type`, `hook`, `visual_scout_brief` pronto per l'handoff). Vedi `AnalysisPanel` in `InstagramAnalytics.jsx` per il renderer.
 
 ---
 
 ## 7. Regole di Sviluppo
 
 - **Mai aggiungere dipendenze** senza motivo concreto. Mantenere l'app super leggera.
-- **JSON strictness**: i prompt AI (Visual Scout e Analytics) chiedono output esclusivamente JSON. Non modificare le strutture senza testare il parsing lato frontend.
+- **JSON strictness**: i prompt AI (Visual Scout e Analytics) chiedono output esclusivamente JSON. Non modificare le strutture senza testare il parsing lato frontend. Campi guidati dai framework: `strategy.framework` (architettura carosello scelta), `post_composer[].hook_type`, e in Analytics `next_posts[].hook_type` + `next_posts[].hook` (prima riga pronta). Sono additivi e resi come badge/citazioni in `StrategyTab`/`PostsTab`/`NextPostCard` — se rimossi la UI degrada senza rompersi.
 - **Design System**: tema scuro (`#0D0D0D`/`#080808` sfondo, `#F0EBE3` testo chiaro), accenti gold `#C9A96E`/`#8B7355`, `JetBrains Mono` per tech/etichette, `Instrument Serif` per eleganza, `DM Sans`/`Montserrat` per testi standard.
 - **Foto**: usare sempre sia Pexels che Pixabay per diversità. Per i caroselli ogni slide deve avere una `search_query` diversa.
 - **Query di ricerca immagini**: preferire soggetti/location ampiamente taggati nelle stock library invece di nomi di luogo di nicchia (spesso restituiscono 0 risultati). `fetchImages`/`fetchVideos` in `App.jsx` fanno comunque un retry automatico allargando la query (tolgono l'ultima parola progressivamente) se la ricerca esatta non trova nulla — vedi `broadenAttempts()`. Ogni `search_query` generata dal system prompt deve essere **globalmente unica** in tutta la risposta (non solo all'interno della singola sezione).
 - **Canva senza template fissi per-slide**: `api/canva-carousel.js` compila un intero carosello in una sola chiamata usando un template con placeholder ripetuti `Image_N`/`Testo_N` (configurato una volta in Canva Studio), invece di richiedere un design per slide.
+- **Crea design da suggerimento (Visual Scout)**: ogni slide del Post Composer ha il pulsante "✦ Crea design" → `CanvaQuickDesignModal` (portale su `document.body`, dark). Precompilata con caption/query/cta della slide; l'utente sceglie formato (post/story/reel) e UNA foto suggerita (grid da `fetchImages`) o lascia "🔀 Auto". Invia a `/api/canva-create` con `imageUrl` = foto scelta.
+- **Toolkit framework marketing**: `src/marketingFrameworks.js` esporta `MARKETING_TOOLKIT` (Visual Scout) e `MARKETING_TOOLKIT_BRIEF` (Analytics) — distillato compatto delle skill in `.claude/skills/` (hook, AIDA/PAS/BAB, architetture carosello, struttura short-form video, content pillar, psicologia della persuasione, value equation, JTBD, test angoli). È iniettato **solo come input** nei system prompt (non allunga l'output → non tocca i limiti di concisione/timeout). Il modello deve applicare i framework in silenzio, senza nominarli nell'output e senza scarsità/urgenza finte. Aggiornare il distillato se si aggiornano le skill upstream.
 
 ---
 
@@ -123,3 +129,9 @@ Push su `main` triggera il deploy automatico su Vercel.
 - Rewrite catch-all verso `index.html` per SPA routing
 - `api/canva-upload.js`, `api/canva-create.js`, `api/canva-carousel.js`, `api/chat.js`: `maxDuration: 60` (upload/polling job e analisi visiva possono richiedere più dei 10s di default)
 - `api/canva-test.js`: `maxDuration: 30`
+
+---
+
+## 9. Skill di marketing (dev tooling)
+
+`.claude/skills/` contiene le ~50 skill di [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) (MIT), versionate nel repo ma **fuori dal bundle** (Vercel builda solo `dist/` + `api/`). Servono a Claude Code durante lo sviluppo di feature marketing; il loro know-how rilevante è distillato in `src/marketingFrameworks.js` per l'uso runtime dell'app. Per aggiornarle: ri-clonare l'upstream, ricopiare `skills/`, rimuovere le cartelle `evals/`, ri-verificare il distillato.

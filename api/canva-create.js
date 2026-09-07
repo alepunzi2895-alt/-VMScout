@@ -82,7 +82,7 @@ async function uploadImageUrl(imageUrl, token) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { caption, search_query, format = "post", cta, templateId: bodyTemplateId } = req.body;
+  const { caption, search_query, format = "post", cta, templateId: bodyTemplateId, imageUrl: bodyImageUrl } = req.body;
   if (!caption) return res.status(400).json({ error: "Manca caption" });
 
   const db = getDb();
@@ -104,8 +104,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Fetch Pexels photo URL
-    const imageUrl = search_query ? await fetchPexelsUrl(search_query, vertical) : null;
+    // 1. Immagine: se il client ne passa una esplicita (foto suggerita scelta
+    //    dall'utente in Visual Scout), usiamo quella; altrimenti fallback sulla
+    //    ricerca Pexels dalla search_query.
+    const imageUrl = bodyImageUrl || (search_query ? await fetchPexelsUrl(search_query, vertical) : null);
 
     // 2. Upload image to Canva and wait for asset_id
     const assetId = imageUrl ? await uploadImageUrl(imageUrl, token) : null;

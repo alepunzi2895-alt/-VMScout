@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
+import { MARKETING_TOOLKIT_BRIEF } from "./marketingFrameworks";
 
 const GOLD      = "#C9A96E";
 const DARK      = "#0D0D0D";
@@ -29,6 +30,62 @@ async function igCall(token, path, params = {}) {
     body: JSON.stringify({ token: sanitizeToken(token), path, params }),
   });
   return res.json();
+}
+
+// Insights per singolo post. Instagram fallisce l'INTERA chiamata se anche una
+// sola metrica della lista non è valida per quel tipo di media / account →
+// proviamo prima il set esteso, poi ricadiamo su quello minimo garantito, così
+// il post ha sempre almeno reach/saved invece di restare senza dati.
+async function fetchPostInsights(token, post) {
+  const isVideo = post.media_type === "VIDEO";
+  const extended = isVideo
+    ? "reach,saved,likes,comments,shares,total_interactions,views,profile_visits,follows"
+    : "reach,saved,likes,comments,shares,total_interactions,profile_visits,follows";
+  const minimal = isVideo ? "reach,saved,views" : "reach,saved";
+  for (const metric of [extended, minimal]) {
+    const ins = await igCall(token, `${post.id}/insights`, { metric });
+    if (Array.isArray(ins.data)) {
+      const m = {};
+      ins.data.forEach(x => { m[x.name] = x.values?.[0]?.value ?? x.total_value?.value ?? 0; });
+      return m;
+    }
+  }
+  return {};
+}
+
+// Panoramica account + (best-effort) insight aggregati e demografia follower.
+// Ogni pezzo è opzionale: le API variano per tipo di token/versione e per il
+// numero di follower (la demografia richiede >100 follower), quindi renderizziamo
+// solo ciò che torna davvero.
+async function fetchAccountOverview(token, accountId) {
+  const base = await igCall(token, accountId, { fields: "followers_count,media_count,follows_count" });
+  if (base.error) return null;
+  const acc = {
+    followers_count: base.followers_count ?? null,
+    media_count: base.media_count ?? null,
+    follows_count: base.follows_count ?? null,
+  };
+
+  const tv = (r) => r?.data?.[0]?.total_value?.value ?? r?.data?.[0]?.values?.[0]?.value ?? null;
+  const breakdown = (r) => r?.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? null;
+
+  const [reach28, views28] = await Promise.all([
+    igCall(token, `${accountId}/insights`, { metric: "reach", period: "days_28", metric_type: "total_value" }).catch(() => null),
+    igCall(token, `${accountId}/insights`, { metric: "profile_views", period: "days_28", metric_type: "total_value" }).catch(() => null),
+  ]);
+  acc.reach_28d = tv(reach28);
+  acc.profile_views_28d = tv(views28);
+
+  const [demCountry, demAge, demGender] = await Promise.all([
+    igCall(token, `${accountId}/insights`, { metric: "follower_demographics", period: "lifetime", metric_type: "total_value", breakdown: "country" }).catch(() => null),
+    igCall(token, `${accountId}/insights`, { metric: "follower_demographics", period: "lifetime", metric_type: "total_value", breakdown: "age" }).catch(() => null),
+    igCall(token, `${accountId}/insights`, { metric: "follower_demographics", period: "lifetime", metric_type: "total_value", breakdown: "gender" }).catch(() => null),
+  ]);
+  acc.dem_country = breakdown(demCountry);
+  acc.dem_age = breakdown(demAge);
+  acc.dem_gender = breakdown(demGender);
+
+  return acc;
 }
 
 // Salva ogni analisi AI nello storico persistente (Turso) e ne restituisce l'id.
@@ -129,8 +186,12 @@ const goldBtn = (disabled) => ({
 // ── Engagement helper ────────────────────────────────────────────────────────
 
 function engRate(post) {
-  const interactions = (post.like_count || 0) + (post.comments_count || 0) + (post.insights?.saved || 0);
-  const reach = post.insights?.reach || 0;
+  // Preferisci il total_interactions ufficiale di Instagram (like+commenti+saves+
+  // condivisioni); se assente ricostruiscilo dai singoli campi disponibili.
+  const ins = post.insights || {};
+  const interactions = ins.total_interactions
+    || (post.like_count || ins.likes || 0) + (post.comments_count || ins.comments || 0) + (ins.saved || 0) + (ins.shares || 0);
+  const reach = ins.reach || 0;
   if (!reach) return 0;
   return (interactions / reach) * 100;
 }
@@ -140,6 +201,20 @@ function mediaLabel(type) {
   if (type === "VIDEO") return "Video / Reel";
   if (type === "CAROUSEL_ALBUM") return "Carosello";
   return type;
+}
+
+// Legge una metrica del post: likes/comments dai campi media (più affidabili),
+// il resto dagli insights. 0 se assente.
+function metric(post, key) {
+  if (key === "likes") return post.like_count ?? post.insights?.likes ?? 0;
+  if (key === "comments") return post.comments_count ?? post.insights?.comments ?? 0;
+  return post.insights?.[key] ?? 0;
+}
+
+function fmtNum(n) {
+  if (n == null) return "—";
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+  return String(n);
 }
 
 function fmtDate(ts) {
@@ -379,6 +454,168 @@ function PostRow({ post, rank }) {
   );
 }
 
+// ── Lista completa post (ordinabile, metriche estese) ────────────────────────
+
+const POST_SORTS = [
+  { id: "date_desc", label: "Data ↓", fn: (a, b) => new Date(b.timestamp) - new Date(a.timestamp) },
+  { id: "date_asc",  label: "Data ↑", fn: (a, b) => new Date(a.timestamp) - new Date(b.timestamp) },
+  { id: "eng",       label: "Engagement", fn: (a, b) => engRate(b) - engRate(a) },
+  { id: "reach",     label: "Reach", fn: (a, b) => metric(b, "reach") - metric(a, "reach") },
+  { id: "interactions", label: "Interazioni", fn: (a, b) => metric(b, "total_interactions") - metric(a, "total_interactions") },
+];
+
+const POST_METRIC_COLS = [
+  { key: "reach", label: "Reach" },
+  { key: "likes", label: "Like" },
+  { key: "comments", label: "Commenti" },
+  { key: "saved", label: "Salvati" },
+  { key: "shares", label: "Condivisi" },
+  { key: "total_interactions", label: "Interaz." },
+  { key: "views", label: "Views", videoOnly: true },
+  { key: "profile_visits", label: "Visite prof." },
+  { key: "follows", label: "Nuovi follow" },
+];
+
+function AllPostsRow({ post }) {
+  const isVideo = post.media_type === "VIDEO";
+  const thumb = post.thumbnail_url || post.media_url;
+  const cols = POST_METRIC_COLS.filter(c => !c.videoOnly || isVideo);
+  return (
+    <div style={{ padding: "12px 0", borderBottom: "1px solid rgba(201,169,110,0.08)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        {thumb ? (
+          <img src={thumb} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 40, height: 40, borderRadius: 6, background: CARD2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>
+            {isVideo ? "🎬" : post.media_type === "CAROUSEL_ALBUM" ? "🖼" : "📸"}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, color: WARM_GREY, marginBottom: 2 }}>
+            <span style={{ color: GOLD }}>{mediaLabel(post.media_type)}</span>
+            <span style={{ margin: "0 5px" }}>·</span>
+            {new Date(post.timestamp).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "2-digit" })}
+            {" "}{String(new Date(post.timestamp).getHours()).padStart(2, "0")}:{String(new Date(post.timestamp).getMinutes()).padStart(2, "0")}
+          </div>
+          <div style={{ fontSize: 11.5, color: OFF_WHITE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {post.caption ? post.caption.slice(0, 90) : <span style={{ color: WARM_GREY, fontStyle: "italic" }}>Nessuna caption</span>}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif" }}>{engRate(post).toFixed(1)}%</div>
+          {post.permalink && (
+            <a href={post.permalink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: IG_PINK, textDecoration: "none" }}>apri ↗</a>
+          )}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols.length}, 1fr)`, gap: 4, paddingLeft: 52 }}>
+        {cols.map(c => {
+          const v = metric(post, c.key);
+          return (
+            <div key={c.key} style={{ textAlign: "center", background: CARD2, borderRadius: 5, padding: "5px 2px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: v ? OFF_WHITE : "#555", fontFamily: "'Montserrat', sans-serif" }}>{v ? fmtNum(v) : "—"}</div>
+              <div style={{ fontSize: 7.5, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>{c.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AllPostsList({ posts }) {
+  const [sort, setSort] = useState("date_desc");
+  const [open, setOpen] = useState(true);
+  const sorted = useMemo(() => {
+    const s = POST_SORTS.find(x => x.id === sort) || POST_SORTS[0];
+    return [...posts].sort(s.fn);
+  }, [posts, sort]);
+
+  return (
+    <div style={{ ...card, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: open ? 12 : 0 }}>
+        <button onClick={() => setOpen(o => !o)} style={{ background: "none", border: "none", color: OFF_WHITE, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", padding: 0 }}>
+          {open ? "▾" : "▸"} Tutti i post ({posts.length})
+        </button>
+        {open && (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {POST_SORTS.map(s => (
+              <button key={s.id} onClick={() => setSort(s.id)}
+                style={{ padding: "4px 9px", borderRadius: 6, border: `1px solid ${sort === s.id ? GOLD : "#2a2a2a"}`, background: sort === s.id ? `${GOLD}18` : "transparent", color: sort === s.id ? GOLD : WARM_GREY, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && sorted.map(p => <AllPostsRow key={p.id} post={p} />)}
+    </div>
+  );
+}
+
+// ── Panoramica account ──────────────────────────────────────────────────────
+
+function DemographicBars({ title, results, mapLabel }) {
+  if (!results?.length) return null;
+  const rows = [...results]
+    .map(r => ({ label: mapLabel ? mapLabel(r.dimension_values?.[0]) : r.dimension_values?.[0], value: r.value || 0 }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+  const max = Math.max(...rows.map(r => r.value), 1);
+  return (
+    <div style={{ flex: 1, minWidth: 180 }}>
+      <div style={{ fontSize: 10, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>{title}</div>
+      {rows.map(r => (
+        <div key={r.label} style={{ marginBottom: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: OFF_WHITE, marginBottom: 2 }}>
+            <span>{r.label}</span><span style={{ color: GOLD, fontWeight: 700 }}>{fmtNum(r.value)}</span>
+          </div>
+          <div style={{ height: 3, background: "#2a2a2a", borderRadius: 2 }}>
+            <div style={{ height: "100%", width: `${(r.value / max) * 100}%`, background: GOLD, borderRadius: 2 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const COUNTRY_NAMES = { IT: "Italia", US: "USA", GB: "Regno Unito", DE: "Germania", FR: "Francia", ES: "Spagna", CH: "Svizzera", NL: "Olanda", BE: "Belgio", AT: "Austria", PT: "Portogallo", BR: "Brasile", RU: "Russia" };
+
+function AccountOverviewPanel({ account }) {
+  if (!account) return null;
+  const hasDemographics = account.dem_country?.length || account.dem_age?.length || account.dem_gender?.length;
+  const tiles = [
+    { label: "Follower", value: account.followers_count },
+    { label: "Seguiti", value: account.follows_count },
+    { label: "Post totali", value: account.media_count },
+    { label: "Reach 28gg", value: account.reach_28d },
+    { label: "Visite profilo 28gg", value: account.profile_views_28d },
+  ].filter(t => t.value != null);
+
+  return (
+    <div style={{ ...card, marginBottom: 24 }}>
+      <div style={{ ...label, marginBottom: 14 }}>👤 Panoramica Account</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: hasDemographics ? 20 : 0 }}>
+        {tiles.map(t => (
+          <div key={t.label} style={{ background: CARD2, borderRadius: 8, padding: "12px 10px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: GOLD, fontFamily: "'Montserrat', sans-serif" }}>{fmtNum(t.value)}</div>
+            <div style={{ fontSize: 9, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3 }}>{t.label}</div>
+          </div>
+        ))}
+      </div>
+      {hasDemographics ? (
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <DemographicBars title="Paesi" results={account.dem_country} mapLabel={c => COUNTRY_NAMES[c] || c} />
+          <DemographicBars title="Età" results={account.dem_age} />
+          <DemographicBars title="Genere" results={account.dem_gender} mapLabel={g => ({ M: "Uomini", F: "Donne", U: "N/D" }[g] || g)} />
+        </div>
+      ) : (
+        <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>Demografia follower non disponibile (richiede &gt;100 follower o permessi insights).</div>
+      )}
+    </div>
+  );
+}
+
 // ── Hour Chart ────────────────────────────────────────────────────────────────
 
 function HourChart({ posts }) {
@@ -460,13 +697,21 @@ function NextPostCard({ post, onSuggestBrief, saved, onMarkUsed }) {
     <div style={{ background: CARD2, border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: OFF_WHITE }}>{post.idea}</div>
-        {post.content_type && (
-          <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{post.content_type}</span>
-        )}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {post.hook_type && (
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(124,106,155,0.18)", color: "#9E8FBF", fontWeight: 700, whiteSpace: "nowrap" }}>{post.hook_type}</span>
+          )}
+          {post.content_type && (
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: `${IG_PINK}18`, color: IG_PINK, fontWeight: 700, whiteSpace: "nowrap" }}>{post.content_type}</span>
+          )}
+        </div>
       </div>
+      {post.hook && (
+        <div style={{ fontSize: 12.5, color: OFF_WHITE, fontStyle: "italic", lineHeight: 1.5, marginBottom: 8, paddingLeft: 10, borderLeft: `2px solid ${IG_PINK}55` }}>“{post.hook}”</div>
+      )}
       {post.rationale && <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.5, marginBottom: 10 }}>{post.rationale}</div>}
       <button
-        onClick={() => { onSuggestBrief(post.visual_scout_brief || post.idea); onMarkUsed?.(); }}
+        onClick={() => { onSuggestBrief([post.hook, post.visual_scout_brief].filter(Boolean).join(" — ") || post.idea); onMarkUsed?.(); }}
         disabled={!post.visual_scout_brief && !post.idea}
         style={{ ...goldBtn(false), background: `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: "#fff", fontSize: 10, padding: "8px 14px" }}
       >
@@ -644,6 +889,7 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   // La sessione (post caricati + ultima analisi) resta in localStorage così
   // riaprendo il tab Analytics non serve ricaricare/rianalizzare da capo.
   const [posts,     setPosts]     = useState(() => readJsonLS("ig_posts", []));
+  const [account,   setAccount]   = useState(() => readJsonLS("ig_account", null));
   const [loading,   setLoading]   = useState(false);
   const [step,      setStep]      = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -656,6 +902,13 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   useEffect(() => {
     try { localStorage.setItem("ig_posts", JSON.stringify(posts)); } catch {}
   }, [posts]);
+
+  useEffect(() => {
+    try {
+      if (account) localStorage.setItem("ig_account", JSON.stringify(account));
+      else localStorage.removeItem("ig_account");
+    } catch {}
+  }, [account]);
 
   useEffect(() => {
     try {
@@ -684,9 +937,9 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   }, [isConnected]);
 
   function disconnect() {
-    ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts"].forEach(k => localStorage.removeItem(k));
+    ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts", "ig_account"].forEach(k => localStorage.removeItem(k));
     setToken(""); setAccountId(""); setUsername(defaultHandle); setProfilePic("");
-    setPosts([]); setAnalysis(null); setError("");
+    setPosts([]); setAccount(null); setAnalysis(null); setError("");
   }
 
   async function fetchPosts() {
@@ -696,9 +949,12 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
     setAnalysis(null);
 
     try {
+      setStep("Recupero panoramica account…");
+      fetchAccountOverview(token, accountId).then(setAccount).catch(() => {});
+
       setStep("Recupero ultimi 30 post…");
       const mediaRes = await igCall(token, `${accountId}/media`, {
-        fields: "id,caption,media_type,timestamp,like_count,comments_count,media_url,thumbnail_url",
+        fields: "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,media_url,thumbnail_url,permalink",
         limit: 30,
       });
       if (mediaRes.error) throw new Error(mediaRes.error.message);
@@ -708,20 +964,7 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
 
       setStep(`Recupero insights per ${mediaList.length} post…`);
       const enriched = await Promise.all(
-        mediaList.map(async (post) => {
-          // "impressions"/"video_views" sono metriche deprecate dalla Instagram Insights API
-          // (Meta risponde con errore "does not support this metric for this media product
-          // type" per gli account moderni) — sostituite da "views" per i contenuti video.
-          const metric = post.media_type === "VIDEO"
-            ? "reach,saved,views"
-            : "reach,saved";
-          const ins = await igCall(token, `${post.id}/insights`, { metric });
-          const insMap = {};
-          if (ins.data) {
-            ins.data.forEach(m => { insMap[m.name] = m.values?.[0]?.value ?? 0; });
-          }
-          return { ...post, insights: insMap };
-        })
+        mediaList.map(async (post) => ({ ...post, insights: await fetchPostInsights(token, post) }))
       );
 
       setPosts(enriched);
@@ -757,7 +1000,9 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
         strengths: parsed.visual_storytelling?.strengths || [],
         weaknesses: parsed.visual_storytelling?.weaknesses || [],
         calendar_entries: (parsed.next_posts || []).map(p => ({
-          idea: p.idea, rationale: p.rationale, content_type: p.content_type, visual_scout_brief: p.visual_scout_brief,
+          idea: p.idea, rationale: p.rationale, content_type: p.content_type,
+          hook: p.hook, hook_type: p.hook_type,
+          visual_scout_brief: [p.hook, p.visual_scout_brief].filter(Boolean).join(" — ") || p.visual_scout_brief,
         })),
       }),
     }).catch(err => console.warn("[InstagramAnalytics] merge insights fallito:", err.message));
@@ -768,18 +1013,28 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
     setAnalyzing(true);
     setError("");
 
-    const postsSummary = posts.map(p => ({
-      data: fmtDate(p.timestamp),
-      ora: `${new Date(p.timestamp).getHours()}:00`,
-      tipo: mediaLabel(p.media_type),
-      likes: p.like_count || 0,
-      commenti: p.comments_count || 0,
-      reach: p.insights?.reach || 0,
-      views: p.insights?.views || 0,
-      saves: p.insights?.saved || 0,
-      eng_pct: engRate(p).toFixed(2) + "%",
-      caption: (p.caption || "").substring(0, 200),
-    }));
+    const postsSummary = [...posts]
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .map(p => ({
+        data: fmtDate(p.timestamp),
+        ora: `${new Date(p.timestamp).getHours()}:00`,
+        tipo: mediaLabel(p.media_type),
+        likes: metric(p, "likes"),
+        commenti: metric(p, "comments"),
+        reach: metric(p, "reach"),
+        views: metric(p, "views"),
+        saves: metric(p, "saved"),
+        condivisioni: metric(p, "shares"),
+        interazioni_tot: metric(p, "total_interactions"),
+        visite_profilo: metric(p, "profile_visits"),
+        nuovi_follow: metric(p, "follows"),
+        eng_pct: engRate(p).toFixed(2) + "%",
+        caption: (p.caption || "").substring(0, 200),
+      }));
+
+    const accountCtx = account
+      ? `\nACCOUNT: ${account.followers_count ?? "?"} follower${account.reach_28d != null ? ` | reach 28gg: ${account.reach_28d}` : ""}${account.profile_views_28d != null ? ` | visite profilo 28gg: ${account.profile_views_28d}` : ""}${account.dem_country?.length ? ` | top paesi follower: ${[...account.dem_country].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 3).map(r => r.dimension_values?.[0]).join(", ")}` : ""}${account.dem_age?.length ? ` | fasce età: ${[...account.dem_age].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 2).map(r => r.dimension_values?.[0]).join(", ")}` : ""}`
+      : "";
 
     const priorInsights = await fetchPriorInsights();
     const priorCtx = priorInsights && (priorInsights.tips?.length || priorInsights.strengths?.length || priorInsights.weaknesses?.length)
@@ -814,20 +1069,25 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
     // concisione FERREI (limite di parole per campo, niente markdown, meno
     // elementi) lo stesso payload di 24 post reali è sceso da >45s (timeout)
     // a ~9s. Le istruzioni sotto sono quelle testate, non un tentativo nuovo.
-    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${priorCtx}${lastPostCtx}
+    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${accountCtx}${priorCtx}${lastPostCtx}
+
+Ogni post nei dati include: reach, likes, commenti, saves, condivisioni, interazioni_tot, visite_profilo, nuovi_follow. Usa condivisioni e saves come segnale di valore/virality, visite_profilo e nuovi_follow come segnale di conversione: cita numeri concreti nelle tue osservazioni.
 
 Struttura ESATTA:
-{"patterns":{"summary":"UNA frase, max 20 parole","winning_formats":["formato1","formato2"]},"timing":{"summary":"UNA frase, max 20 parole","best_slot":"es. 19:00-21:00"},"content_pillars":["tema1","tema2","tema3"],"corrections":["max 10 parole","max 10 parole"],"next_posts":[{"idea":"max 6 parole","content_type":"Post|Reel|Carosello","rationale":"UNA frase, max 15 parole","visual_scout_brief":"max 30 parole, in italiano: soggetto, location/mood"}]}
+{"patterns":{"summary":"UNA frase, max 20 parole","winning_formats":["formato1","formato2"]},"timing":{"summary":"UNA frase, max 20 parole","best_slot":"es. 19:00-21:00"},"content_pillars":["tema1","tema2","tema3"],"corrections":["max 12 parole","max 12 parole"],"next_posts":[{"idea":"max 6 parole","content_type":"Post|Reel|Carosello","hook_type":"Curiosità|Storia|Valore|Contrarian","hook":"prima riga pronta all'uso, max 12 parole","rationale":"UNA frase, max 15 parole","visual_scout_brief":"max 30 parole, in italiano: soggetto, location/mood"}]}
 
 REGOLE FERREE:
 - Genera SOLO 2 elementi in "next_posts".
-- SEQUENZA: le 2 idee devono avere formato E tema diversi tra loro E diversi dall'ULTIMO CONTENUTO PUBBLICATO (se indicato sopra) — mai la stessa idea scenografica riproposta.
+- SEQUENZA: le 2 idee devono avere formato, tema E hook_type diversi tra loro E diversi dall'ULTIMO CONTENUTO PUBBLICATO (se indicato sopra) — mai la stessa idea scenografica riproposta.
 - MIX OBBLIGATORIO: almeno 1 delle 2 idee deve riguardare l'OFFERTA/I SERVIZI CONCRETI del brand (es. pacchetti su misura, prenotazioni, esperienze specifiche, collaborazioni, orari/luoghi dedicati) — non solo atmosfera/paesaggio. L'altra può essere più scenografica/emotiva.
+- FRAMEWORK: ogni "correction" nomina la leva concreta (hook debole / pillar poco chiari / CTA assente / carosello senza struttura / poca riprova sociale / timing) + l'azione. "hook" è la prima riga vera del post nel tono del brand. Se content_type è "Carosello", il visual_scout_brief nomina l'architettura (Value-Stack/Problem-Proof/Hack-List/Rant/Demo).
 - Ogni campo testuale ha un limite di parole indicato sopra: NON superarlo.
 - NON usare markdown (niente #, **, tabelle, emoji decorative).
 - NON aggiungere spiegazioni, premesse o testo fuori dal JSON.
 - Risposta totale: massimo 400 parole in tutto il JSON.
-- Mantieni comunque dati concreti e tono lusso/evocativo, solo estremamente sintetico.`;
+- Mantieni comunque dati concreti e tono lusso/evocativo, solo estremamente sintetico.
+
+${MARKETING_TOOLKIT_BRIEF}`;
 
     const textUserMsg = `Dati Instagram reali di ${username || "questo account"} (ultimi ${posts.length} post):
 
@@ -846,7 +1106,8 @@ Struttura ESATTA:
 REGOLE FERREE:
 - NON usare markdown. NON aggiungere testo fuori dal JSON.
 - Rispetta i limiti di parole indicati per ogni campo.
-- Massimo 1 elemento in "strengths" e in "weaknesses".`;
+- Massimo 1 elemento in "strengths" e in "weaknesses".
+- Valuta lo storytelling anche rispetto a: coerenza dei pillar visivi, forza dell'hook nel primo frame/prima slide, architettura del carosello (una sola, riconoscibile), uso etico di leve psicologiche (riprova sociale, peak-end, loop aperti).`;
     const visualUserMsg = `Analizza lo stile visivo di queste ${imageUrls.length} foto, i post più performanti di ${username || "questo account"}.`;
 
     try {
@@ -1016,11 +1277,13 @@ REGOLE FERREE:
       {posts.length > 0 && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
-            <StatCard label="Engagement Medio" value={`${avgEng}%`} sub="likes + commenti + saves / reach" />
+            <StatCard label="Engagement Medio" value={`${avgEng}%`} sub="interazioni totali / reach" />
             <StatCard label="Formato Vincente" value={mediaLabel(bestType)} sub="per engagement medio" />
             <StatCard label="Ora Migliore" value={hourBest || "—"} sub="engagement più alto" />
             <StatCard label="Reach Medio" value={avgReach ? avgReach.toLocaleString("it-IT") : "—"} sub="per post" />
           </div>
+
+          <AccountOverviewPanel account={account} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
             {/* Top posts */}
@@ -1075,6 +1338,8 @@ REGOLE FERREE:
               </div>
             </div>
           </div>
+
+          <AllPostsList posts={posts} />
 
           <AnalysisPanel data={analysis} onSuggestBrief={onSuggestBrief} />
           <PastAnalyses brand={brand} refreshKey={historyRefreshKey} onSuggestBrief={onSuggestBrief} />

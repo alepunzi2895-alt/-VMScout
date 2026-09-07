@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useBrand } from "./BrandContext.jsx";
+import CanvaMark from "./CanvaMark.jsx";
 
 const GOLD = "#C9A96E";
 const CANVA_TEAL = "#00C4CC";
@@ -151,8 +152,8 @@ export default function CanvaStudio() {
 
         {/* Header */}
         <div style={{ marginBottom: 36 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", color: CANVA_TEAL, marginBottom: 10, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
-            ✦ Canva Studio
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", color: CANVA_TEAL, marginBottom: 10, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+            <CanvaMark size={16} /> Canva Studio
           </div>
           <h2 style={{ fontSize: 30, fontWeight: 300, margin: "0 0 8px", fontFamily: "'Instrument Serif', serif" }}>
             Gestisci i tuoi template

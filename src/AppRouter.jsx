@@ -5,6 +5,8 @@ import VisualMarketingScout from "./App.jsx";
 import InstagramAnalytics from "./InstagramAnalytics.jsx";
 import CanvaStudio from "./CanvaStudio.jsx";
 import Dashboard from "./Dashboard.jsx";
+import CanvaMark from "./CanvaMark.jsx";
+import BrandAvatar from "./BrandAvatar.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -12,7 +14,7 @@ const TABS = [
   { id: "home", label: "Home", icon: "◈" },
   { id: "vmscout", label: "Visual Scout", icon: "🎯" },
   { id: "instagram", label: "Analytics", icon: "📊" },
-  { id: "canva", label: "Canva Studio", icon: "✦" },
+  { id: "canva", label: "Canva Studio", icon: <CanvaMark size={14} /> },
   { id: "dashboard", label: "Dashboard", icon: "🧭" },
 ];
 
@@ -78,13 +80,7 @@ function Nav({ activeApp, setActiveApp }) {
               background: menuOpen ? `${GOLD}08` : "transparent",
               cursor: "pointer", transition: "all 0.2s",
             }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: "50%",
-              background: GOLD, display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 10, fontWeight: 700, color: "#000", fontFamily: "'Montserrat', sans-serif",
-            }}>
-              {activeBrand.name[0].toUpperCase()}
-            </div>
+            <BrandAvatar brand={activeBrand} size={24} radius={12} />
             <span style={{ fontSize: 11, color: "#A0988E", fontFamily: "'Montserrat', sans-serif", fontWeight: 500, maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {activeBrand.name}
             </span>
@@ -107,16 +103,7 @@ function Nav({ activeApp, setActiveApp }) {
                     border: "none", background: brand.id === activeBrandId ? `${GOLD}12` : "transparent",
                     cursor: "pointer", textAlign: "left", transition: "background 0.15s",
                   }}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                    background: brand.id === activeBrandId ? GOLD : "#1E1E1E",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 10, fontWeight: 700,
-                    color: brand.id === activeBrandId ? "#000" : "#666",
-                    fontFamily: "'Montserrat', sans-serif",
-                  }}>
-                    {brand.name[0].toUpperCase()}
-                  </div>
+                  <BrandAvatar brand={brand} size={24} radius={12} active={brand.id === activeBrandId} />
                   <span style={{ fontSize: 12, color: brand.id === activeBrandId ? "#E8E0D8" : "#666", fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                     {brand.name}
                   </span>

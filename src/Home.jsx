@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useBrand } from "./BrandContext.jsx";
+import CanvaMark from "./CanvaMark.jsx";
+import BrandAvatar, { fileToResizedDataURL } from "./BrandAvatar.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -22,9 +24,20 @@ export default function Home({ onNavigate }) {
   const [newName, setNewName] = useState("");
   const [showNew, setShowNew] = useState(false);
 
-  function startEdit() {
-    setDraft({ ...activeBrand });
+  function startEdit(brand) {
+    const target = brand && typeof brand.id === "string" ? brand : activeBrand;
+    if (target.id !== activeBrandId) setActiveBrandId(target.id);
+    setDraft({ ...target });
     setEditing(true);
+  }
+
+  function removeBrand(brand) {
+    const target = brand && typeof brand.id === "string" ? brand : activeBrand;
+    if (brands.length <= 1) return;
+    if (window.confirm(`Eliminare il progetto "${target.name}"? L'operazione non è reversibile.`)) {
+      deleteBrand(target.id);
+      if (editing && target.id === activeBrandId) cancelEdit();
+    }
   }
 
   function saveEdit() {
@@ -55,7 +68,7 @@ export default function Home({ onNavigate }) {
       desc: "Analisi engagement reale, timing ottimale e suggerimenti strategici via AI.",
     },
     {
-      id: "canva", icon: "✦", title: "Canva Studio",
+      id: "canva", icon: <CanvaMark size={24} />, title: "Canva Studio",
       desc: "Configura template Canva e crea design dal tuo brief in un click.",
     },
   ];
@@ -137,16 +150,7 @@ export default function Home({ onNavigate }) {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{
-                      width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                      background: isActive ? GOLD : "#1E1E1E",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 14, fontWeight: 700,
-                      color: isActive ? "#000" : "#555",
-                      fontFamily: "'Montserrat', sans-serif",
-                    }}>
-                      {brand.name[0].toUpperCase()}
-                    </div>
+                    <BrandAvatar brand={brand} size={34} radius={9} active={isActive} />
                     <div style={{ flex: 1, overflow: "hidden" }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? "#F0EBE3" : "#777", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {brand.name}
@@ -156,9 +160,23 @@ export default function Home({ onNavigate }) {
                       )}
                     </div>
                   </div>
-                  {isActive && (
-                    <div style={{ position: "absolute", top: 10, right: 10, width: 6, height: 6, borderRadius: "50%", background: GOLD }} />
-                  )}
+
+                  <div className="home-brand-actions" style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
+                    <button
+                      title="Modifica progetto"
+                      onClick={e => { e.stopPropagation(); startEdit(brand); }}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: "1px solid #262626", background: "#0C0C0C", color: "#888", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+                      ✎
+                    </button>
+                    {brands.length > 1 && (
+                      <button
+                        title="Elimina progetto"
+                        onClick={e => { e.stopPropagation(); removeBrand(brand); }}
+                        style={{ width: 22, height: 22, borderRadius: 6, border: "1px solid #3A2020", background: "#0C0C0C", color: "#B06060", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+                        🗑
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -197,8 +215,8 @@ export default function Home({ onNavigate }) {
 
             {brands.length > 1 && !editing && (
               <button
-                onClick={() => { if (window.confirm(`Eliminare "${activeBrand.name}"?`)) deleteBrand(activeBrand.id); }}
-                style={{ marginTop: 18, fontSize: 10, color: "#333", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 3 }}>
+                onClick={() => removeBrand()}
+                style={{ marginTop: 18, fontSize: 10, color: "#7A4A4A", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 3 }}>
                 Elimina progetto
               </button>
             )}
@@ -218,7 +236,7 @@ export default function Home({ onNavigate }) {
                 onClick={() => onNavigate(t.id)}
                 style={{ padding: "22px 18px", borderRadius: 14, border: "1px solid #1A1A1A", background: "#0C0C0C", textAlign: "left", cursor: "pointer", transition: "all 0.2s" }}
               >
-                <div style={{ fontSize: 24, marginBottom: 10 }}>{t.icon}</div>
+                <div style={{ fontSize: 24, marginBottom: 10, height: 24 }}>{t.icon}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#C8C0B8", marginBottom: 7, fontFamily: "'Montserrat', sans-serif" }}>{t.title}</div>
                 <div style={{ fontSize: 11, color: "#454540", lineHeight: 1.6 }}>{t.desc}</div>
               </button>
@@ -263,6 +281,52 @@ function BrandSummary({ brand }) {
   );
 }
 
+function LogoField({ draft, onChange }) {
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setErr("");
+    setBusy(true);
+    try {
+      const dataUrl = await fileToResizedDataURL(file, 320);
+      onChange({ ...draft, logo: dataUrl });
+    } catch (er) {
+      setErr(er.message || "Caricamento fallito");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14 }}>
+      <BrandAvatar brand={draft} size={48} radius={12} />
+      <div style={{ flex: 1 }}>
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 6 }}>
+          Logo / foto progetto
+        </label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "#141414", color: "#A0988E", fontSize: 11, cursor: busy ? "wait" : "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+            {busy ? "Carico…" : draft.logo ? "Sostituisci" : "Carica immagine"}
+            <input type="file" accept="image/*" onChange={handleFile} disabled={busy} style={{ display: "none" }} />
+          </label>
+          {draft.logo && (
+            <button type="button" onClick={() => onChange({ ...draft, logo: "" })}
+              style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #2A2A2A", background: "transparent", color: "#666", fontSize: 11, cursor: "pointer" }}>
+              Rimuovi
+            </button>
+          )}
+          <span style={{ fontSize: 10, color: "#3A3A3A" }}>PNG/JPG · ridimensionata a 320px</span>
+        </div>
+        {err && <div style={{ fontSize: 11, color: "#E47070", marginTop: 6 }}>{err}</div>}
+      </div>
+    </div>
+  );
+}
+
 function BrandForm({ draft, onChange }) {
   const inputStyle = {
     width: "100%", background: "#141414", border: "1px solid #2A2A2A", borderRadius: 8,
@@ -302,6 +366,8 @@ function BrandForm({ draft, onChange }) {
       <div style={{ gridColumn: "1 / -1" }}>
         {field("name", "Nome Brand / Progetto", "Es: Mio Brand, Progetto Estate 2026...")}
       </div>
+
+      <LogoField draft={draft} onChange={onChange} />
 
       <div>
         <label style={labelStyle}>Settore</label>

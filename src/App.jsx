@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { MARKETING_TOOLKIT } from "./marketingFrameworks";
 
 // Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
 // "solo JSON": invece di assumere che l'intera stringa ripulita sia JSON puro,
@@ -54,7 +56,7 @@ GOLDEN RULE: "Anti-AI Aesthetic" — authentic, real, imperfect visuals only. No
 CONCISION IS MANDATORY. Every field below has a hard word limit — respect it exactly, this is the single most important rule. Short, direct, professional copy. Zero flowery preamble, zero filler, zero repeated ideas across fields.
 
 Structure (word limits in parentheses):
-{"strategy":{"emotion":"(2 words)","palette":["c1","c2","c3","c4"],"palette_hex":["#h1","#h2","#h3","#h4"],"narrative":"Italian, max 18 words"},"direction":{"style":"max 5 words","composition":"max 5 words","lighting":"max 5 words"},"queries":{"primary":["q1","q2","q3"],"secondary":["q4","q5"],"avoid":["bad1","bad2"]},"video_queries":{"primary":["vq1","vq2","vq3"],"secondary":["vq4","vq5"],"style_notes":"max 8 words"},"post_composer":[{"slide_number":1,"visual_description":"max 10 words, in the user's language","search_query":"max 3 English words","instagram_hashtag":"#tag","captions":{"it":"max 18 words","en":"max 18 words","es":"max 18 words"},"hashtags_instagram":["6 tags"],"hashtags_facebook":["3 tags"],"cta":{"it":"max 4 words","en":"max 4 words","es":"max 4 words"},"platform_tip":"max 6 words"}],"editorial_plan":{"duration_context":"${duration}","weekly_focus":"max 6 words","days":[{"day":"Lunedì","content_type":"Post|Story|Reel|Carousel","topic":"max 4 words","goal":"Awareness|Engagement|Conversion|Community","best_time":"18:30","fb_cross_post_tip":"max 6 words","story_reel_hint":"max 6 words"}]},"video_storytelling":{"concept":{"it":"max 8 words","en":"max 8 words","es":"max 8 words"},"duration":"15s","aspect_ratio":"9:16","music_mood":"2 words","scenes":[{"scene_number":1,"duration":"3s","footage_type":"type","description":{"it":"max 5 words","en":"max 5 words","es":"max 5 words"},"search_query":"max 3 English words","text_overlay":{"it":"max 3 words","en":"max 3 words","es":"max 3 words"},"transition":"cut"}],"audio_notes":{"it":"max 6 words","en":"max 6 words","es":"max 6 words"}},"orientation":"portrait|landscape|square","mood_tags":["t1","t2","t3"]}
+{"strategy":{"emotion":"(2 words)","framework":"carousel architecture: Value-Stack|Problem-Proof|Hack-List|Rant|Demo","palette":["c1","c2","c3","c4"],"palette_hex":["#h1","#h2","#h3","#h4"],"narrative":"Italian, max 18 words"},"direction":{"style":"max 5 words","composition":"max 5 words","lighting":"max 5 words"},"queries":{"primary":["q1","q2","q3"],"secondary":["q4","q5"],"avoid":["bad1","bad2"]},"video_queries":{"primary":["vq1","vq2","vq3"],"secondary":["vq4","vq5"],"style_notes":"max 8 words"},"post_composer":[{"slide_number":1,"hook_type":"Curiosity|Story|Value|Contrarian","visual_description":"max 10 words, in the user's language","search_query":"max 3 English words","instagram_hashtag":"#tag","captions":{"it":"max 18 words","en":"max 18 words","es":"max 18 words"},"hashtags_instagram":["6 tags"],"hashtags_facebook":["3 tags"],"cta":{"it":"max 4 words","en":"max 4 words","es":"max 4 words"},"platform_tip":"max 6 words"}],"editorial_plan":{"duration_context":"${duration}","weekly_focus":"max 6 words","days":[{"day":"Lunedì","content_type":"Post|Story|Reel|Carousel","topic":"max 4 words","goal":"Awareness|Engagement|Conversion|Community","best_time":"18:30","fb_cross_post_tip":"max 6 words","story_reel_hint":"max 6 words"}]},"video_storytelling":{"concept":{"it":"max 8 words","en":"max 8 words","es":"max 8 words"},"duration":"15s","aspect_ratio":"9:16","music_mood":"2 words","scenes":[{"scene_number":1,"duration":"3s","footage_type":"type","description":{"it":"max 5 words","en":"max 5 words","es":"max 5 words"},"search_query":"max 3 English words","text_overlay":{"it":"max 3 words","en":"max 3 words","es":"max 3 words"},"transition":"cut"}],"audio_notes":{"it":"max 6 words","en":"max 6 words","es":"max 6 words"}},"orientation":"portrait|landscape|square","mood_tags":["t1","t2","t3"]}
 
 RULES:
 - Generate exactly 3 post_composer slides, exactly 3 video_storytelling scenes.
@@ -63,7 +65,16 @@ RULES:
 - English, max 3 words, every photo/video search_query: [adjective]+[subject]+[location]. Prefer broadly-tagged stock subjects (city/region/landscape type) over hyper-specific niche place names — those return zero results on Pexels/Pixabay. Put the niche place name in visual_description instead.
 - No search_query string may repeat anywhere in the whole response (photo or video, any section).
 - CAROUSEL/MULTI-SLIDE DIFFERENTIATION: if the brief involves N items of the same type (e.g. "3 villas"), each slide's search_query must be a VISUALLY DISTINCT subject, not the same subject from different angles (e.g. villa: exterior cliffside / infinity pool / minimalist interior — never the same query 3x).
-- Each video scene's search_query must be visually distinct from the others and serve a clear narrative beat.${brandCtx}${insightsCtx}`;
+- Each video scene's search_query must be visually distinct from the others and serve a clear narrative beat.
+
+FRAMEWORK APPLICATION (apply the toolkit below concretely — do not name frameworks in captions):
+- Pick ONE carousel architecture in strategy.framework; every slide must serve it. Slide 1 is a standalone scroll-stopping cover (works alone in the feed).
+- Slide 1 caption opens with a hook of its hook_type. Every caption follows PAS, AIDA or BAB — lead with tension/benefit, never a flat description.
+- Each cta is one concrete action leveraging exactly one ethical lever (social proof, loss aversion, curiosity gap) — no fake scarcity.
+- editorial_plan: rotate 3-5 content pillars across the days, vary the goal each day, max 1 promotional day per week.
+- video_storytelling: scene 1 is a 0-3s hook (visual + text_overlay); each later scene is a distinct narrative beat; the final scene carries the CTA.
+
+${MARKETING_TOOLKIT}${brandCtx}${insightsCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -302,55 +313,213 @@ function CanvaUploadBtn({ url }) {
   );
 }
 
-function CanvaSlideBtn({ caption, query, canvaTemplates }) {
-  const [state, setState] = useState("idle");
-  const [url, setUrl] = useState(null);
-  const templateId = canvaTemplates?.post || "";
+// Formati design supportati dai template Canva per-slide (stessi di Canva Studio).
+const CANVA_QD_FORMATS = [
+  { id: "post", label: "Post 1:1", vertical: false },
+  { id: "story", label: "Story 9:16", vertical: true },
+  { id: "reel", label: "Reel 9:16", vertical: true },
+];
 
-  if (!templateId) {
-    return (
-      <span title="Configura il template in Canva Studio" style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "help", userSelect: "none" }}>
-        ✦ Canva
-      </span>
-    );
-  }
+// Modale "Crea design rapido" agganciata a una singola slide di Visual Scout:
+// caption e query arrivano già dal suggerimento, l'utente sceglie il formato e
+// UNA delle foto suggerite (o lascia la ricerca automatica), poi il backend
+// carica quell'immagine e compila il template Canva.
+function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation, canvaTemplates }) {
+  const [format, setFormat] = useState("post");
+  const [captionText, setCaptionText] = useState(caption || "");
+  const [queryText, setQueryText] = useState(query || "");
+  const [source, setSource] = useState(() => defaultPhotoSource() || "pexels");
+  const [images, setImages] = useState(null);
+  const [imgLoading, setImgLoading] = useState(false);
+  const [selectedImg, setSelectedImg] = useState(null); // url immagine scelta, null = ricerca automatica
+  const [creating, setCreating] = useState(false);
+  const [designUrl, setDesignUrl] = useState(null);
+  const [error, setError] = useState("");
 
-  if (state === "done" && url) {
-    return (
-      <a href={url} target="_blank" rel="noopener noreferrer"
-        style={{ padding: "7px 12px", borderRadius: 8, background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 11, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(90,186,90,0.25)" }}>
-        ✓ Canva →
-      </a>
-    );
-  }
+  // reset quando si riapre su un'altra slide
+  useEffect(() => {
+    if (!open) return;
+    setCaptionText(caption || "");
+    setQueryText(query || "");
+    setSelectedImg(null);
+    setDesignUrl(null);
+    setError("");
+  }, [open, caption, query]);
+
+  const fmt = CANVA_QD_FORMATS.find(f => f.id === format);
+  const templateId = canvaTemplates?.[format] || "";
+  const orient = fmt?.vertical ? "portrait" : (orientation || "square");
+
+  // carica le foto suggerite per la query (debounce leggero sulla digitazione)
+  useEffect(() => {
+    if (!open) return;
+    const q = queryText.trim();
+    if (!q) { setImages(null); return; }
+    let active = true;
+    setImgLoading(true);
+    const t = setTimeout(() => {
+      fetchImages(q, orient, source).then(o => {
+        if (!active) return;
+        setImages(o?.results || []);
+        setImgLoading(false);
+      });
+    }, 350);
+    return () => { active = false; clearTimeout(t); };
+  }, [open, queryText, source, orient]);
 
   async function handleCreate() {
-    setState("loading");
+    if (!templateId) return;
+    setCreating(true);
+    setError("");
+    setDesignUrl(null);
     try {
       const res = await fetch("/api/canva-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caption, search_query: query, format: "post", templateId }),
+        body: JSON.stringify({
+          caption: captionText.trim(),
+          cta: cta || "",
+          search_query: queryText.trim(),
+          format,
+          templateId,
+          imageUrl: selectedImg || undefined,
+        }),
       });
       const data = await res.json();
       if (data.ok) {
-        setUrl(data.url);
-        setState("done");
+        setDesignUrl(data.url);
       } else if (data.error === "CANVA_NOT_CONNECTED") {
         window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-        setState("idle");
+        setError("Connetti Canva nella finestra aperta, poi riprova.");
       } else {
-        setState("error");
-        setTimeout(() => setState("idle"), 3000);
+        setError(data.message || "Errore durante la creazione del design.");
       }
-    } catch { setState("idle"); }
+    } catch (e) {
+      setError(e.message || "Errore di rete.");
+    } finally {
+      setCreating(false);
+    }
   }
 
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 4000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 480, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 16, padding: 22, fontFamily: "'DM Sans', sans-serif", color: "#F0EBE3" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+            ✦ Crea design in Canva
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 16 }}>Da questo suggerimento di Visual Scout.</div>
+
+        {/* Formato */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {CANVA_QD_FORMATS.map(f => (
+            <button key={f.id} onClick={() => { setFormat(f.id); setDesignUrl(null); }}
+              style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 8, cursor: "pointer", border: `1px solid ${format === f.id ? "#00C4CC70" : "#1E1E1E"}`, background: format === f.id ? "rgba(0,196,204,0.1)" : "transparent", color: format === f.id ? "#00C4CC" : "#555", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {!templateId && (
+          <div style={{ padding: "9px 12px", borderRadius: 9, background: "rgba(201,169,110,0.08)", border: "1px solid rgba(201,169,110,0.2)", color: "#C9A96E", fontSize: 11, marginBottom: 14, lineHeight: 1.5 }}>
+            Nessun Template ID per "{fmt?.label}" — impostalo in Canva Studio.
+          </div>
+        )}
+
+        {/* Caption */}
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 5 }}>Caption</label>
+        <textarea value={captionText} onChange={e => setCaptionText(e.target.value)} rows={3}
+          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "none", marginBottom: 12 }} />
+
+        {/* Query */}
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Montserrat', sans-serif", display: "block", marginBottom: 5 }}>Query foto</label>
+        <input value={queryText} onChange={e => setQueryText(e.target.value)}
+          style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 9, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }} />
+
+        {/* Sorgente + immagini suggerite */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]).map(([k, s]) => (
+            <button key={k} onClick={() => setSource(k)}
+              style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${source === k ? "#8B7355" : "#222"}`, background: source === k ? "rgba(139,115,85,0.15)" : "transparent", color: source === k ? "#C9A96E" : "#555", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginBottom: 6, fontSize: 10, color: "#555" }}>
+          {selectedImg ? "Immagine scelta" : "Scegli una foto suggerita, o lascia la ricerca automatica"}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setSelectedImg(null)}
+            style={{ aspectRatio: "1", borderRadius: 8, border: `2px solid ${selectedImg === null ? "#00C4CC" : "#222"}`, background: "#141414", color: selectedImg === null ? "#00C4CC" : "#555", fontSize: 10, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, padding: 4 }}>
+            🔀 Auto
+          </button>
+          {imgLoading && !images?.length
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} style={{ aspectRatio: "1", borderRadius: 8, background: "#141414" }} />
+              ))
+            : (images || []).slice(0, 5).map((img, i) => {
+                const url = img.full || img.thumb;
+                const active = selectedImg === url;
+                return (
+                  <button key={img.id || i} onClick={() => setSelectedImg(url)}
+                    style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${active ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414" }}>
+                    <img src={img.thumb} alt={img.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: active ? 1 : 0.85 }} loading="lazy" />
+                  </button>
+                );
+              })}
+        </div>
+
+        {error && (
+          <div style={{ padding: "9px 12px", borderRadius: 9, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>
+        )}
+
+        {designUrl ? (
+          <a href={designUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: "block", padding: "12px", borderRadius: 9, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700, fontFamily: "'Montserrat', sans-serif" }}>
+            ✓ Apri design in Canva →
+          </a>
+        ) : (
+          <button onClick={handleCreate} disabled={creating || !templateId || !captionText.trim()}
+            style={{ width: "100%", padding: "12px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: creating || !templateId || !captionText.trim() ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Montserrat', sans-serif", opacity: creating || !templateId || !captionText.trim() ? 0.5 : 1 }}>
+            {creating ? "⏳ Creo design…" : "✦ Crea Design in Canva"}
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Pulsante per-slide che apre CanvaQuickDesignModal.
+function CanvaDesignButton({ caption, cta, query, orientation, canvaTemplates }) {
+  const [open, setOpen] = useState(false);
   return (
-    <button onClick={handleCreate} disabled={state === "loading"}
-      style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: state === "loading" ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: state === "loading" ? 0.6 : 1, display: "flex", alignItems: "center", gap: 4 }}>
-      {state === "loading" ? "⏳" : state === "error" ? "⚠" : "✦"} Canva
-    </button>
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+        ✦ Crea design
+      </button>
+      <CanvaQuickDesignModal
+        open={open}
+        onClose={() => setOpen(false)}
+        caption={caption}
+        cta={cta}
+        query={query}
+        orientation={orientation}
+        canvaTemplates={canvaTemplates}
+      />
+    </>
   );
 }
 
@@ -534,8 +703,15 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
 
   return (
     <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
-      <div style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#FFF", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>
-        ◈ {strategy.emotion}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <span style={{ display: "inline-block", padding: "5px 14px", borderRadius: 20, background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#FFF", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          ◈ {strategy.emotion}
+        </span>
+        {strategy.framework && (
+          <span title="Architettura del carosello (framework di marketing applicato)" style={{ display: "inline-block", padding: "5px 12px", borderRadius: 20, border: "1px solid rgba(139,115,85,0.35)", color: "#8B7355", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            ⚙ {strategy.framework}
+          </span>
+        )}
       </div>
 
       <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#3D3225", margin: "0 0 16px" }}>{strategy.narrative}</p>
@@ -629,10 +805,11 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
 const REGEN_SLIDE_PROMPT = (slide, originalBrief) => `You previously generated a post_composer slide for a marketing campaign. The user wants a NEW version of this specific slide. Keep the same slide_number but generate completely different content.
 
 Generate the slide with:
-- captions: object with "it", "en", "es" keys (each a native-feeling caption, not translations)
+- hook_type: one of Curiosity|Story|Value|Contrarian — pick a DIFFERENT one than the current slide
+- captions: object with "it", "en", "es" keys (each a native-feeling caption, not translations). Open with a hook of hook_type; follow PAS, AIDA or BAB — lead with tension or benefit, never a flat description
 - hashtags_instagram: array of exactly 10 hashtags (3 broad, 4 mid-range niche, 3 micro-niche)
 - hashtags_facebook: array of exactly 3 broad hashtags
-- cta: object with "it", "en", "es" keys
+- cta: object with "it", "en", "es" keys — one concrete action, one ethical persuasion lever, no fake scarcity
 - visual_description, search_query, platform_tip
 
 Original campaign brief: "${originalBrief}"
@@ -816,6 +993,12 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid rgba(139,115,85,0.08)", background: "rgba(139,115,85,0.03)" }}>
                 <span style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #8B7355, #A69070)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{post.slide_number}</span>
                 <span style={{ fontSize: 10, color: "#8B7355", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Slide {post.slide_number}</span>
+                {post.slide_number === 1 && (
+                  <span style={{ fontSize: 9, color: "#A67C3D", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, background: "rgba(166,124,61,0.12)" }}>Copertina</span>
+                )}
+                {post.hook_type && (
+                  <span title="Tipo di hook (prima riga)" style={{ fontSize: 9, color: "#7C6A9B", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, background: "rgba(124,106,155,0.12)" }}>hook: {post.hook_type}</span>
+                )}
               </div>
 
               {post.search_query && (
@@ -862,7 +1045,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
                 </div>
-                <CanvaSlideBtn caption={getCaption(post)} query={post.search_query || ""} canvaTemplates={brand?.canvaTemplates} />
+                <CanvaDesignButton caption={getCaption(post)} cta={cta} query={post.search_query || ""} orientation={orientation} canvaTemplates={brand?.canvaTemplates} />
                 <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
                   style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
                   {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}

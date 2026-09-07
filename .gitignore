@@ -3,4 +3,6 @@ dist
 .env
 .env.local
 .vercel
-.claude
+.claude/*
+!.claude/skills
+.claude/settings.local.json
