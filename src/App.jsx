@@ -1067,10 +1067,16 @@ function SlidePreviewImages({ query, orientation, sourceKey }) {
     return () => { active = false; };
   }, [query, orientation, sourceKey, canFetch]);
 
-  // Pinterest/Instagram non hanno un'API di ricerca pubblica (solo link,
-  // vedi PHOTO_SOURCES) — niente anteprima inline per quelle, resta il link
-  // già mostrato sopra in SlideSearchLinks.
-  if (!canFetch) return null;
+  // Pinterest/Instagram non hanno un'API di ricerca pubblica (solo link, vedi
+  // PHOTO_SOURCES): niente anteprima inline. Invece di non mostrare nulla — che
+  // confonde — spieghiamo perché e rimandiamo al link già presente sopra.
+  if (!canFetch) {
+    return (
+      <div style={{ marginTop: 8, fontSize: 10, color: "#999", fontStyle: "italic" }}>
+        {src?.name} non ha un'API di ricerca pubblica — niente anteprima qui. Usa il link "{src?.name}" qui sopra per aprire i risultati.
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -1137,12 +1143,16 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Anteprime foto da</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {Object.entries(PHOTO_SOURCES).map(([key, src]) => (
-            <button key={key} onClick={() => setSelectedSource(key)}
-              style={{ padding: "5px 14px", borderRadius: 12, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-              {src.name} {API_KEYS[key] ? "●" : ""}
-            </button>
-          ))}
+          {Object.entries(PHOTO_SOURCES).map(([key, src]) => {
+            const previewable = !!(src.apiUrl && API_KEYS[key]);
+            return (
+              <button key={key} onClick={() => setSelectedSource(key)}
+                title={previewable ? "" : "Nessuna API pubblica: solo link, niente anteprime"}
+                style={{ padding: "5px 14px", borderRadius: 12, border: selectedSource === key ? "2px solid #8B7355" : "2px solid rgba(139,115,85,0.15)", background: selectedSource === key ? "rgba(139,115,85,0.12)" : "transparent", color: selectedSource === key ? "#3D3225" : previewable ? "#8B7355" : "#B7ADA0", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                {src.name} {previewable ? "●" : "· solo link"}
+              </button>
+            );
+          })}
         </div>
       </div>
 

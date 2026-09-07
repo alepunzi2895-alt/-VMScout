@@ -112,6 +112,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // Rimuove i progetti-fantasma: default senza nome utile, con TUTTI i campi
+    // vuoti, nessun template Canva valorizzato e nessun dato associato
+    // (richieste AI / insight / design). Provabilmente sicuro.
+    if (action === "cleanup_empty_projects" && req.method === "POST") {
+      const r = await db.execute(`
+        DELETE FROM projects
+        WHERE (name IS NULL OR name = '' OR name = 'Il Mio Brand')
+          AND COALESCE(sector,'') = '' AND COALESCE(description,'') = ''
+          AND COALESCE(tone,'') = '' AND COALESCE(instagram_handle,'') = ''
+          AND COALESCE(hashtags,'') = '' AND COALESCE(logo,'') = ''
+          AND NOT EXISTS (
+            SELECT 1 FROM json_each(COALESCE(NULLIF(projects.canva_templates, ''), '{}'))
+            WHERE json_each.value IS NOT NULL AND json_each.value <> ''
+          )
+          AND id NOT IN (SELECT DISTINCT project_id FROM requests WHERE project_id IS NOT NULL)
+          AND id NOT IN (SELECT project_id FROM project_insights)
+          AND id NOT IN (SELECT DISTINCT project_id FROM canva_designs WHERE project_id IS NOT NULL)
+      `);
+      return res.status(200).json({ ok: true, deleted: Number(r.rowsAffected || 0) });
+    }
+
     // ─── REQUESTS (storico domande/risposte AI) ────────────────
     if (action === "save_request" && req.method === "POST") {
       const { project_id, type, prompt, result_json } = req.body;

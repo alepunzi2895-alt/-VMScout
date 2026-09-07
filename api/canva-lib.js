@@ -40,10 +40,16 @@ export async function runAutofill({ token, templateId, data, title }) {
   const createJson = await createRes.json().catch(() => ({}));
 
   if (!createRes.ok) {
+    const blob = JSON.stringify(createJson).toLowerCase();
     const msg = createJson.message || createJson.error || "Errore Canva Autofill API";
-    const hint = /not found|invalid|brand_template/i.test(JSON.stringify(createJson))
-      ? " — verifica che l'ID sia quello di un Brand Template pubblicato (non di un design). In Canva: apri il template → Condividi → 'Modello del brand', poi copia l'ID dall'URL /brand-templates/<ID>."
-      : "";
+    let hint = "";
+    if (/autofill capable elements|no autofill|autofillable/.test(blob)) {
+      hint = " — il Brand Template non ha campi di autofill. In Canva apri il template, seleziona ogni riquadro immagine e ogni casella di testo, click destro → 'Aggiungi al modello del brand' (o pannello Dati) e assegna un nome campo: per il carosello Image_1/Testo_1, Image_2/Testo_2, ... (per un post singolo: Immagine_Sfondo e Testo_Post/Caption). Poi ripubblica il Modello del brand.";
+    } else if (/not found|invalid|brand_template|permission|not authorized/.test(blob)) {
+      hint = " — verifica che l'ID sia quello di un Brand Template pubblicato (non di un design) e che l'account Canva collegato abbia accesso al template. In Canva: apri il template → Condividi → 'Modello del brand', poi copia l'ID dall'URL /brand-templates/<ID>.";
+    } else if (/enterprise|not available on your plan|upgrade/.test(blob)) {
+      hint = " — l'API Autofill di Canva richiede un piano Canva Enterprise (o l'accesso trial per integrazioni in sviluppo).";
+    }
     return { ok: false, status: createRes.status, message: msg + hint, details: createJson };
   }
 

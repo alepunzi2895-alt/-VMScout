@@ -6,7 +6,9 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-const newBrand = (name = "Il Mio Brand") => ({
+const DEFAULT_NAME = "Il Mio Brand";
+
+const newBrand = (name = DEFAULT_NAME) => ({
   id: uid(),
   name,
   sector: "",
@@ -16,9 +18,39 @@ const newBrand = (name = "Il Mio Brand") => ({
   instagramHandle: "",
   hashtags: "",
   logo: "",            // data URL (immagine/logo del progetto, ridimensionata client-side)
-  canvaTemplates: { post: "", story: "", reel: "" },
+  canvaTemplates: { post: "", story: "", reel: "", carousel: "" },
   createdAt: new Date().toISOString(),
 });
+
+// Un progetto "ha contenuto" se l'utente ci ha messo qualcosa: profilo, logo o
+// almeno un template Canva.
+function hasContent(b) {
+  return !isPristine(b) || !!b?.logo || Object.values(b?.canvaTemplates || {}).some(Boolean);
+}
+
+// Vale la pena persistere / mostrare un progetto solo se ha contenuto oppure se
+// l'utente l'ha rinominato. Il progetto di default vuoto ("Il Mio Brand" senza
+// nulla dentro) NON va salvato sul DB né ripescato: altrimenti ogni browser/
+// dispositivo nuovo ne crea uno e la lista si riempie di progetti fantasma.
+function isMeaningful(b) {
+  return hasContent(b) || (!!b?.name && b.name !== DEFAULT_NAME);
+}
+
+// Collassa più "Il Mio Brand" vuoti in uno solo (ripulisce localStorage già
+// inquinati da versioni precedenti).
+function dedupeEmptyDefaults(list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  let keptEmpty = false;
+  const out = [];
+  for (const b of list) {
+    if (b?.name === DEFAULT_NAME && !hasContent(b)) {
+      if (keptEmpty) continue;
+      keptEmpty = true;
+    }
+    out.push(b);
+  }
+  return out;
+}
 
 function loadBrands() {
   try {
@@ -58,12 +90,22 @@ function deleteProjectFromDb(id) {
   }).catch(err => console.warn("[BrandContext] delete progetto fallita:", err.message));
 }
 
+// Rimuove dal DB i progetti-fantasma: default vuoti, senza alcun dato associato
+// (nessuna richiesta AI, nessun insight, nessun design). Safe: tocca solo righe
+// prive di contenuto E di storico.
+function cleanupEmptyProjectsOnDb() {
+  fetch("/api/history?action=cleanup_empty_projects", { method: "POST" })
+    .then(r => r.json())
+    .then(d => { if (d?.deleted) console.info(`[BrandContext] rimossi ${d.deleted} progetti vuoti dal DB`); })
+    .catch(() => {});
+}
+
 function isPristine(b) {
   return !b?.sector && !b?.description && !b?.tone && !b?.instagramHandle && !b?.hashtags;
 }
 
 export function BrandProvider({ children }) {
-  const [brands, setBrands] = useState(() => loadBrands() || [newBrand()]);
+  const [brands, setBrands] = useState(() => dedupeEmptyDefaults(loadBrands()) || [newBrand()]);
   const [activeBrandId, setActiveBrandId] = useState(
     () => localStorage.getItem("vmscout_active_brand") || null
   );
@@ -76,27 +118,29 @@ export function BrandProvider({ children }) {
     if (activeBrandId) localStorage.setItem("vmscout_active_brand", activeBrandId);
   }, [activeBrandId]);
 
-  // Il progetto di default veniva creato solo in locale — non passava mai da
-  // createBrand/updateBrand, quindi non arrivava MAI al DB finché l'utente non
-  // apriva "Modifica" e salvava qualcosa. Risultato: da un altro dispositivo/
-  // browser (localStorage vuoto) non c'era nulla da recuperare, nemmeno il
-  // progetto stesso. Sincronizza quindi anche lo stato iniziale al mount, non
-  // solo le modifiche esplicite — upsert idempotente, sicuro anche se il
-  // progetto era già su DB.
+  // Se il progetto attivo non esiste più (dedup, cancellazione da un altro
+  // dispositivo, ecc.) riporta la selezione su un progetto reale.
   useEffect(() => {
-    brands.forEach(syncProjectToDb);
+    if (activeBrandId && brands.length && !brands.some(b => b.id === activeBrandId)) {
+      setActiveBrandId(brands[0].id);
+    }
+  }, [brands, activeBrandId]);
+
+  // Sincronizza sul DB SOLO i progetti che hanno senso persistere (contenuto o
+  // rinominati). Il progetto di default vuoto non va mai sul DB: era la causa
+  // dei "progetti fantasma" (ogni browser nuovo ne creava e caricava uno).
+  useEffect(() => {
+    brands.filter(isMeaningful).forEach(syncProjectToDb);
+    cleanupEmptyProjectsOnDb();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Al primo avvio, recupera i progetti salvati sul DB e integra quelli non
-  // ancora presenti in locale (es. da un altro browser/dispositivo). Se questo
-  // dispositivo non aveva ancora nulla di suo (solo il progetto di default,
-  // mai personalizzato, nessuna selezione attiva salvata) e troviamo progetti
-  // reali sul DB, li rendiamo attivi subito invece di lasciare selezionato il
-  // progetto vuoto appena creato in locale — altrimenti sembra che "non ci sia
-  // nulla di salvato" anche se i dati esistono, solo non selezionati.
+  // Al primo avvio recupera i progetti salvati sul DB e integra quelli non
+  // ancora presenti in locale (da un altro browser/dispositivo). Scarta i
+  // default vuoti storici. Se questo dispositivo non aveva ancora nulla di suo,
+  // rende attivo il primo progetto reale trovato.
   useEffect(() => {
-    const wasFreshDevice = !activeBrandId && brands.length === 1 && isPristine(brands[0]);
+    const wasFreshDevice = !activeBrandId && brands.length === 1 && !isMeaningful(brands[0]);
     fetch("/api/history?action=projects")
       .then(r => r.json())
       .then(d => {
@@ -115,12 +159,13 @@ export function BrandProvider({ children }) {
               instagramHandle: row.instagram_handle || "",
               hashtags: row.hashtags || "",
               logo: row.logo || "",
-              canvaTemplates: (() => { try { return JSON.parse(row.canva_templates || "{}"); } catch { return { post: "", story: "", reel: "" }; } })(),
+              canvaTemplates: (() => { try { return { post: "", story: "", reel: "", carousel: "", ...JSON.parse(row.canva_templates || "{}") }; } catch { return { post: "", story: "", reel: "", carousel: "" }; } })(),
               createdAt: row.created_at,
-            }));
+            }))
+            .filter(isMeaningful);
           if (!remoteOnly.length) return prev;
           if (wasFreshDevice) setActiveBrandId(remoteOnly[0].id);
-          return [...prev, ...remoteOnly];
+          return dedupeEmptyDefaults([...prev, ...remoteOnly]);
         });
       })
       .catch(err => console.warn("[BrandContext] fetch progetti da DB fallita:", err.message));
@@ -133,7 +178,7 @@ export function BrandProvider({ children }) {
     const b = newBrand(name);
     setBrands(p => [...p, b]);
     setActiveBrandId(b.id);
-    syncProjectToDb(b);
+    if (isMeaningful(b)) syncProjectToDb(b);
     return b;
   }
 
