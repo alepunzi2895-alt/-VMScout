@@ -31,9 +31,11 @@ function sizedImageUrl(url) {
 
 // Carica un'immagine su Canva da URL (job asincrono) e ne restituisce l'asset_id.
 // Prova prima la versione normalizzata/ridimensionata, poi l'URL grezzo.
+// `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
 export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
   if (!url) return { assetId: null, error: "URL immagine mancante" };
   const candidates = [...new Set([sizedImageUrl(url), url])];
+  let lastErr = "Canva non è riuscita a caricare l'immagine.";
   for (const candidate of candidates) {
     try {
       const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
@@ -42,7 +44,13 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
         body: JSON.stringify({ name: String(name).slice(0, 255), url: candidate }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d?.job?.id) continue;
+      if (r.status === 401 || r.status === 403) {
+        return { assetId: null, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
+      }
+      if (!r.ok || !d?.job?.id) {
+        lastErr = `Canva ha rifiutato l'upload (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.`;
+        continue;
+      }
 
       const jobId = d.job.id;
       const deadline = Date.now() + 28_000;
@@ -53,10 +61,15 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
         job = (await poll.json().catch(() => ({})))?.job ?? job;
       }
       if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
-      // job fallito: se era il candidato proxato, prova col grezzo
-    } catch { /* prova il candidato successivo */ }
+      lastErr = job.status === "failed"
+        ? `Canva: ${job.error?.message || job.error?.code || "download dell'immagine fallito"}`
+        : `Upload immagine ancora in corso dopo 28s (${job.status}). Riprova o usa una foto più piccola.`;
+      // job fallito/lento: prova il candidato successivo (URL grezzo)
+    } catch (e) {
+      lastErr = `Errore di rete verso Canva: ${e.message}`;
+    }
   }
-  return { assetId: null, error: "Canva non è riuscita a caricare l'immagine dall'URL (formato non supportato, file troppo grande o URL non pubblico)." };
+  return { assetId: null, error: lastErr };
 }
 
 // L'utente spesso incolla un pezzo di URL Canva
