@@ -55,7 +55,9 @@ async function ensureTables(db) {
   }
 }
 
-const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [] };
+const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null };
+
+const MAX_DIRECTIVES_CHARS = 4000;
 
 function dedupAppend(arr, additions, cap) {
   const out = [...(arr || [])];
@@ -182,8 +184,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, data, updated_at: rows.rows[0].updated_at });
     }
 
+    // Direttive specifiche del progetto (documento vivo, markdown): lette prima
+    // di ogni prompt/analisi e riscritte alla fine dall'AI stessa.
+    if (action === "save_directives" && req.method === "POST") {
+      const { project_id, directives } = req.body;
+      if (!project_id) return res.status(400).json({ error: "Manca project_id" });
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      let current = EMPTY_INSIGHTS;
+      if (existing.rows.length) {
+        try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
+      }
+      current.directives = String(directives || "").slice(0, MAX_DIRECTIVES_CHARS);
+      current.directives_updated_at = new Date().toISOString();
+      await db.execute({
+        sql: `INSERT INTO project_insights (project_id, data, updated_at) VALUES (?,?,datetime('now'))
+              ON CONFLICT(project_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
+        args: [project_id, JSON.stringify(current)],
+      });
+      return res.status(200).json({ ok: true, data: current });
+    }
+
     if (action === "merge_insights" && req.method === "POST") {
-      const { project_id, tips, strengths, weaknesses, calendar_entries } = req.body;
+      const { project_id, tips, strengths, weaknesses, calendar_entries, directives } = req.body;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
 
       const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
@@ -195,6 +217,11 @@ export default async function handler(req, res) {
       current.tips = dedupAppend(current.tips, tips, 30);
       current.strengths = dedupAppend(current.strengths, strengths, 20);
       current.weaknesses = dedupAppend(current.weaknesses, weaknesses, 20);
+
+      if (typeof directives === "string" && directives.trim()) {
+        current.directives = directives.slice(0, MAX_DIRECTIVES_CHARS);
+        current.directives_updated_at = new Date().toISOString();
+      }
 
       if (Array.isArray(calendar_entries) && calendar_entries.length) {
         const newEntries = calendar_entries.map(e => ({

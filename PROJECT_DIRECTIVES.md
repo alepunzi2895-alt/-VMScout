@@ -29,8 +29,8 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
   Specchio server-side dei progetti/brand gestiti in `BrandContext.jsx` (che resta la fonte di verità immediata via `localStorage`; il DB è lo storico durevole cross-browser). Le colonne aggiunte dopo il `CREATE TABLE` iniziale (es. `logo`) sono create con `ALTER TABLE` lazy e idempotente in `ensureTables()` di `api/history.js`. Logo/edit/elimina progetto si gestiscono dalle card della griglia "Progetti" in `Home.jsx` (`BrandAvatar.jsx` = avatar con logo o iniziale; `fileToResizedDataURL` = resize client-side).
 - **`requests`**: `id`, `project_id`, `type` (`strategy` | `analytics`), `prompt`, `result_json`, `created_at`
   Storico di ogni domanda/risposta AI, per progetto. **Non è più un tab a sé stante**: vive dentro ogni sezione che lo genera (vedi §5).
-- **`project_insights`**: `project_id` (PK), `data` (JSON: `{ tips[], strengths[], weaknesses[], calendar[] }`), `updated_at`
-  La "memoria" del progetto: cresce a ogni analisi Instagram (§5) e viene letta da Visual Scout e Analytics prima di ogni nuova generazione (loop di auto-apprendimento).
+- **`project_insights`**: `project_id` (PK), `data` (JSON: `{ tips[], strengths[], weaknesses[], calendar[], directives, directives_updated_at }`), `updated_at`
+  La "memoria" del progetto. `directives` = brief operativo per-progetto (markdown), letto prima di **ogni** studio/analisi e riscritto dall'AI in background alla fine di ognuno — vedi **`docs/PROJECT_LEARNING_LOOP.md`**. `tips`/`strengths`/`weaknesses`/`calendar` crescono a ogni analisi Instagram (§5).
 - **`canva_designs`**: `id`, `project_id`, `kind` (`design` | `carousel`), `format`, `title`, `design_url`, `thumb_url` (foto principale usata), `slides`, `created_at`
   Storico dei design Canva creati dall'app. Il frontend chiama `save_design` dopo ogni `/api/canva-create` / `/api/canva-carousel` riuscito (helper in `src/canvaDesigns.js`). Renderizzato nella galleria "Design creati" di Canva Studio (`CreatedDesignsPanel`) e riusabile come pagina nel `CarouselComposer` (via `thumb_url`).
 - **`canva_auth`**: `id` (fisso a 1), `access_token`, `refresh_token`, `expires_in`, `created_at` — token OAuth Canva.
@@ -44,7 +44,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | File | Rotta | Descrizione |
 |------|-------|-------------|
 | `api/chat.js` | `POST /api/chat` | Proxy Anthropic. Accetta anche `images: [url,...]` opzionale: le scarica e le converte in base64 lato server (niente CORS) per l'analisi visiva |
-| `api/history.js` | `GET/POST/DELETE /api/history?action=...` | CRUD progetti, storico richieste AI, memoria di progetto, storico design Canva (`projects`, `save_project`, `delete_project`, `save_request`, `history`, `delete_request`, `get_insights`, `merge_insights`, `update_calendar_status`, `stats`, `save_design`, `designs`, `delete_design`) |
+| `api/history.js` | `GET/POST/DELETE /api/history?action=...` | CRUD progetti, storico richieste AI, memoria + direttive di progetto, storico design Canva (`projects`, `save_project`, `delete_project`, `save_request`, `history`, `delete_request`, `get_insights`, `merge_insights`, `save_directives`, `update_calendar_status`, `stats`, `save_design`, `designs`, `delete_design`) |
 | `api/instagram.js` | `POST /api/instagram` | Proxy Instagram/Facebook Graph API — vedi §6 per il routing token |
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
@@ -78,9 +78,9 @@ Non esiste più un tab "Storico": ogni sezione mostra e gestisce la propria cron
 - **Analytics** (`src/InstagramAnalytics.jsx`): la sessione (post caricati, foto profilo, ultima analisi) resta in `localStorage` così riaprendo il tab non serve ricaricare/rianalizzare da capo. Le analisi precedenti sono in una sezione richiudibile **"🕘 Analisi Precedenti"** in fondo alla pagina (fetch pigro solo quando aperta), con dettaglio espandibile ed eliminazione.
 - **Dashboard** (`src/Dashboard.jsx`, nuovo tab): mostra la `project_insights` del progetto attivo — punti di forza, punti da migliorare, consigli accumulati, e il **calendario dei prossimi post** con lo stato (`suggerito`/`generato`). Ogni idea calendario ha un bottone "🎯 Genera con Visual Scout".
 
-### Loop di auto-apprendimento
-1. Ogni analisi Instagram (`analyze()` in `InstagramAnalytics.jsx`) chiama `mergeIntoProjectInsights()` → `POST /api/history?action=merge_insights`: aggiunge (deduplicando) nuovi tips/strengths/weaknesses e nuove idee al calendario.
-2. Sia `getSystemPrompt()` (Visual Scout) sia il prompt di `analyze()` (Analytics) leggono prima `get_insights` e includono un blocco "MEMORIA DI PROGETTO/MEMORIA ACCUMULATA" nel system prompt, istruendo l'AI a **non ripetere gli stessi consigli** ma a costruirci sopra.
+### Loop di auto-apprendimento — **vedi `docs/PROJECT_LEARNING_LOOP.md` per il quadro completo**
+1. **Direttive di progetto** (`project_insights.data.directives`, markdown): lette prima di **ogni** studio (Visual Scout) e analisi (Analytics) via `directivesBlock()` (`src/projectDirectives.js`), con priorità massima nel system prompt. Alla fine di ogni studio/analisi parte **in background** `refineProjectDirectives()` — chiamata AI separata e leggera che riscrive le direttive tenendo il valido e potando il resto (non blocca la UI, non tocca i timeout dei prompt principali). Visualizzate/editabili in Dashboard (`DirectivesCard`).
+2. Ogni analisi Instagram chiama anche `mergeIntoProjectInsights()` → `merge_insights`: aggiunge (deduplicando) nuovi tips/strengths/weaknesses e nuove idee al calendario. `getSystemPrompt()` e `analyze()` includono anche il blocco "MEMORIA DI PROGETTO/MEMORIA ACCUMULATA".
 3. Handoff Analytics → Visual Scout: cliccare un'idea (in "Prossimi Post" nell'analisi, o nel calendario della Dashboard) chiama `onSuggestBrief(brief)` → risale fino a `AppRouter.jsx` (`goToScoutWithBrief`) → cambia tab e passa `initialBrief` a `VisualMarketingScout`, che lo invia **da solo** non appena la cronologia è stata idratata (per non perdere il messaggio in una race con l'hydration).
 
 ---

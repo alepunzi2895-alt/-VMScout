@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
 import { MARKETING_TOOLKIT_BRIEF } from "./marketingFrameworks";
+import { directivesBlock, refineProjectDirectives } from "./projectDirectives";
 
 const GOLD      = "#C9A96E";
 const DARK      = "#0D0D0D";
@@ -1069,7 +1070,7 @@ ${priorInsights.tips?.length ? `Consigli già dati in passato: ${priorInsights.t
     // concisione FERREI (limite di parole per campo, niente markdown, meno
     // elementi) lo stesso payload di 24 post reali è sceso da >45s (timeout)
     // a ~9s. Le istruzioni sotto sono quelle testate, non un tentativo nuovo.
-    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${accountCtx}${priorCtx}${lastPostCtx}
+    const textSystem = `Sei un social media strategist. Analizza i dati e rispondi SOLO con JSON valido (no markdown fences, no testo extra).${brandCtx}${directivesBlock(priorInsights?.directives)}${accountCtx}${priorCtx}${lastPostCtx}
 
 Ogni post nei dati include: reach, likes, commenti, saves, condivisioni, interazioni_tot, visite_profilo, nuovi_follow. Usa condivisioni e saves come segnale di valore/virality, visite_profilo e nuovi_follow come segnale di conversione: cita numeri concreti nelle tue osservazioni.
 
@@ -1131,6 +1132,23 @@ REGOLE FERREE:
       const saved = await saveToHistory({ project_id: brand?.id, type: "analytics", prompt: textUserMsg, result_json: parsed });
       mergeIntoProjectInsights(parsed);
       if (saved?.ok) setHistoryRefreshKey(k => k + 1);
+
+      // Loop di auto-apprendimento: dopo l'analisi, in background, l'AI riscrive
+      // le direttive specifiche del progetto (non blocca la UI).
+      if (brand?.id) {
+        const vs = parsed.visual_storytelling;
+        const ctx = `RISULTATO ANALISI INSTAGRAM (@${username || "account"}, ${posts.length} post):
+- pattern: ${parsed.patterns?.summary || "-"} | formati vincenti: ${(parsed.patterns?.winning_formats || []).join(", ")}
+- timing: ${parsed.timing?.summary || "-"} (${parsed.timing?.best_slot || "-"})
+- content pillar: ${(parsed.content_pillars || []).join(", ")}
+- correzioni: ${(parsed.corrections || []).join(" | ")}
+- stile visivo: ${vs?.style_description || "-"} | punti forti: ${(vs?.strengths || []).join(", ")} | debolezze: ${(vs?.weaknesses || []).join(", ")}
+- prossimi post proposti: ${(parsed.next_posts || []).map(p => `[${p.hook_type || "?"}/${p.content_type || "?"}] ${p.idea || ""}`).join(" || ")}`;
+        refineProjectDirectives({
+          projectId: brand.id, kind: "analysis", current: priorInsights?.directives,
+          brandName: brand?.name, context: ctx,
+        });
+      }
     } catch (err) {
       setError("Errore analisi Claude: " + err.message);
     }

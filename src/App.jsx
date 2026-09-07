@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { MARKETING_TOOLKIT } from "./marketingFrameworks";
 import { saveCanvaDesign, listCanvaDesigns } from "./canvaDesigns";
+import { directivesBlock, refineProjectDirectives } from "./projectDirectives";
 
 // Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
 // "solo JSON": invece di assumere che l'intera stringa ripulita sia JSON puro,
@@ -75,7 +76,7 @@ FRAMEWORK APPLICATION (apply the toolkit below concretely — do not name framew
 - editorial_plan: rotate 3-5 content pillars across the days, vary the goal each day, max 1 promotional day per week.
 - video_storytelling: scene 1 is a 0-3s hook (visual + text_overlay); each later scene is a distinct narrative beat; the final scene carries the CTA.
 
-${MARKETING_TOOLKIT}${brandCtx}${insightsCtx}`;
+${MARKETING_TOOLKIT}${directivesBlock(insights?.directives)}${brandCtx}${insightsCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -1609,6 +1610,16 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
           const parsed = parseJsonResponse(raw);
           const saved = await saveToHistory({ project_id: brand?.id, type: "strategy", prompt: userMsg, result_json: parsed });
           setMessages(prev => [...prev, { role: "assistant", content: parsed, type: "strategy", requestId: saved?.id ?? null }]);
+
+          // Loop di auto-apprendimento: dopo ogni studio, in background, l'AI
+          // rivede le direttive specifiche del progetto (non blocca la UI).
+          if (brand?.id) {
+            const ctx = `BRIEF DELL'UTENTE:\n${userMsg}\n\nSINTESI DELLA STRATEGIA GENERATA:\n- framework: ${parsed.strategy?.framework || "-"}\n- emozione: ${parsed.strategy?.emotion || "-"}\n- narrativa: ${parsed.strategy?.narrative || "-"}\n- slide: ${(parsed.post_composer || []).map(s => `[${s.hook_type || "?"}] ${(s.captions?.it || s.caption || "").slice(0, 90)}`).join(" || ")}\n- focus editoriale: ${parsed.editorial_plan?.weekly_focus || "-"}`;
+            refineProjectDirectives({
+              projectId: brand.id, kind: "study", current: insights?.directives,
+              brandName: brand?.name, context: ctx,
+            }).then(newD => { if (newD) setInsights(prev => ({ ...(prev || {}), directives: newD })); });
+          }
         } catch { setMessages(prev => [...prev, { role: "assistant", content: raw, type: "text" }]); }
       } else {
         setMessages(prev => [...prev, { role: "assistant", content: "Non ho potuto elaborare la richiesta. Riprova con più dettagli.", type: "text" }]);

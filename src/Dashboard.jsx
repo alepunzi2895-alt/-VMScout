@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { saveProjectDirectives } from "./projectDirectives";
 
 const GOLD      = "#C9A96E";
 const DARK      = "#0D0D0D";
@@ -60,6 +61,57 @@ function CalendarEntry({ entry, onSuggestBrief, onMarkUsed }) {
   );
 }
 
+function DirectivesCard({ brand, directives, updatedAt, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(directives || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setDraft(directives || ""); }, [directives]);
+
+  async function save() {
+    setSaving(true);
+    await saveProjectDirectives(brand.id, draft);
+    setSaving(false);
+    setEditing(false);
+    onSaved?.(draft);
+  }
+
+  return (
+    <div style={{ ...card, marginBottom: 20, borderColor: "rgba(201,169,110,0.3)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ ...label, marginBottom: 0, color: GOLD }}>🎯 Direttive di progetto</div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {updatedAt && !editing && <span style={{ fontSize: 9, color: "#555" }}>agg. {fmtDateTime(updatedAt)}</span>}
+          {editing ? (
+            <>
+              <button onClick={() => { setEditing(false); setDraft(directives || ""); }}
+                style={{ padding: "4px 10px", borderRadius: 10, border: "1px solid #2A2A2A", background: "transparent", color: WARM_GREY, fontSize: 10, cursor: "pointer" }}>Annulla</button>
+              <button onClick={save} disabled={saving}
+                style={{ padding: "4px 12px", borderRadius: 10, border: "none", background: GOLD, color: "#000", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>{saving ? "…" : "Salva"}</button>
+            </>
+          ) : (
+            <button onClick={() => setEditing(true)}
+              style={{ padding: "4px 12px", borderRadius: 10, border: "1px solid #2A2A2A", background: "transparent", color: "#999", fontSize: 10, cursor: "pointer" }}>Modifica</button>
+          )}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: WARM_GREY, marginBottom: 12, lineHeight: 1.5 }}>
+        Il brief operativo di questo progetto. VMScout lo legge prima di ogni studio e analisi, e lo riscrive da solo alla fine di ognuno tenendo ciò che funziona.
+      </div>
+      {editing ? (
+        <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={12}
+          style={{ width: "100%", background: "#0E0E0E", border: "1px solid #2A2A2A", borderRadius: 12, padding: "12px 14px", color: OFF_WHITE, fontSize: 12.5, lineHeight: 1.6, fontFamily: "'Space Grotesk', sans-serif", resize: "vertical" }} />
+      ) : directives?.trim() ? (
+        <div style={{ fontSize: 12.5, color: OFF_WHITE, opacity: 0.92, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{directives}</div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>
+          Ancora vuote. Si creano da sole dopo il primo studio in Visual Scout o la prima analisi in Analytics — oppure scrivile a mano con "Modifica".
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({ brand, onSuggestBrief }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -106,7 +158,7 @@ export default function Dashboard({ brand, onSuggestBrief }) {
           {brand ? `Memoria di progetto — ${brand.name}` : "Memoria di progetto"}
         </div>
         <div style={{ fontSize: 12, color: WARM_GREY, marginTop: 4 }}>
-          Si arricchisce automaticamente a ogni analisi in Analytics: punti di forza, cose da migliorare, consigli accumulati e idee per i prossimi post.
+          Si arricchisce da sola a ogni studio in Visual Scout e a ogni analisi in Analytics: direttive di progetto, punti di forza, cose da migliorare, consigli e idee per i prossimi post.
         </div>
       </div>
 
@@ -125,15 +177,30 @@ export default function Dashboard({ brand, onSuggestBrief }) {
       )}
 
       {!loading && brand?.id && !data && (
-        <div style={{ ...card, textAlign: "center", padding: "60px 24px" }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🧭</div>
-          <div style={{ fontSize: 13, color: OFF_WHITE, marginBottom: 6 }}>Ancora nessun dato</div>
-          <div style={{ fontSize: 12, color: WARM_GREY }}>Vai su Analytics e genera la prima analisi: la dashboard di questo progetto si popolerà da sola.</div>
-        </div>
+        <>
+          <DirectivesCard
+            brand={brand}
+            directives=""
+            updatedAt={null}
+            onSaved={(d) => setData({ directives: d, directives_updated_at: new Date().toISOString(), strengths: [], weaknesses: [], tips: [], calendar: [] })}
+          />
+          <div style={{ ...card, textAlign: "center", padding: "40px 24px" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🧭</div>
+            <div style={{ fontSize: 13, color: OFF_WHITE, marginBottom: 6 }}>Ancora nessun dato accumulato</div>
+            <div style={{ fontSize: 12, color: WARM_GREY }}>Fai il primo studio in Visual Scout o la prima analisi in Analytics: memoria e direttive di questo progetto si popolano da sole.</div>
+          </div>
+        </>
       )}
 
       {!loading && data && (
         <>
+          <DirectivesCard
+            brand={brand}
+            directives={data.directives}
+            updatedAt={data.directives_updated_at}
+            onSaved={(d) => setData(prev => ({ ...prev, directives: d, directives_updated_at: new Date().toISOString() }))}
+          />
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
             <div style={{ ...card }}>
               <div style={{ ...label, marginBottom: 12, color: "#5ABA5A" }}>✓ Punti di Forza</div>
