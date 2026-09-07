@@ -21,10 +21,38 @@ export function cleanTemplateId(raw) {
     .split(/[/?#\s]/)[0];
 }
 
+// Il dataset del Brand Template: nomi dei campi di autofill e tipo. Canva
+// RIFIUTA le chiavi non presenti nel dataset, quindi filtriamo `data` prima
+// di inviarlo (il backend manda anche alias tipo Caption/Background).
+async function fetchDataset(token, brandTemplateId) {
+  try {
+    const r = await fetch(`${CANVA_API}/brand-templates/${brandTemplateId}/dataset`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const j = await r.json().catch(() => ({}));
+    return j?.dataset && typeof j.dataset === "object" ? j.dataset : null;
+  } catch { return null; }
+}
+
 export async function runAutofill({ token, templateId, data, title }) {
   const brandTemplateId = cleanTemplateId(templateId);
   if (!brandTemplateId) {
     return { ok: false, status: 400, message: "Brand Template ID mancante o non valido." };
+  }
+
+  // Filtra i campi a quelli realmente definiti nel template.
+  const dataset = await fetchDataset(token, brandTemplateId);
+  let payloadData = data;
+  if (dataset) {
+    payloadData = Object.fromEntries(Object.entries(data || {}).filter(([k]) => k in dataset));
+    if (!Object.keys(payloadData).length) {
+      return {
+        ok: false,
+        status: 400,
+        message: `Nessun campo compatibile col Brand Template. Campi attesi: ${Object.keys(dataset).join(", ") || "(nessuno)"}. In VMScout i placeholder devono chiamarsi Testo_Post / Immagine_Sfondo (post, story, reel) oppure Image_1/Testo_1, Image_2/Testo_2… (carosello).`,
+        details: dataset,
+      };
+    }
   }
 
   const createRes = await fetch(`${CANVA_API}/autofills`, {
@@ -33,7 +61,7 @@ export async function runAutofill({ token, templateId, data, title }) {
     body: JSON.stringify({
       type: "create_from_brand_template",
       brand_template_id: brandTemplateId,
-      data,
+      data: payloadData,
       ...(title ? { title: String(title).slice(0, 255) } : {}),
     }),
   });
