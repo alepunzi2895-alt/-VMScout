@@ -1,4 +1,5 @@
 import { getDb, ensureCanvaAuthTable } from "./db.js";
+import { runAutofill } from "./canva-lib.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -126,28 +127,16 @@ export default async function handler(req, res) {
       autofillData["Background"]      = { type: "image", asset_id: assetId };
     }
 
-    const autofillRes = await fetch(
-      `${CANVA_API}/designs/templates/${templateId}/autofill`,
-      {
-        method:  "POST",
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body:    JSON.stringify({ data: autofillData }),
-      }
-    );
-    const autofillData2 = await autofillRes.json();
-
-    if (!autofillRes.ok) {
-      return res.status(400).json({
+    const af = await runAutofill({ token, templateId, data: autofillData, title: (caption || "VMScout").slice(0, 60) });
+    if (!af.ok) {
+      return res.status(af.status >= 400 && af.status < 600 ? af.status : 400).json({
         error:   true,
-        message: autofillData2.message || "Errore Canva Autofill API",
-        details: autofillData2,
+        message: af.message,
+        details: af.details,
       });
     }
 
-    const designId  = autofillData2.design?.id;
-    const designUrl = autofillData2.design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
-
-    return res.status(200).json({ ok: true, url: designUrl, imageUrl: imageUrl || null });
+    return res.status(200).json({ ok: true, url: af.designUrl, imageUrl: imageUrl || null });
 
   } catch (err) {
     console.error("[canva-create]", err);

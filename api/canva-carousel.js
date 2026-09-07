@@ -4,6 +4,7 @@
 // Image_1..N / Testo_1..N, invece di dover creare/compilare un design per slide.
 
 import { getDb, ensureCanvaAuthTable } from "./db.js";
+import { runAutofill } from "./canva-lib.js";
 
 const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -131,30 +132,19 @@ export default async function handler(req, res) {
       }
     });
 
-    const autofillRes = await fetch(
-      `${CANVA_API}/designs/templates/${templateId}/autofill`,
-      {
-        method:  "POST",
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body:    JSON.stringify({ data: autofillData }),
-      }
-    );
-    const autofillJson = await autofillRes.json();
+    const af = await runAutofill({ token, templateId, data: autofillData, title: `Carosello ${usedSlides.length} slide` });
 
-    if (!autofillRes.ok) {
-      return res.status(400).json({
+    if (!af.ok) {
+      return res.status(af.status >= 400 && af.status < 600 ? af.status : 400).json({
         error:   true,
-        message: autofillJson.message || "Errore Canva Autofill API",
-        details: autofillJson,
+        message: af.message,
+        details: af.details,
       });
     }
 
-    const designId  = autofillJson.design?.id;
-    const designUrl = autofillJson.design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
-
     return res.status(200).json({
       ok: true,
-      url: designUrl,
+      url: af.designUrl,
       slidesFilled: assetIds.filter(Boolean).length,
       totalSlides: usedSlides.length,
     });

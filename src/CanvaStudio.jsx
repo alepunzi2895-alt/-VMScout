@@ -203,9 +203,10 @@ export default function CanvaStudio() {
                 Template ID — {activeBrand?.name || "Progetto"}
               </div>
               <div style={{ fontSize: 11, color: "#3A3A3A", lineHeight: 1.5 }}>
-                Apri un template Canva → copia l'ID dall'URL.<br />
+                Serve l'ID di un <strong style={{ color: "#777" }}>Modello del brand</strong> (Brand Template), non di un design.
+                In Canva: apri il design → <em>Condividi → Modello del brand</em> → copia l'ID dall'URL.<br />
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#444", fontSize: 10 }}>
-                  canva.com/design/<strong style={{ color: CANVA_TEAL }}>DAF_XXXXXXX</strong>/edit
+                  canva.com/brand-templates/<strong style={{ color: CANVA_TEAL }}>XXXXXXXXXXX</strong>
                 </span>
               </div>
             </div>

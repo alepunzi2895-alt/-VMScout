@@ -1,4 +1,5 @@
 import { getDb } from "./db.js";
+import { runAutofill } from "./canva-lib.js";
 
 const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
 const clientSecret = process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "";
@@ -114,29 +115,17 @@ export default async function handler(req, res) {
       }
     }
 
-    const response = await fetch(
-      `https://api.canva.com/rest/v1/designs/templates/${templateId}/autofill`,
-      {
-        method:  "POST",
-        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body:    JSON.stringify({ data: autofillData }),
-      }
-    );
+    const af = await runAutofill({ token: accessToken, templateId, data: autofillData, title: (caption || "VMScout").slice(0, 60) });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(400).json({
+    if (!af.ok) {
+      return res.status(af.status >= 400 && af.status < 600 ? af.status : 400).json({
         error:   true,
-        message: data.message || "Errore da Canva Autofill API",
-        details: data,
+        message: af.message,
+        details: af.details,
       });
     }
 
-    const designId  = data.design?.id;
-    const designUrl = data.design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
-
-    return res.status(200).json({ ok: true, designId, url: designUrl });
+    return res.status(200).json({ ok: true, designId: af.designId, url: af.designUrl });
 
   } catch (err) {
     console.error("[canva-export]", err);

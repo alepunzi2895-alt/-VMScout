@@ -48,7 +48,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
 | `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, e `imageUrl` opzionale — se il client passa `imageUrl` (foto suggerita scelta a mano nella modale di Visual Scout) si usa quella, altrimenti fallback su ricerca Pexels dalla `search_query` |
 | `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone un **carosello intero** in un solo design: upload di tutte le immagini delle slide + un solo autofill su un template con placeholder ripetuti (vedi §7) |
-| `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA |
+| `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
 
 ### canva-upload.js / canva-carousel.js — flusso upload immagini (funzionante)
@@ -57,6 +57,14 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 3. `POST /v1/folders/move` con `{to_folder_id: "uploads", item_id: assetId}` → sposta l'asset nella sezione Caricamenti dell'editor (solo `canva-upload.js`)
 
 > **NON usare** `POST /v1/asset-uploads` (binary upload diretto) — richiede TUS protocol complesso e dà errori 415/400. Usare sempre `url-asset-uploads`.
+
+### Autofill — `api/canva-lib.js` `runAutofill()` (condiviso da canva-create / canva-carousel / canva-export)
+Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ `Unknown endpoint`). Flusso corrente:
+1. `POST /v1/autofills` con `{type:"create_from_brand_template", brand_template_id, data, title}` → job async
+2. Poll `GET /v1/autofills/{jobId}` ogni 1.5s finché `status=success` (ceiling 35s per stare sotto `maxDuration:60`)
+3. Risultato in `job.result.design` (o `job.design`) → `{id, url}`
+
+> Serve un ID di **Brand Template** (design pubblicato come "Modello del brand", URL `canva.com/brand-templates/<ID>`), **non** l'ID di un design. `cleanTemplateId()` normalizza gli incolla sporchi (URL interi, `id/token`, virgolette) tenendo il primo segmento. L'autofill richiede piano Canva **Enterprise** (trial sui piani a pagamento durante lo sviluppo).
 
 ---
 
