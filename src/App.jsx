@@ -352,6 +352,11 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
   const [images, setImages] = useState(null);
   const [imgLoading, setImgLoading] = useState(false);
   const [selectedImg, setSelectedImg] = useState(null); // url immagine scelta, null = ricerca automatica
+  // Reel = sempre video; Story = foto o video (l'utente sceglie).
+  const [mediaType, setMediaType] = useState("image");
+  const [videos, setVideos] = useState(null);
+  const [vidLoading, setVidLoading] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState(null); // url video scelto, null = automatico
   const [creating, setCreating] = useState(false);
   const [progress, setProgress] = useState("");
   const [designUrl, setDesignUrl] = useState(null);
@@ -363,6 +368,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
     setCaptionText(caption || "");
     setQueryText(query || "");
     setSelectedImg(null);
+    setSelectedVideo(null);
     setDesignUrl(null);
     setError("");
     setProgress("");
@@ -371,6 +377,31 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
   const fmt = CANVA_QD_FORMATS.find(f => f.id === format);
   const templateId = canvaTemplates?.[format] || "";
   const orient = fmt?.vertical ? "portrait" : (orientation || "square");
+  const canVideo = format === "reel" || format === "story"; // formati verticali
+  const isVideo = format === "reel" || (canVideo && mediaType === "video");
+
+  // Il Reel forza il video; cambiando formato si azzera la scelta media.
+  useEffect(() => {
+    setMediaType(format === "reel" ? "video" : "image");
+    setSelectedVideo(null);
+  }, [format]);
+
+  // Carica i video suggeriti quando si è in modalità video.
+  useEffect(() => {
+    if (!open || !isVideo) { setVideos(null); return; }
+    const q = queryText.trim();
+    if (!q) { setVideos(null); return; }
+    let active = true;
+    setVidLoading(true);
+    const t = setTimeout(() => {
+      fetchVideos(q, "pexels").then(v => {
+        if (!active) return;
+        setVideos(v || []);
+        setVidLoading(false);
+      });
+    }, 400);
+    return () => { active = false; clearTimeout(t); };
+  }, [open, isVideo, queryText]);
 
   // carica le foto suggerite per la query (debounce leggero sulla digitazione)
   useEffect(() => {
@@ -401,7 +432,9 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
       search_query: queryText.trim(),
       format,
       templateId,
-      imageUrl: selectedImg || undefined,
+      mediaType: isVideo ? "video" : "image",
+      imageUrl: !isVideo ? (selectedImg || undefined) : undefined,
+      videoUrl: isVideo ? (selectedVideo || undefined) : undefined,
     };
     // Il backend lavora a cicli: se Canva è ancora al lavoro risponde
     // { pending, resume } e noi lo richiamiamo finché non è pronto. Nessun
@@ -430,14 +463,14 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
 
         if (data.ok) {
           setDesignUrl(data.url);
-          if (data.imageWarning) setError("⚠ Design creato, ma lo sfondo non è stato caricato: " + data.imageWarning);
+          if (data.imageWarning) setError("⚠ Design creato: " + data.imageWarning);
           saveCanvaDesign({
             project_id: projectId || null,
             kind: "design",
             format,
             title: captionText.trim().slice(0, 80) || "Design",
             design_url: data.url,
-            thumb_url: selectedImg || data.imageUrl || null,
+            thumb_url: isVideo ? null : (selectedImg || data.imageUrl || null),
           });
         } else if (data.error === "CANVA_NOT_CONNECTED") {
           window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
@@ -490,16 +523,65 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
           </div>
         )}
 
+        {/* Sfondo: foto o video (Reel = sempre video) */}
+        {canVideo && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[{ id: "image", label: "🖼 Foto" }, { id: "video", label: "🎬 Video" }].map(m => {
+              const on = isVideo === (m.id === "video");
+              const locked = format === "reel" && m.id === "image";
+              return (
+                <button key={m.id} disabled={locked}
+                  onClick={() => { setMediaType(m.id); setSelectedImg(null); setSelectedVideo(null); }}
+                  style={{ flex: 1, padding: "7px 4px", fontSize: 11, borderRadius: 12, cursor: locked ? "not-allowed" : "pointer", border: `1px solid ${on ? "#00C4CC70" : "#1E1E1E"}`, background: on ? "rgba(0,196,204,0.1)" : "transparent", color: on ? "#00C4CC" : "#555", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, opacity: locked ? 0.4 : 1 }}>
+                  {m.label}{locked ? " (no reel)" : ""}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Caption */}
         <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>Caption</label>
         <textarea value={captionText} onChange={e => setCaptionText(e.target.value)} rows={3}
           style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 12 }} />
 
         {/* Query */}
-        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>Query foto</label>
+        <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 5 }}>Query {isVideo ? "video" : "foto"}</label>
         <input value={queryText} onChange={e => setQueryText(e.target.value)}
           style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 13, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 10 }} />
 
+        {isVideo && (
+          <>
+            <div style={{ marginBottom: 6, fontSize: 10, color: "#555" }}>
+              {selectedVideo ? "Video scelto" : "Scegli un video suggerito (Pexels), o lascia la ricerca automatica"}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 14 }}>
+              <button onClick={() => setSelectedVideo(null)}
+                style={{ aspectRatio: fmt?.vertical ? "9/16" : "1", borderRadius: 12, border: `2px solid ${selectedVideo === null ? "#00C4CC" : "#222"}`, background: "#141414", color: selectedVideo === null ? "#00C4CC" : "#555", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, padding: 4 }}>
+                🔀 Auto
+              </button>
+              {vidLoading && !videos?.length
+                ? Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} style={{ aspectRatio: fmt?.vertical ? "9/16" : "1", borderRadius: 12, background: "#141414" }} />
+                  ))
+                : (videos || []).slice(0, 5).map((v, i) => {
+                    const active = selectedVideo === v.videoUrl;
+                    return (
+                      <button key={v.id || i} onClick={() => setSelectedVideo(v.videoUrl)}
+                        style={{ aspectRatio: fmt?.vertical ? "9/16" : "1", borderRadius: 12, overflow: "hidden", padding: 0, border: `2px solid ${active ? "#00C4CC" : "#222"}`, cursor: "pointer", background: "#141414", position: "relative" }}>
+                        <img src={v.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: active ? 1 : 0.8 }} loading="lazy" />
+                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>▶</span>
+                      </button>
+                    );
+                  })}
+            </div>
+            {!videos?.length && !vidLoading && queryText.trim() && (
+              <div style={{ fontSize: 9, color: "#3A3A3A", marginBottom: 14 }}>Nessun video per questa query — verrà usata la ricerca automatica o una foto.</div>
+            )}
+          </>
+        )}
+
+        {!isVideo && (<>
         {/* Sorgente + immagini suggerite */}
         <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
           {Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]).map(([k, s]) => (
@@ -547,6 +629,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         <div style={{ fontSize: 9, color: "#3A3A3A", marginBottom: 14 }}>
           Su Pinterest: tasto destro sull'immagine → "Copia indirizzo immagine" (deve finire in .jpg/.png).
         </div>
+        </>)}
 
         {error && (
           <div style={{ padding: "9px 12px", borderRadius: 13, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>

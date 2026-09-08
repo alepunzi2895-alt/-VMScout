@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import { getCanvaToken, runAutofill, uploadUrlAsset } from "./canva-lib.js";
+import { getCanvaToken, runAutofill, uploadUrlAsset, uploadVideoUrlAsset } from "./canva-lib.js";
 
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 
@@ -17,10 +17,25 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
-// Avvia (o riprende) l'autofill e finalizza la risposta. Se il job Canva è
-// ancora in corso allo scadere del ciclo, risponde 202 con un `resume` che il
-// client rimanda finché non è pronto (nessun limite di tempo lato client).
-async function runAutofillPhase({ res, token, templateId, caption, cta, assetId, resumeJobId, imageUrl, imageWarning, deadline }) {
+// Un video Pexels per la query. Sceglie un file ~720-1400px: abbastanza nitido
+// per un reel, sotto il limite 100MB di `url-asset-uploads` di Canva.
+async function fetchPexelsVideo(query, vertical) {
+  if (!PEXELS_KEY || !query) return null;
+  try {
+    const r = await fetch(
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=5&orientation=${vertical ? "portrait" : "landscape"}`,
+      { headers: { Authorization: PEXELS_KEY } }
+    );
+    const d = await r.json();
+    const files = (d.videos?.[0]?.video_files || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0));
+    const pick = files.find(f => (f.width || 0) >= 720 && (f.width || 0) <= 1400) || files[files.length - 1] || files[0];
+    return pick?.link || null;
+  } catch { return null; }
+}
+
+// Avvia (o riprende) l'autofill e finalizza la risposta. `assetKind` = "image" |
+// "video" — Canva riempie lo stesso campo cornice con l'uno o l'altro.
+async function runAutofillPhase({ res, token, templateId, caption, cta, assetId, assetKind = "image", resumeJobId, mediaUrl, mediaWarning, deadline }) {
   const autofillData = {};
   if (caption) {
     autofillData["Testo_Post"] = { type: "text", text: caption };
@@ -28,8 +43,8 @@ async function runAutofillPhase({ res, token, templateId, caption, cta, assetId,
   }
   if (cta) autofillData["CTA"] = { type: "text", text: cta };
   if (assetId) {
-    autofillData["Immagine_Sfondo"] = { type: "image", asset_id: assetId };
-    autofillData["Background"]      = { type: "image", asset_id: assetId };
+    autofillData["Immagine_Sfondo"] = { type: assetKind, asset_id: assetId };
+    autofillData["Background"]      = { type: assetKind, asset_id: assetId };
   }
 
   const af = await runAutofill({
@@ -42,7 +57,7 @@ async function runAutofillPhase({ res, token, templateId, caption, cta, assetId,
     return res.status(202).json({
       pending: true,
       phase: "autofill",
-      resume: { stage: "autofill", jobId: af.jobId, imageUrl: imageUrl || null, imageWarning: imageWarning || null },
+      resume: { stage: "autofill", jobId: af.jobId, mediaUrl: mediaUrl || null, mediaWarning: mediaWarning || null },
     });
   }
   if (!af.ok) {
@@ -54,13 +69,14 @@ async function runAutofillPhase({ res, token, templateId, caption, cta, assetId,
     });
   }
   const templateHint = af.imageFieldsMissing && typeof af.imageFieldsMissing === "string" ? af.imageFieldsMissing : null;
+  const what = assetKind === "video" ? "Il video" : "La foto";
   return res.status(200).json({
     ok: true,
     url: af.designUrl,
-    imageUrl: imageUrl || null,
+    imageUrl: mediaUrl || null,
     imageWarning: templateHint
-      ? `La foto è stata caricata ma il template non la mostra. ${templateHint}`
-      : (imageWarning || null),
+      ? `${what} è stato caricato ma il template non lo mostra. ${templateHint}`
+      : (mediaWarning || null),
   });
 }
 
@@ -71,7 +87,7 @@ export default async function handler(req, res) {
 
   const {
     caption, search_query, format = "post", cta,
-    templateId, imageUrl: bodyImageUrl, resume,
+    templateId, imageUrl: bodyImageUrl, videoUrl: bodyVideoUrl, mediaType, resume,
   } = req.body || {};
   if (!caption) return res.status(400).json({ error: "Manca caption" });
   if (!templateId) {
@@ -89,8 +105,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }
 
-  // Budget di UN ciclo: sotto il maxDuration:60 (12s di margine per rete/JSON).
   const deadline = Date.now() + 48_000;
+  const vertical = format === "story" || format === "reel";
+  // I Reel sono SEMPRE video; per gli altri formati serve mediaType/videoUrl.
+  const wantVideo = format === "reel" || mediaType === "video" || !!bodyVideoUrl;
 
   try {
     // ── Resume: autofill già avviato ──────────────────────────────
@@ -98,49 +116,80 @@ export default async function handler(req, res) {
       return await runAutofillPhase({
         res, token, templateId, caption, cta,
         resumeJobId: resume.jobId,
-        imageUrl: resume.imageUrl, imageWarning: resume.imageWarning,
+        mediaUrl: resume.mediaUrl, mediaWarning: resume.mediaWarning,
         deadline,
       });
     }
 
-    // ── Resume: upload immagine già avviato ───────────────────────
+    // ── Resume: upload media già avviato ──────────────────────────
     if (resume?.stage === "upload" && resume.jobId) {
-      const up = await uploadUrlAsset({ token, resumeJobId: resume.jobId, deadline });
+      const isVid = resume.assetKind === "video";
+      const up = isVid
+        ? await uploadVideoUrlAsset({ token, resumeJobId: resume.jobId, deadline })
+        : await uploadUrlAsset({ token, resumeJobId: resume.jobId, deadline });
       if (up.pending) {
         return res.status(202).json({
           pending: true, phase: "upload",
-          resume: { stage: "upload", jobId: up.jobId, imageUrl: resume.imageUrl },
+          resume: { stage: "upload", jobId: up.jobId, mediaUrl: resume.mediaUrl, assetKind: resume.assetKind },
         });
       }
       return await runAutofillPhase({
         res, token, templateId, caption, cta,
-        assetId: up.assetId,
-        imageUrl: resume.imageUrl,
-        imageWarning: up.assetId ? null : (up.error || "Immagine non caricata su Canva."),
+        assetId: up.assetId, assetKind: resume.assetKind || "image",
+        mediaUrl: resume.mediaUrl,
+        mediaWarning: up.assetId ? null : (up.error || `${isVid ? "Video" : "Immagine"} non caricato su Canva.`),
         deadline,
       });
     }
 
-    // ── Fresh: risolvi immagine → upload → autofill ───────────────
-    const vertical = format === "story" || format === "reel";
-    const imageUrl = bodyImageUrl || (search_query ? await fetchPexelsUrl(search_query, vertical) : null);
-
-    if (!imageUrl) {
-      return await runAutofillPhase({ res, token, templateId, caption, cta, deadline });
+    // ── Fresh ─────────────────────────────────────────────────────
+    if (wantVideo) {
+      const videoUrl = bodyVideoUrl || (search_query ? await fetchPexelsVideo(search_query, vertical) : null);
+      if (videoUrl) {
+        const up = await uploadVideoUrlAsset({ token, url: videoUrl, name: "vmscout-bg.mp4", deadline });
+        if (up.pending) {
+          return res.status(202).json({
+            pending: true, phase: "upload",
+            resume: { stage: "upload", jobId: up.jobId, mediaUrl: videoUrl, assetKind: "video" },
+          });
+        }
+        return await runAutofillPhase({
+          res, token, templateId, caption, cta,
+          assetId: up.assetId, assetKind: "video",
+          mediaUrl: videoUrl,
+          mediaWarning: up.assetId ? null : (up.error || "Video non caricato su Canva."),
+          deadline,
+        });
+      }
+      // nessun video trovato → per il reel ripiego sulla foto con avviso
+      if (format !== "reel") {
+        return await runAutofillPhase({ res, token, templateId, caption, cta, deadline });
+      }
     }
 
+    // Percorso immagine (post/story, o reel senza video disponibile)
+    const imageUrl = bodyImageUrl || (search_query ? await fetchPexelsUrl(search_query, vertical) : null);
+    if (!imageUrl) {
+      return await runAutofillPhase({
+        res, token, templateId, caption, cta, deadline,
+        mediaWarning: wantVideo ? "Nessun video trovato per la query: apri il design e trascina un video." : null,
+      });
+    }
     const up = await uploadUrlAsset({ token, url: imageUrl, name: "vmscout-bg.jpg", deadline });
     if (up.pending) {
       return res.status(202).json({
         pending: true, phase: "upload",
-        resume: { stage: "upload", jobId: up.jobId, imageUrl },
+        resume: { stage: "upload", jobId: up.jobId, mediaUrl: imageUrl, assetKind: "image" },
       });
     }
     return await runAutofillPhase({
       res, token, templateId, caption, cta,
-      assetId: up.assetId,
-      imageUrl,
-      imageWarning: up.assetId ? null : (up.error || "Immagine non caricata su Canva."),
+      assetId: up.assetId, assetKind: "image",
+      mediaUrl: imageUrl,
+      mediaWarning: [
+        up.assetId ? null : (up.error || "Immagine non caricata su Canva."),
+        wantVideo ? "Nessun video trovato: usata una foto." : null,
+      ].filter(Boolean).join(" ") || null,
       deadline,
     });
 

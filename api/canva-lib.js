@@ -260,6 +260,49 @@ async function uploadBinaryAsset({ token, url, name, stopAt, resumeJobId }) {
   return pollBinaryJob({ token, jobId: start.jobId, stopAt });
 }
 
+// Carica un VIDEO su Canva via `url-asset-uploads` (Canva lo scarica lui, fino a
+// 100MB) — mai binario: i video sono troppo grossi per scaricarli in memoria su
+// Vercel. `{ assetId } | { pending, jobId } | { error }`. Con `resumeJobId`
+// riprende solo il polling del job.
+export async function uploadVideoUrlAsset({ token, url, name = "vmscout.mp4", deadline, resumeJobId }) {
+  const stopAt = deadline || (Date.now() + 45_000);
+  let jobId = resumeJobId, job = null;
+
+  if (!jobId) {
+    if (!url) return { assetId: null, error: "URL video mancante" };
+    let r, d;
+    try {
+      r = await fetch(`${CANVA_API}/url-asset-uploads`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: String(name).slice(0, 255), url }),
+      });
+      d = await r.json().catch(() => ({}));
+    } catch (e) {
+      return { assetId: null, error: `Errore di rete verso Canva: ${e.message}` };
+    }
+    if (r.status === 401 || r.status === 403) {
+      return { assetId: null, error: "Permesso Canva insufficiente per caricare video (scope asset:write). Disconnetti e riconnetti Canva." };
+    }
+    if (!r.ok || !d?.job?.id) {
+      return { assetId: null, error: `Canva ha rifiutato l'upload del video (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.` };
+    }
+    jobId = d.job.id;
+    job = d.job;
+  }
+
+  while ((!job || job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
+    await sleep(POLL_INTERVAL_MS);
+    const poll = await canvaGet(token, `/url-asset-uploads/${jobId}`);
+    job = poll.body?.job ?? job ?? { status: "in_progress" };
+  }
+  if (job?.status === "success" && job.asset?.id) return { assetId: job.asset.id };
+  if (job?.status === "failed") {
+    return { assetId: null, error: `Canva: ${job.error?.message || job.error?.code || "elaborazione video fallita"}` };
+  }
+  return { assetId: null, pending: true, jobId };
+}
+
 // Carica un'immagine su Canva e ne restituisce l'asset_id. Prima prova il metodo
 // binario (veloce), poi come fallback `url-asset-uploads` (Canva scarica l'URL).
 // `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
