@@ -125,13 +125,17 @@ export default async function handler(req, res) {
 
     const filled = slots.filter(s => s?.assetId).length;
     const missing = usedSlides.length - filled;
+    const slotErrors = slots.map((s, i) => s?.error ? `Slide ${i + 1}: ${s.error}` : null).filter(Boolean);
     return res.status(200).json({
       ok: true,
       url: finalUrl,
       slidesFilled: filled,
       totalSlides: usedSlides.length,
       imageUrls: (imageUrls || []).filter(Boolean),
-      imageWarning: missing > 0 ? `${missing} sfondo/i non caricato/i su Canva (immagine troppo grande o URL non pubblico).` : null,
+      slotErrors,
+      imageWarning: missing > 0
+        ? (slotErrors.length ? slotErrors.join(" · ") : `${missing} sfondo/i non caricato/i su Canva.`)
+        : null,
     });
   }
 
@@ -166,7 +170,11 @@ export default async function handler(req, res) {
     );
     let slots = await Promise.all(imageUrls.map((url, i) =>
       url
-        ? startImageUpload({ token, url, name: `vmscout-slide-${i + 1}.jpg` }).then(toSlot)
+        ? startImageUpload({ token, url, name: `vmscout-slide-${i + 1}.jpg` }).then(r => {
+            const s = toSlot(r);
+            if (s.error) { try { s.error += ` [${new URL(url).host}]`; } catch { /* */ } }
+            return s;
+          })
         : Promise.resolve({ error: null })
     ));
     slots = await pollSlots({ token, slots, stopAt: deadline });
