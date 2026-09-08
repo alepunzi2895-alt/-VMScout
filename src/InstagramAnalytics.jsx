@@ -811,21 +811,25 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [tokenPaste, setTokenPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
-  const [onlyMine, setOnlyMine] = useState(() => { try { return localStorage.getItem("fb_ads_only_mine") !== "0"; } catch { return true; } });
-
-  useEffect(() => { try { localStorage.setItem("fb_ads_only_mine", onlyMine ? "1" : "0"); } catch {} }, [onlyMine]);
-
-  // Sponsorizzate dell'account IG del progetto: match sull'instagram_actor_id
-  // del creative. Se il filtro non trova nulla ma ci sono ads con permalink IG,
-  // mostra comunque quelle (il match per id può fallire se l'IG-Login usa un id
-  // diverso da quello lato Ads).
-  const igMatched = (ads || []).filter(a => adInstagramActorId(a.creative) && String(adInstagramActorId(a.creative)) === String(igAccountId || ""));
-  const igLike = (ads || []).filter(a => a.creative?.instagram_permalink_url || a.creative?.effective_instagram_media_id || adInstagramActorId(a.creative));
-  const filterActive = onlyMine && !!igAccountId;
-  const shownAds = !filterActive ? (ads || [])
-    : igMatched.length ? igMatched
-    : igLike;
-  const filterFellBack = filterActive && !igMatched.length && igLike.length > 0;
+  // Account IG rilevati tra le sponsorizzate caricate (server risolve a._ig).
+  const igOptions = (() => {
+    const map = new Map();
+    (ads || []).forEach(a => {
+      const ig = a._ig;
+      if (!ig) return;
+      const key = String(ig.username || ig.id);
+      if (!map.has(key)) map.set(key, { key, id: ig.id, username: ig.username || null, count: 0 });
+      map.get(key).count++;
+    });
+    return [...map.values()];
+  })();
+  const handle = (brand?.instagramHandle || igUsername || "").replace(/^@/, "").toLowerCase();
+  const [igFilter, setIgFilter] = useState("auto"); // "auto" | "all" | key
+  const autoMatch = igOptions.find(o => o.username && o.username.toLowerCase() === handle);
+  const activeKey = igFilter === "auto" ? (autoMatch?.key || "all") : igFilter;
+  const shownAds = activeKey === "all" ? (ads || [])
+    : (ads || []).filter(a => a._ig && String(a._ig.username || a._ig.id) === activeKey);
+  const noIgInfo = (ads || []).length > 0 && igOptions.length === 0;
 
   const checkStatus = () => fetch("/api/instagram?action=fb_status").then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false }));
 
@@ -960,7 +964,7 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
         {showPaste && (
           <div style={{ marginTop: 14, padding: 14, background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10 }}>
             <div style={{ fontSize: 11, color: WARM_GREY, lineHeight: 1.6, marginBottom: 10 }}>
-              Da <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ color: "#4A90E2" }}>Graph API Explorer</a>: seleziona la tua app → aggiungi il permesso <code style={{ color: GOLD }}>ads_read</code> → <strong>Generate Access Token</strong> → copia e incolla qui. Lo converto in token da ~60 giorni.
+              Da <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ color: "#4A90E2" }}>Graph API Explorer</a>: seleziona la tua app → aggiungi i permessi <code style={{ color: GOLD }}>ads_read</code> <code style={{ color: GOLD }}>instagram_basic</code> <code style={{ color: GOLD }}>pages_read_engagement</code> → <strong>Generate Access Token</strong> → copia e incolla qui. Lo converto in token da ~60 giorni. (<code>instagram_basic</code> serve per distinguere le sponsorizzate per account IG.)
             </div>
             <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={3} placeholder="EAAxxxxxxxxxxxx..."
               style={{ width: "100%", background: "#141414", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "9px 11px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
@@ -1026,25 +1030,32 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
         )}
       </div>
 
-      {ads?.length > 0 && igAccountId && (
-        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: WARM_GREY, marginBottom: 12, cursor: "pointer" }}>
-          <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} />
-          Solo le sponsorizzate di {igUsername ? `@${igUsername}` : "questo account IG"}
-        </label>
+      {ads?.length > 0 && igOptions.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: WARM_GREY }}>Account Instagram:</span>
+          <select value={igFilter} onChange={e => setIgFilter(e.target.value)}
+            style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "6px 8px", fontSize: 11 }}>
+            {autoMatch && <option value="auto">@{autoMatch.username} (del progetto)</option>}
+            <option value="all">Tutti gli account ({ads.length})</option>
+            {igOptions.map(o => (
+              <option key={o.key} value={o.key}>{o.username ? `@${o.username}` : `ID ${o.id}`} ({o.count})</option>
+            ))}
+          </select>
+        </div>
       )}
 
       {err && <div style={{ marginBottom: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
 
       {fetchedAt && ads?.length > 0 && (
         <div style={{ fontSize: 10, color: "#555", marginBottom: 10 }}>
-          {shownAds.length}{filterActive && shownAds.length !== ads.length ? ` di ${ads.length}` : ""} sponsorizzate · aggiornate il {new Date(fetchedAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-          {filterFellBack && <span style={{ color: "#E4A050" }}> · match esatto per account IG non riuscito, mostro tutte quelle con placement Instagram</span>}
+          {shownAds.length}{shownAds.length !== ads.length ? ` di ${ads.length}` : ""} sponsorizzate · aggiornate il {new Date(fetchedAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          {noIgInfo && <span style={{ color: "#E4A050" }}> · non riesco a distinguere gli account IG con questo token (aggiungi lo scope instagram_basic o pages_read_engagement)</span>}
         </div>
       )}
 
       {ads?.length === 0 && <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata negli ultimi 90 giorni su questo account.</div>}
       {ads?.length > 0 && shownAds.length === 0 && (
-        <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata di {igUsername ? `@${igUsername}` : "questo account IG"} tra le {ads.length} trovate. Togli la spunta per vederle tutte.</div>
+        <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata per l'account IG selezionato. Scegli "Tutti gli account".</div>
       )}
 
       {shownAds.length > 0 && (

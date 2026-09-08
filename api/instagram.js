@@ -203,7 +203,45 @@ export default async function handler(req, res) {
         ].join(",");
         const r = await fbGraph(token, `act_${acct}/ads`, { fields, limit: body.limit || 50 });
         if (!r.ok) return res.status(r.status).json({ error: r.data?.error?.message || "Errore Meta", details: r.data });
-        return res.status(200).json({ ok: true, ads: r.data.data || [], paging: r.data.paging || null });
+        const ads = r.data.data || [];
+
+        // Risolvi a quale account Instagram appartiene ogni ad (per il filtro
+        // "solo la pagina del progetto"). Fonti, in ordine: instagram_actor_id
+        // del creative → la Pagina FB in effective_object_story_id → il media IG.
+        // Deduplicato: di solito è 1-2 Pagine per account pubblicitario.
+        const pageIds = [...new Set(ads.map(a => {
+          const s = String(a.creative?.effective_object_story_id || "").split("_");
+          return s.length === 2 ? s[0] : null;
+        }).filter(Boolean))];
+        const actorIds = [...new Set(ads.map(a => a.creative?.object_story_spec?.instagram_actor_id || a.creative?.object_story_spec?.instagram_user_id).filter(Boolean))];
+        const mediaIds = [...new Set(ads.map(a => a.creative?.effective_instagram_media_id).filter(Boolean))].slice(0, 12);
+
+        const igByPage = {}, igByActor = {}, igByMedia = {};
+        await Promise.all([
+          ...pageIds.map(async pid => {
+            const p = await fbGraph(token, pid, { fields: "name,instagram_business_account{id,username},connected_instagram_account{id,username}" });
+            const ig = p.data?.instagram_business_account || p.data?.connected_instagram_account;
+            if (ig?.id) igByPage[pid] = { id: ig.id, username: ig.username || null };
+          }),
+          ...actorIds.map(async aid => {
+            const u = await fbGraph(token, aid, { fields: "username" });
+            if (u.ok && u.data?.username) igByActor[aid] = { id: aid, username: u.data.username };
+          }),
+          ...mediaIds.map(async mid => {
+            const m = await fbGraph(token, mid, { fields: "username,owner" });
+            if (m.ok && m.data?.username) igByMedia[mid] = { id: m.data.owner?.id || mid, username: m.data.username };
+          }),
+        ]);
+
+        for (const a of ads) {
+          const s = String(a.creative?.effective_object_story_id || "").split("_");
+          const pid = s.length === 2 ? s[0] : null;
+          const aid = a.creative?.object_story_spec?.instagram_actor_id || a.creative?.object_story_spec?.instagram_user_id;
+          const mid = a.creative?.effective_instagram_media_id;
+          a._ig = (aid && igByActor[aid]) || (pid && igByPage[pid]) || (mid && igByMedia[mid]) || (aid ? { id: aid, username: null } : null);
+        }
+
+        return res.status(200).json({ ok: true, ads, paging: r.data.paging || null });
       }
 
       return res.status(400).json({ error: "fb_action sconosciuta" });
