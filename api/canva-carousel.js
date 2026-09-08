@@ -126,16 +126,21 @@ export default async function handler(req, res) {
     const filled = slots.filter(s => s?.assetId).length;
     const missing = usedSlides.length - filled;
     const slotErrors = slots.map((s, i) => s?.error ? `Slide ${i + 1}: ${s.error}` : null).filter(Boolean);
+    // Le immagini sono state caricate su Canva ma l'autofill non aveva un campo
+    // immagine col nome giusto nel template → carosello con solo testo.
+    const templateHint = af.imageFieldsMissing && typeof af.imageFieldsMissing === "string" ? af.imageFieldsMissing : null;
     return res.status(200).json({
       ok: true,
       url: finalUrl,
-      slidesFilled: filled,
+      slidesFilled: templateHint ? 0 : filled,
       totalSlides: usedSlides.length,
       imageUrls: (imageUrls || []).filter(Boolean),
       slotErrors,
-      imageWarning: missing > 0
-        ? (slotErrors.length ? slotErrors.join(" · ") : `${missing} sfondo/i non caricato/i su Canva.`)
-        : null,
+      imageWarning: templateHint
+        ? `Le foto sono state caricate ma il template carosello non le mostra. ${templateHint}`
+        : missing > 0
+          ? (slotErrors.length ? slotErrors.join(" · ") : `${missing} sfondo/i non caricato/i su Canva.`)
+          : null,
     });
   }
 

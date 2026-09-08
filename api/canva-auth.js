@@ -54,10 +54,15 @@ export default async function handler(req, res) {
     url.searchParams.set("client_id",             clientId);
     url.searchParams.set("response_type",         "code");
     url.searchParams.set("redirect_uri",          redirectUri);
-    // asset:read serve per fare il polling dei job di upload
-    // (GET /v1/asset-uploads/{jobId}); senza, ogni poll torna 403 missing_scope
-    // e l'immagine non risulta mai "pronta" pur essendo stata caricata.
-    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write");
+    // Scope necessari, con il motivo:
+    // - asset:read  → polling dei job di upload (GET /v1/asset-uploads/{jobId})
+    // - asset:write → creare gli asset
+    // - design:content:write / design:meta:read → autofill + merge pagine
+    // - brandtemplate:content:read → leggere il DATASET del Brand Template
+    //   (GET /v1/brand-templates/{id}/dataset): senza, non sappiamo i nomi dei
+    //   campi immagine del carosello e l'autofill li scarta in silenzio → il
+    //   carosello esce con solo il testo.
+    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write brandtemplate:meta:read brandtemplate:content:read");
     url.searchParams.set("code_challenge_method", "S256");
     url.searchParams.set("code_challenge",        challenge);
 

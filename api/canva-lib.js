@@ -387,15 +387,28 @@ export async function runAutofill({ token, templateId, data, title, deadline, re
   // Filtra i campi a quelli realmente definiti nel template.
   const dataset = await fetchDataset(token, brandTemplateId);
   let payloadData = data;
+  let imageFieldsMissing = false;
+  let imageFieldsHint = "";
   if (dataset) {
     payloadData = Object.fromEntries(Object.entries(data || {}).filter(([k]) => k in dataset));
     if (!Object.keys(payloadData).length) {
       return {
         ok: false,
         status: 400,
-        message: `Nessun campo compatibile col Brand Template. Campi attesi: ${Object.keys(dataset).join(", ") || "(nessuno)"}. In VMScout i placeholder devono chiamarsi Testo_Post / Immagine_Sfondo (post, story, reel) oppure Image_1/Testo_1, Image_2/Testo_2… (carosello).`,
+        message: `Nessun campo compatibile col Brand Template. Campi del template: ${Object.keys(dataset).join(", ") || "(nessuno)"}.`,
         details: dataset,
       };
+    }
+    // Volevamo mettere delle immagini ma NESSUN campo immagine ha combaciato:
+    // il design uscirà con solo il testo. Segnalalo al chiamante.
+    const wantedImage = Object.values(data || {}).some(v => v?.type === "image");
+    const gotImage = Object.values(payloadData).some(v => v?.type === "image");
+    if (wantedImage && !gotImage) {
+      imageFieldsMissing = true;
+      const imgFields = Object.entries(dataset).filter(([, d]) => d?.type === "image").map(([n]) => n);
+      imageFieldsHint = imgFields.length
+        ? `I campi immagine del template si chiamano: ${imgFields.join(", ")} — rinominali in Image_1..N (o Immagine_1..N) nel pannello Dati di Canva e ripubblica il Modello del brand.`
+        : `Il template non ha campi immagine di autofill: in Canva seleziona ogni riquadro sfondo → click destro → 'Aggiungi al modello del brand' e chiamalo Image_1, Image_2, … poi ripubblica.`;
     }
   }
 
@@ -431,7 +444,9 @@ export async function runAutofill({ token, templateId, data, title, deadline, re
   if (!job.id) {
     return { ok: false, status: 502, message: "Canva non ha restituito un job di autofill.", details: createJson };
   }
-  return pollAutofillJob({ token, jobId: job.id, job, stopAt });
+  const result = await pollAutofillJob({ token, jobId: job.id, job, stopAt });
+  if (result.ok && imageFieldsMissing) result.imageFieldsMissing = imageFieldsHint || true;
+  return result;
 }
 
 // Elimina le pagine in coda a un design (Design Merge API, preview). Serve al

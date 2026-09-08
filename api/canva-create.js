@@ -53,11 +53,14 @@ async function runAutofillPhase({ res, token, templateId, caption, cta, assetId,
       error: true, message: af.message, details: af.details,
     });
   }
+  const templateHint = af.imageFieldsMissing && typeof af.imageFieldsMissing === "string" ? af.imageFieldsMissing : null;
   return res.status(200).json({
     ok: true,
     url: af.designUrl,
     imageUrl: imageUrl || null,
-    imageWarning: imageWarning || null,
+    imageWarning: templateHint
+      ? `La foto è stata caricata ma il template non la mostra. ${templateHint}`
+      : (imageWarning || null),
   });
 }
 
