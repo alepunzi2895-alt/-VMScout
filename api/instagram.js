@@ -42,12 +42,16 @@ async function getFbToken(db) {
 // Chiamata alla Graph API di Facebook col token FB salvato. `path` senza slash
 // iniziale; `params` come oggetto piatto.
 async function fbGraph(token, path, params = {}) {
-  const url = new URL(`${FB_GRAPH}/${path}`);
-  url.searchParams.set("access_token", token);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  const r = await fetch(url.toString());
-  const data = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, data };
+  try {
+    const url = new URL(`${FB_GRAPH}/${path}`);
+    if (token) url.searchParams.set("access_token", token);
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+    const r = await fetch(url.toString());
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: {}, netError: e.message };
+  }
 }
 
 function page(title, body, accent = "#C9A96E") {
@@ -185,9 +189,24 @@ export default async function handler(req, res) {
 
     try {
       if (body.fb_action === "adaccounts") {
-        const r = await fbGraph(token, "me/adaccounts", { fields: "id,name,currency,account_status,timezone_name", limit: 50 });
-        if (!r.ok) return res.status(r.status).json({ error: r.data?.error?.message || "Errore Meta", details: r.data });
-        return res.status(200).json({ ok: true, accounts: r.data.data || [] });
+        const fields = "id,name,currency,account_status";
+        const [mine, biz] = await Promise.all([
+          fbGraph(token, "me/adaccounts", { fields, limit: 200 }),
+          // Le promozioni fatte dall'app Instagram girano spesso su un ad account
+          // dentro il Business Manager della Pagina collegata → non sempre in
+          // me/adaccounts. Serve lo scope business_management.
+          fbGraph(token, "me/businesses", { fields: `owned_ad_accounts{${fields}},client_ad_accounts{${fields}}`, limit: 50 }),
+        ]);
+        if (!mine.ok && !biz.ok) {
+          return res.status(mine.status || 400).json({ error: mine.data?.error?.message || "Errore Meta", details: mine.data });
+        }
+        const byId = new Map();
+        (mine.data?.data || []).forEach(a => byId.set(a.id, a));
+        (biz.data?.data || []).forEach(b => {
+          (b.owned_ad_accounts?.data || []).forEach(a => byId.set(a.id, a));
+          (b.client_ad_accounts?.data || []).forEach(a => byId.set(a.id, a));
+        });
+        return res.status(200).json({ ok: true, accounts: [...byId.values()] });
       }
 
       if (body.fb_action === "ads") {
@@ -201,7 +220,7 @@ export default async function handler(req, res) {
           "creative{name,title,body,object_type,instagram_permalink_url,thumbnail_url,image_url,effective_object_story_id,effective_instagram_media_id,object_story_spec}",
           `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr,cpc,frequency,actions,cost_per_action_type}`,
         ].join(",");
-        const r = await fbGraph(token, `act_${acct}/ads`, { fields, limit: body.limit || 50 });
+        const r = await fbGraph(token, `act_${acct}/ads`, { fields, limit: body.limit || 250 });
         if (!r.ok) return res.status(r.status).json({ error: r.data?.error?.message || "Errore Meta", details: r.data });
         const ads = r.data.data || [];
 
