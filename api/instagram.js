@@ -190,21 +190,28 @@ export default async function handler(req, res) {
     try {
       if (body.fb_action === "adaccounts") {
         const fields = "id,name,currency,account_status";
-        const [mine, biz] = await Promise.all([
+        // Le promozioni fatte dall'app Instagram girano su un ad account del
+        // Business della Pagina collegata → NON sempre in me/adaccounts. Le
+        // raccogliamo da tre fonti: me/adaccounts, me/businesses (serve
+        // business_management), e me/accounts → pagina → business → ad accounts.
+        const [mine, biz, pages] = await Promise.all([
           fbGraph(token, "me/adaccounts", { fields, limit: 200 }),
-          // Le promozioni fatte dall'app Instagram girano spesso su un ad account
-          // dentro il Business Manager della Pagina collegata → non sempre in
-          // me/adaccounts. Serve lo scope business_management.
           fbGraph(token, "me/businesses", { fields: `owned_ad_accounts{${fields}},client_ad_accounts{${fields}}`, limit: 50 }),
+          fbGraph(token, "me/accounts", { fields: `name,business{owned_ad_accounts{${fields}},client_ad_accounts{${fields}}}`, limit: 100 }),
         ]);
-        if (!mine.ok && !biz.ok) {
+        if (!mine.ok && !biz.ok && !pages.ok) {
           return res.status(mine.status || 400).json({ error: mine.data?.error?.message || "Errore Meta", details: mine.data });
         }
         const byId = new Map();
-        (mine.data?.data || []).forEach(a => byId.set(a.id, a));
+        const add = a => a?.id && byId.set(a.id, a);
+        (mine.data?.data || []).forEach(add);
         (biz.data?.data || []).forEach(b => {
-          (b.owned_ad_accounts?.data || []).forEach(a => byId.set(a.id, a));
-          (b.client_ad_accounts?.data || []).forEach(a => byId.set(a.id, a));
+          (b.owned_ad_accounts?.data || []).forEach(add);
+          (b.client_ad_accounts?.data || []).forEach(add);
+        });
+        (pages.data?.data || []).forEach(p => {
+          (p.business?.owned_ad_accounts?.data || []).forEach(add);
+          (p.business?.client_ad_accounts?.data || []).forEach(add);
         });
         return res.status(200).json({ ok: true, accounts: [...byId.values()] });
       }
@@ -212,18 +219,22 @@ export default async function handler(req, res) {
       // Diagnostica: cosa raggiunge questo token FB (per capire se un dato
       // account IG / ad account è visibile).
       if (body.fb_action === "diagnose") {
-        const [me, pages, biz, adAcc] = await Promise.all([
+        const [me, perms, pages, biz, adAcc] = await Promise.all([
           fbGraph(token, "me", { fields: "id,name" }),
-          fbGraph(token, "me/accounts", { fields: "name,instagram_business_account{username,id},connected_instagram_account{username,id}", limit: 100 }),
+          fbGraph(token, "me/permissions", {}),
+          fbGraph(token, "me/accounts", { fields: "id,name,instagram_business_account{username,id},connected_instagram_account{username,id},business{id,name,owned_ad_accounts{name,id},client_ad_accounts{name,id}}", limit: 100 }),
           fbGraph(token, "me/businesses", { fields: "name,owned_ad_accounts{name},client_ad_accounts{name},instagram_business_accounts{username}", limit: 50 }),
           fbGraph(token, "me/adaccounts", { fields: "name,account_status", limit: 200 }),
         ]);
         return res.status(200).json({
           ok: true,
           me: me.data,
+          scopes: (perms.data?.data || []).filter(p => p.status === "granted").map(p => p.permission),
           pages: (pages.data?.data || []).map(p => ({
             page: p.name,
             ig: p.instagram_business_account?.username || p.connected_instagram_account?.username || null,
+            business: p.business?.name || null,
+            business_ad_accounts: [...(p.business?.owned_ad_accounts?.data || []), ...(p.business?.client_ad_accounts?.data || [])].map(a => ({ name: a.name, id: a.id })),
           })),
           pages_error: pages.ok ? null : pages.data?.error?.message,
           businesses: (biz.data?.data || []).map(b => ({
