@@ -37,6 +37,76 @@ export default async function handler(req, res) {
     });
   }
 
+  // ?debug=merge — DIAGNOSTICA TEMPORANEA: crea 3 design 1-pagina col template
+  // post e li unisce a catena con la Merge API, loggando id e page_count a ogni
+  // passo. Serve a capire se modify_existing_design muta in place o crea un
+  // nuovo design, e cosa torna in result.design.id.
+  if (req.query.debug === "merge") {
+    const TPL = String(req.query.tpl || "EAHUiCrR7F8");
+    const dbg = [];
+    const g = async (path, init) => {
+      const r = await fetch(`${CANVA_API}${path}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers || {}) },
+      });
+      const j = await r.json().catch(() => ({}));
+      return { status: r.status, ok: r.ok, j };
+    };
+    const pollJob = async (kind, id) => {
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const { j } = await g(`/${kind}/${id}`);
+        const job = j.job ?? j;
+        if (job.status === "success" || job.status === "failed") return job;
+      }
+      return { status: "timeout" };
+    };
+    const pageCount = async (id) => {
+      const { j } = await g(`/designs/${id}`);
+      return j?.design?.page_count ?? j?.page_count ?? null;
+    };
+
+    // 1) crea 3 autofill
+    const designIds = [];
+    for (let n = 1; n <= 3; n++) {
+      const { j: cj } = await g(`/autofills`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "create_from_brand_template", brand_template_id: TPL,
+          data: { Testo_Post: { type: "text", text: `DBG slide ${n}` }, Caption: { type: "text", text: `DBG slide ${n}` } },
+          title: `DBG ${n}`,
+        }),
+      });
+      const job = await pollJob("autofills", (cj.job ?? cj).id);
+      const id = job.result?.design?.id;
+      designIds.push(id);
+      dbg.push({ step: `autofill ${n}`, jobStatus: job.status, designId: id, pages: await pageCount(id) });
+    }
+
+    // 2) merge a catena: base = designIds[0], append designIds[1], poi [2]
+    let base = designIds[0];
+    for (let k = 1; k < designIds.length; k++) {
+      const { status, j: mj } = await g(`/merges`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "modify_existing_design", design_id: base,
+          operations: [{ type: "insert_pages", source: { type: "design", design_id: designIds[k], page_numbers: [1] } }],
+        }),
+      });
+      const job = await pollJob("merges", (mj.job ?? mj).id);
+      const resultId = job.result?.design?.id;
+      dbg.push({
+        step: `merge append ${k}`, httpStatus: status, jobStatus: job.status,
+        jobError: job.error || null,
+        baseSent: base, resultDesignId: resultId,
+        resultPages: resultId ? await pageCount(resultId) : null,
+        basePagesAfter: await pageCount(base),
+      });
+      if (resultId) base = resultId;
+    }
+    return res.status(200).json({ ok: true, finalDesign: base, finalUrl: `https://www.canva.com/design/${base}/edit`, designIds, dbg });
+  }
+
   // 1. scarica i byte della foto di prova
   let bytes;
   try {
