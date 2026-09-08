@@ -209,6 +209,34 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, accounts: [...byId.values()] });
       }
 
+      // Diagnostica: cosa raggiunge questo token FB (per capire se un dato
+      // account IG / ad account è visibile).
+      if (body.fb_action === "diagnose") {
+        const [me, pages, biz, adAcc] = await Promise.all([
+          fbGraph(token, "me", { fields: "id,name" }),
+          fbGraph(token, "me/accounts", { fields: "name,instagram_business_account{username,id},connected_instagram_account{username,id}", limit: 100 }),
+          fbGraph(token, "me/businesses", { fields: "name,owned_ad_accounts{name},client_ad_accounts{name},instagram_business_accounts{username}", limit: 50 }),
+          fbGraph(token, "me/adaccounts", { fields: "name,account_status", limit: 200 }),
+        ]);
+        return res.status(200).json({
+          ok: true,
+          me: me.data,
+          pages: (pages.data?.data || []).map(p => ({
+            page: p.name,
+            ig: p.instagram_business_account?.username || p.connected_instagram_account?.username || null,
+          })),
+          pages_error: pages.ok ? null : pages.data?.error?.message,
+          businesses: (biz.data?.data || []).map(b => ({
+            name: b.name,
+            ig: (b.instagram_business_accounts?.data || []).map(x => x.username),
+            ad_accounts: [...(b.owned_ad_accounts?.data || []), ...(b.client_ad_accounts?.data || [])].map(a => a.name),
+          })),
+          businesses_error: biz.ok ? null : biz.data?.error?.message,
+          ad_accounts: (adAcc.data?.data || []).map(a => a.name),
+          ad_accounts_error: adAcc.ok ? null : adAcc.data?.error?.message,
+        });
+      }
+
       if (body.fb_action === "ads") {
         const acct = String(body.ad_account_id || "").replace(/^act_/, "");
         if (!acct) return res.status(400).json({ error: "Manca ad_account_id" });
