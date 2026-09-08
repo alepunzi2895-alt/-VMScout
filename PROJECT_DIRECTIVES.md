@@ -50,7 +50,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
 | `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, + `imageUrl`/`videoUrl`/`mediaType` opzionali. **Reel = sempre video** (autofill `type:"video"`); **Story = foto o video** (toggle nel modale); post = foto. Se `videoUrl` non c'è: `fetchPexelsVideo(search_query)`, fallback su foto |
-| `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone un **carosello intero in un solo design**: upload immagini + **un solo autofill** (`Testo_1..N`/`Immagine_1..N`) sul Brand Template a 6 pagine + `trimTrailingPages` se N<6. Body: `slides[]`, `carouselTemplateId`, `format`. Vedi §7 |
+| `api/canva-carousel.js` | `POST /api/canva-carousel` | **Carosello intero in un solo design** (FOTO o VIDEO): upload media + **un solo autofill** (`Testo_1..N`/`Immagine_1..N`) sul Brand Template a 6 pagine + `trimTrailingPages` se N<6. Body: `slides[]` (`caption`/`search_query`/`image_url`/`video_url`), `carouselTemplateId`, `media` (`"video"` per il carosello video), `format`. Vedi §7 |
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
 
@@ -91,7 +91,9 @@ Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ 
 - Non abbiamo lo scope `brandtemplate:content:read` → `runAutofill` non legge il dataset. `/api/canva-test?dataset=<id>` dà 403. Si verifica solo con l'autofill vero + apertura del design.
 
 ### Carosello = un solo design (dal 2026-09-09)
-`canva-carousel.js`: carica le N immagini → **un solo `runAutofill`** su `carouselTemplateId` (`EAHUiOe8TUA`) con `Testo_1..N` + `Immagine_1..N` (+ alias `Image_N`/`Sfondo_N`/`Caption_N`) → `trimTrailingPages()` se N<6 → un unico design a N pagine. Fasi cicliche `resume.stage`: `upload` → `autofill`. Frontend `CarouselComposer` manda `carouselTemplateId`, `CAROUSEL_MAX_PAGES = 6`, risponde con un singolo link "Apri carosello in Canva".
+`canva-carousel.js`: carica gli N media → **un solo `runAutofill`** su `carouselTemplateId` (`EAHUiOe8TUA`) con `Testo_1..N` + `Immagine_1..N` (+ alias `Image_N`/`Sfondo_N`/`Caption_N`) → `trimTrailingPages()` se N<6 → un unico design a N pagine. Fasi cicliche `resume.stage`: `upload` → `autofill`. Gli slot hanno `kind` "image"|"video" per pollare l'endpoint giusto.
+- **Foto**: frontend `CarouselComposer` (tab Post) → `carouselTemplateId`, `CAROUSEL_MAX_PAGES = 6`.
+- **Video**: frontend `VideoCarouselComposer` (tab Video Storytelling) → `media: "video"`, `slides[].video_url`. Una pagina per scena, con anteprima Pexels e i secondi da ritagliare (cumulativi da `scene.duration`). Cap client 6 min (i video sono lenti).
 
 > Tentativo intermedio scartato: **Design Merge API** (`POST /v1/merges` `insert_pages`) per unire N design da 1 pagina — è preview, per l'account risponde `success` ma NON aggiunge pagine. Helper rimossi; `startAutofillJob`/`checkAutofillJob` restano in canva-lib.js inutilizzati.
 
