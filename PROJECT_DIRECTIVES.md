@@ -61,7 +61,14 @@ Due metodi, in cascata:
 
 `canva-upload.js` (media scelti a mano nel CarouselComposer) usa ancora solo il metodo 2 + `POST /v1/folders/move` (`to_folder_id: "uploads"`) per far comparire l'asset nel tab Caricamenti.
 
-> Tutte le funzioni di polling (`uploadUrlAsset`, `runAutofill`, `trimTrailingPages`) accettano una `deadline` assoluta che il chiamante (`canva-create`/`canva-carousel`) calcola per tenere l'intera richiesta sotto `maxDuration:60`.
+> Tutte le funzioni di polling (`uploadUrlAsset`, `runAutofill`, `trimTrailingPages`) accettano una `deadline` assoluta che il chiamante calcola per tenere l'intera richiesta sotto `maxDuration:60`.
+
+### `canva-create` / `canva-carousel` lavorano a CICLI (client polling)
+Canva a volte impiega minuti per elaborare upload/autofill → non c'è modo di stare in un singolo serverless call. Il flusso:
+1. Client `POST` col body normale.
+2. Il server fa fino a ~48s di lavoro; se un job Canva è ancora in corso risponde **HTTP 202** `{ pending: true, phase, resume: {...} }`. `resume` contiene solo job-id opachi di Canva (nessuna tabella DB).
+3. Il client (`handleCreate` in `App.jsx`) rimanda `{ ...body, resume }` ogni 3s finché ottiene `{ ok }` o un errore. Cap client: 5 minuti. Il pulsante mostra `progress` ("Caricamento sfondo…" / "Composizione…").
+`uploadUrlAsset` e `runAutofill` accettano `resumeJobId` per riprendere il solo polling. Stati `resume`: `upload` (job asset-uploads) → `autofill` (job autofills). Il carosello ha `slots[]` (un job/asset per slide) nel `resume`.
 
 ### Token OAuth Canva — `getCanvaToken(db)` in `api/canva-lib.js` (punto UNICO)
 Ogni endpoint Canva (`canva-create`, `canva-carousel`, `canva-scaffold`, `canva-upload`, `canva-export`) legge il token **solo** da qui. Canva **ruota** il `refresh_token` a ogni `POST /v1/oauth/token`: la risposta contiene un nuovo `refresh_token` e quello usato viene invalidato subito. `getCanvaToken` ripersiste sempre `td.refresh_token` in `canva_auth`; se il refresh fallisce lancia `CANVA_NOT_CONNECTED` invece di ricadere su un access_token scaduto (→ era la causa di *"Access token is invalid"*: gli endpoint rinnovavano l'access_token senza salvare il refresh_token ruotato, e la volta dopo il refresh moriva). *Sta in `canva-lib.js` e non in un file suo per non superare il limite di 12 Serverless Functions del deploy — ogni file in `api/` conta come funzione.*

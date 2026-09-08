@@ -338,6 +338,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
   const [imgLoading, setImgLoading] = useState(false);
   const [selectedImg, setSelectedImg] = useState(null); // url immagine scelta, null = ricerca automatica
   const [creating, setCreating] = useState(false);
+  const [progress, setProgress] = useState("");
   const [designUrl, setDesignUrl] = useState(null);
   const [error, setError] = useState("");
 
@@ -349,6 +350,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
     setSelectedImg(null);
     setDesignUrl(null);
     setError("");
+    setProgress("");
   }, [open, caption, query]);
 
   const fmt = CANVA_QD_FORMATS.find(f => f.id === format);
@@ -376,42 +378,65 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
     if (!templateId) return;
     setCreating(true);
     setError("");
+    setProgress("Preparazione…");
     setDesignUrl(null);
+    const baseBody = {
+      caption: captionText.trim(),
+      cta: cta || "",
+      search_query: queryText.trim(),
+      format,
+      templateId,
+      imageUrl: selectedImg || undefined,
+    };
+    // Il backend lavora a cicli: se Canva è ancora al lavoro risponde
+    // { pending, resume } e noi lo richiamiamo finché non è pronto. Nessun
+    // limite di tempo serverless: cap lato client a 5 minuti.
+    const giveUpAt = Date.now() + 5 * 60_000;
+    let resume;
     try {
-      const res = await fetch("/api/canva-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          caption: captionText.trim(),
-          cta: cta || "",
-          search_query: queryText.trim(),
-          format,
-          templateId,
-          imageUrl: selectedImg || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setDesignUrl(data.url);
-        if (data.imageWarning) setError("⚠ Design creato, ma lo sfondo non è stato caricato: " + data.imageWarning);
-        saveCanvaDesign({
-          project_id: projectId || null,
-          kind: "design",
-          format,
-          title: captionText.trim().slice(0, 80) || "Design",
-          design_url: data.url,
-          thumb_url: selectedImg || data.imageUrl || null,
+      while (true) {
+        const res = await fetch("/api/canva-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(resume ? { ...baseBody, resume } : baseBody),
         });
-      } else if (data.error === "CANVA_NOT_CONNECTED") {
-        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-        setError("Connetti Canva nella finestra aperta, poi riprova.");
-      } else {
-        setError(data.message || "Errore durante la creazione del design.");
+        const data = await res.json();
+
+        if (data.pending) {
+          setProgress(data.phase === "autofill" ? "Composizione del design in Canva…" : "Caricamento sfondo su Canva…");
+          if (Date.now() > giveUpAt) {
+            setError("Canva ci sta mettendo troppo. Il design potrebbe comparire tra poco in Canva; riprova più tardi.");
+            break;
+          }
+          resume = data.resume;
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        if (data.ok) {
+          setDesignUrl(data.url);
+          if (data.imageWarning) setError("⚠ Design creato, ma lo sfondo non è stato caricato: " + data.imageWarning);
+          saveCanvaDesign({
+            project_id: projectId || null,
+            kind: "design",
+            format,
+            title: captionText.trim().slice(0, 80) || "Design",
+            design_url: data.url,
+            thumb_url: selectedImg || data.imageUrl || null,
+          });
+        } else if (data.error === "CANVA_NOT_CONNECTED") {
+          window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+          setError("Connetti Canva nella finestra aperta, poi riprova.");
+        } else {
+          setError(data.message || "Errore durante la creazione del design.");
+        }
+        break;
       }
     } catch (e) {
       setError(e.message || "Errore di rete.");
     } finally {
       setCreating(false);
+      setProgress("");
     }
   }
 
@@ -520,7 +545,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         ) : (
           <button onClick={handleCreate} disabled={creating || !templateId || !captionText.trim()}
             style={{ width: "100%", padding: "12px", borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: creating || !templateId || !captionText.trim() ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: creating || !templateId || !captionText.trim() ? 0.5 : 1 }}>
-            {creating ? "⏳ Creo design…" : "✦ Crea Design in Canva"}
+            {creating ? `⏳ ${progress || "Creo design…"}` : "✦ Crea Design in Canva"}
           </button>
         )}
       </div>
@@ -630,13 +655,14 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
   const [errMsg, setErrMsg] = useState("");
   const [savedDesigns, setSavedDesigns] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [progress, setProgress] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setPages((initialSlides || []).map(s => ({
       caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null,
     })));
-    setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false);
+    setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false); setProgress("");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(i, key, val) {
@@ -666,35 +692,58 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
   }
 
   async function handleCreate() {
-    setState("loading"); setErrMsg("");
+    setState("loading"); setErrMsg(""); setProgress("Preparazione…");
+    const baseBody = {
+      slides: pages.map(p => ({ caption: p.caption, search_query: p.search_query, image_url: p.image_url || undefined })),
+      templateId, format: "post",
+    };
+    // Il backend lavora a cicli: finché risponde { pending, resume } lo
+    // richiamiamo. Cap lato client a 5 minuti.
+    const giveUpAt = Date.now() + 5 * 60_000;
+    let resume;
     try {
-      const res = await fetch("/api/canva-carousel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slides: pages.map(p => ({ caption: p.caption, search_query: p.search_query, image_url: p.image_url || undefined })),
-          templateId, format: "post",
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setUrl(data.url); setState("done");
-        if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
-        saveCanvaDesign({
-          project_id: projectId || null, kind: "carousel", format: "carousel",
-          title: `Carosello ${pages.length} pagine`, design_url: data.url,
-          thumb_url: (pages.find(p => p.image_url)?.image_url) || data.imageUrls?.[0] || null,
-          slides: pages.length,
+      while (true) {
+        const res = await fetch("/api/canva-carousel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(resume ? { ...baseBody, resume } : baseBody),
         });
-      } else if (data.error === "CANVA_NOT_CONNECTED") {
-        window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
-        setState("idle");
-      } else {
-        setErrMsg(data.message || "Errore durante la creazione del carosello.");
-        setState("idle");
+        const data = await res.json();
+
+        if (data.pending) {
+          setProgress(data.phase === "autofill" ? "Composizione del carosello in Canva…" : "Caricamento immagini su Canva…");
+          if (Date.now() > giveUpAt) {
+            setErrMsg("Canva ci sta mettendo troppo. Riprova tra qualche minuto.");
+            setState("idle");
+            break;
+          }
+          resume = data.resume;
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        if (data.ok) {
+          setUrl(data.url); setState("done");
+          if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
+          saveCanvaDesign({
+            project_id: projectId || null, kind: "carousel", format: "carousel",
+            title: `Carosello ${pages.length} pagine`, design_url: data.url,
+            thumb_url: (pages.find(p => p.image_url)?.image_url) || data.imageUrls?.[0] || null,
+            slides: pages.length,
+          });
+        } else if (data.error === "CANVA_NOT_CONNECTED") {
+          window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+          setState("idle");
+        } else {
+          setErrMsg(data.message || "Errore durante la creazione del carosello.");
+          setState("idle");
+        }
+        break;
       }
     } catch (e) {
       setErrMsg(e.message || "Errore di rete."); setState("idle");
+    } finally {
+      setProgress("");
     }
   }
 
@@ -789,7 +838,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
             ) : (
               <button onClick={handleCreate} disabled={state === "loading" || !pages.length}
                 style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !pages.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !pages.length ? 0.5 : 1 }}>
-                {state === "loading" ? "⏳ Compongo il carosello…" : `✦ Crea carosello (${pages.length} pagine)`}
+                {state === "loading" ? `⏳ ${progress || "Compongo il carosello…"}` : `✦ Crea carosello (${pages.length} pagine)`}
               </button>
             )}
           </div>

@@ -112,11 +112,30 @@ export function bustedUrl(url) {
   }
 }
 
+// Poll di un job asset-uploads binario. `{ assetId }` | `{ pending, jobId }` (job
+// ancora in lavorazione allo scadere di stopAt) | `{ assetId: null, error }`.
+async function pollBinaryJob({ token, jobId, job, stopAt }) {
+  let j = job || { id: jobId, status: "in_progress" };
+  while ((j.status === "in_progress" || j.status === "pending") && Date.now() < stopAt) {
+    await new Promise(res => setTimeout(res, 1200));
+    const poll = await fetch(`${CANVA_API}/asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
+    j = (await poll.json().catch(() => ({})))?.job ?? j;
+  }
+  if (j.status === "success" && j.asset?.id) return { assetId: j.asset.id };
+  if (j.status === "failed") {
+    return { assetId: null, error: `Canva: ${j.error?.message || j.error?.code || "elaborazione immagine fallita"}` };
+  }
+  return { assetId: null, pending: true, jobId };
+}
+
 // Scarica i byte dell'immagine e li carica su Canva col metodo BINARIO
 // (`POST /v1/asset-uploads`). A differenza di `url-asset-uploads`, qui Canva NON
 // deve fare un fetch esterno da Unsplash/Pexels (che la lasciava "in_progress"
 // 40s+): riceve già i byte e il job si chiude in pochi secondi.
-async function uploadBinaryAsset({ token, url, name, stopAt }) {
+// Con `resumeJobId` salta download + create e riprende solo il polling.
+async function uploadBinaryAsset({ token, url, name, stopAt, resumeJobId }) {
+  if (resumeJobId) return pollBinaryJob({ token, jobId: resumeJobId, stopAt });
+
   let bytes;
   try {
     const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined;
@@ -152,20 +171,7 @@ async function uploadBinaryAsset({ token, url, name, stopAt }) {
     return { assetId: null, error: `Errore di rete verso Canva: ${e.message}` };
   }
 
-  const jobId = d.job.id;
-  let job = d.job;
-  while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
-    await new Promise(res => setTimeout(res, 1200));
-    const poll = await fetch(`${CANVA_API}/asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-    job = (await poll.json().catch(() => ({})))?.job ?? job;
-  }
-  if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
-  return {
-    assetId: null,
-    error: job.status === "failed"
-      ? `Canva: ${job.error?.message || job.error?.code || "elaborazione immagine fallita"}`
-      : `Upload immagine ancora in corso (job ${job.status}).`,
-  };
+  return pollBinaryJob({ token, jobId: d.job.id, job: d.job, stopAt });
 }
 
 // Carica un'immagine su Canva e ne restituisce l'asset_id. Prima prova il metodo
@@ -173,13 +179,18 @@ async function uploadBinaryAsset({ token, url, name, stopAt }) {
 // `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
 // `deadline` (ms assoluti) limita TUTTO (download + create + polling), così il
 // chiamante può garantire che upload + autofill stiano sotto il maxDuration:60.
-export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadline }) {
-  if (!url) return { assetId: null, error: "URL immagine mancante" };
+export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadline, resumeJobId }) {
   const stopAt = deadline || (Date.now() + 45_000);
+
+  // Resume: riprendi solo il polling di un job binario già avviato.
+  if (resumeJobId) return uploadBinaryAsset({ token, resumeJobId, stopAt });
+
+  if (!url) return { assetId: null, error: "URL immagine mancante" };
 
   // Metodo 1: byte scaricati da noi → upload binario.
   const bin = await uploadBinaryAsset({ token, url: sizedImageUrl(url), name, stopAt });
   if (bin.assetId) return { assetId: bin.assetId };
+  if (bin.pending) return { assetId: null, pending: true, jobId: bin.jobId };
   if (bin.stop) return { assetId: null, error: bin.error };
   let lastErr = bin.error || "Canva non è riuscita a caricare l'immagine.";
 
@@ -253,7 +264,39 @@ async function fetchDataset(token, brandTemplateId) {
   } catch { return null; }
 }
 
-export async function runAutofill({ token, templateId, data, title, deadline }) {
+// Poll di un job autofill. `{ ok, designId, designUrl }` | `{ ok:false, pending, jobId }`
+// (ancora in lavorazione allo scadere di stopAt) | `{ ok:false, status, message }`.
+async function pollAutofillJob({ token, jobId, job, stopAt }) {
+  let j = job || { id: jobId, status: "in_progress" };
+  while ((j.status === "in_progress" || j.status === "pending") && Date.now() < stopAt) {
+    await new Promise(r => setTimeout(r, 1500));
+    const pollRes = await fetch(`${CANVA_API}/autofills/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const pollJson = await pollRes.json().catch(() => ({}));
+    j = pollJson.job ?? pollJson;
+  }
+  if (j.status === "success") {
+    const design = j.result?.design ?? j.design ?? null;
+    const designId = design?.id ?? null;
+    const designUrl = design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
+    return { ok: true, designId, designUrl };
+  }
+  if (j.status === "in_progress" || j.status === "pending") {
+    return { ok: false, pending: true, jobId, status: 202, message: "Autofill Canva ancora in corso." };
+  }
+  return {
+    ok: false,
+    status: 502,
+    message: j.error?.message || `Autofill Canva non riuscito (stato: ${j.status || "sconosciuto"}).`,
+    details: j,
+  };
+}
+
+export async function runAutofill({ token, templateId, data, title, deadline, resumeJobId }) {
+  const stopAt = deadline || (Date.now() + 35_000);
+
+  // Resume: riprendi solo il polling di un job autofill già avviato.
+  if (resumeJobId) return pollAutofillJob({ token, jobId: resumeJobId, stopAt });
+
   const brandTemplateId = cleanTemplateId(templateId);
   if (!brandTemplateId) {
     return { ok: false, status: 400, message: "Brand Template ID mancante o non valido." };
@@ -302,38 +345,11 @@ export async function runAutofill({ token, templateId, data, title, deadline }) 
     return { ok: false, status: createRes.status, message: msg + hint, details: createJson };
   }
 
-  let job = createJson.job ?? createJson;
-  const jobId = job.id;
-  if (!jobId) {
+  const job = createJson.job ?? createJson;
+  if (!job.id) {
     return { ok: false, status: 502, message: "Canva non ha restituito un job di autofill.", details: createJson };
   }
-
-  // Ceiling di polling: gli step precedenti (upload immagini) + questo devono
-  // stare sotto il maxDuration:60 di vercel.json. Il chiamante passa un
-  // `deadline` assoluto condiviso con l'upload; in mancanza, 35s.
-  const stopAt = deadline || (Date.now() + 35_000);
-  while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
-    await new Promise(r => setTimeout(r, 1500));
-    const pollRes = await fetch(`${CANVA_API}/autofills/${jobId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const pollJson = await pollRes.json().catch(() => ({}));
-    job = pollJson.job ?? pollJson;
-  }
-
-  if (job.status !== "success") {
-    return {
-      ok: false,
-      status: 502,
-      message: job.error?.message || `Autofill Canva non riuscito (stato: ${job.status || "sconosciuto"}).`,
-      details: job,
-    };
-  }
-
-  const design = job.result?.design ?? job.design ?? null;
-  const designId = design?.id ?? null;
-  const designUrl = design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
-  return { ok: true, designId, designUrl };
+  return pollAutofillJob({ token, jobId: job.id, job, stopAt });
 }
 
 // Elimina le pagine in coda a un design (Design Merge API, preview). Serve al
