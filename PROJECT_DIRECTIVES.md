@@ -49,7 +49,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/instagram.js` | `POST /api/instagram` | Proxy Instagram/Facebook Graph API — vedi §6 per il routing token |
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
-| `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, e `imageUrl` opzionale — se il client passa `imageUrl` (foto suggerita scelta a mano nella modale di Visual Scout) si usa quella, altrimenti fallback su ricerca Pexels dalla `search_query` |
+| `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, + `imageUrl`/`videoUrl`/`mediaType` opzionali. **Reel = sempre video** (autofill `type:"video"`); **Story = foto o video** (toggle nel modale); post = foto. Se `videoUrl` non c'è: `fetchPexelsVideo(search_query)`, fallback su foto |
 | `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone un **carosello intero in un solo design**: upload immagini + **un solo autofill** (`Testo_1..N`/`Immagine_1..N`) sul Brand Template a 6 pagine + `trimTrailingPages` se N<6. Body: `slides[]`, `carouselTemplateId`, `format`. Vedi §7 |
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
@@ -85,8 +85,9 @@ Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ 
 ### Campi autofill dei template (ricostruiti a mano in Canva il 2026-09-09)
 ⚠️ **Nessun template aveva davvero un campo immagine di autofill** — Post/Story/Reel avevano solo testo + "Sfondo" = colore pieno; il "post funziona" era falso (mai verificato visivamente). Rifatti così via browser automation (dettagli in memory [[project-canva-upload-saga]]):
 - **post / story / reel** (`EAHUiCrR7F8` / `EAHUiDPEzhU` / `EAHUiIqblm4`): aggiunta una **cornice** (Elementi → Cornici) full-bleed a dimensione pagina (1080×1080 o 1080×1920, X/Y 0) dietro al testo, connessa via "Crea in blocco" → colonna `Immagine_Sfondo` (image) → "Associa i campi automaticamente". Campo testo `Testo_Post` c'era già.
-- **carosello** (`EAHUiOe8TUA`): 6 pagine, ognuna con una cornice full-bleed (copiata con Ctrl+C/V) connessa a `Immagine_1..6`; testo `Testo_1..6`. "Associa i campi automaticamente" ha mappato tutti e 12.
+- **carosello** (`EAHUiOe8TUA`): 6 pagine, ognuna con una cornice full-bleed (copiata con Ctrl+C/V) connessa a `Immagine_1..6`; testo `Testo_1..6`. "Associa i campi automaticamente" ha mappato tutti e 12. ⚠️ Le cornici copincollate finiscono SOPRA il testo → click destro → Livello → "Sposta in secondo piano" su ogni pagina 2-6, poi ripubblicare.
 - Trucco tabella "Crea in blocco": "Aggiungi immagine" NON preseleziona l'header → scrivi `_N` per fare `Immagine_N` da `Immagine`. NON rinominare via doppio-click (scrolla e colpisce colonna 1).
+- **Video**: la cornice `Immagine_Sfondo` accetta anche un video — autofill `{ type: "video", asset_id }` (funzione preview Canva, **verificata funzionante**). Reel = sempre video, Story = foto o video.
 - Non abbiamo lo scope `brandtemplate:content:read` → `runAutofill` non legge il dataset. `/api/canva-test?dataset=<id>` dà 403. Si verifica solo con l'autofill vero + apertura del design.
 
 ### Carosello = un solo design (dal 2026-09-09)
