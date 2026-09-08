@@ -8,7 +8,9 @@
 // non è pronto — così non si sbatte contro il maxDuration:60 di Vercel.
 
 import { getDb } from "./db.js";
-import { getCanvaToken, runAutofill, trimTrailingPages, uploadUrlAsset } from "./canva-lib.js";
+import { getCanvaToken, runAutofill, trimTrailingPages, startImageUpload, checkImageUpload } from "./canva-lib.js";
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 const MAX_SLIDES = 10;
@@ -25,12 +27,31 @@ async function fetchPexelsUrl(query, vertical) {
   } catch { return null; }
 }
 
-// Risultato di un upload → "slot": { assetId } pronto | { jobId } in corso |
-// { error } fallito (error:null = slide senza immagine, non è un problema).
-function toSlot(up) {
-  if (up.assetId) return { assetId: up.assetId };
-  if (up.pending) return { jobId: up.jobId };
-  return { error: up.error || "Immagine non caricata su Canva." };
+// "slot" per slide: { assetId } pronto | { jobId } in corso | { error } fallito
+// (error:null = slide senza immagine, non è un problema).
+function toSlot(r) {
+  if (r.assetId) return { assetId: r.assetId };
+  if (r.jobId) return { jobId: r.jobId };
+  if (r.pending) return { jobId: r.jobId || null };
+  return { error: r.error || "Immagine non caricata su Canva." };
+}
+
+// Poll SEQUENZIALE degli slot ancora in upload (mai in parallelo: Canva limita a
+// ~30 req/min/utente). Un giro ogni POLL_INTERVAL finché tutti risolti o stopAt.
+async function pollSlots({ token, slots, stopAt }) {
+  const out = [...slots];
+  const POLL_INTERVAL = 3500;
+  while (out.some(s => s?.jobId) && Date.now() < stopAt) {
+    await sleep(POLL_INTERVAL);
+    for (let i = 0; i < out.length; i++) {
+      if (!out[i]?.jobId || Date.now() >= stopAt) continue;
+      const c = await checkImageUpload({ token, jobId: out[i].jobId });
+      if (c.assetId) out[i] = { assetId: c.assetId };
+      else if (c.error) out[i] = { error: c.error };
+      // c.pending: lascia lo slot com'è, riprova al giro dopo
+    }
+  }
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -133,22 +154,22 @@ export default async function handler(req, res) {
 
     // ── Resume: upload immagini in corso ─────────────────────────
     if (resume?.stage === "upload" && Array.isArray(resume.slots)) {
-      const slots = await Promise.all(resume.slots.map(s =>
-        s?.jobId ? uploadUrlAsset({ token, resumeJobId: s.jobId, deadline }).then(toSlot) : Promise.resolve(s)
-      ));
+      const slots = await pollSlots({ token, slots: resume.slots, stopAt: deadline });
       return await afterUploads({ slots, imageUrls: resume.imageUrls || [] });
     }
 
-    // ── Fresh: risolvi immagini → avvia upload ───────────────────
+    // ── Fresh: risolvi immagini → AVVIA gli upload (create in parallelo,
+    //    poi polling sequenziale) ─────────────────────────────────
     const vertical = format === "story" || format === "reel";
     const imageUrls = await Promise.all(
       usedSlides.map(s => s.image_url ? Promise.resolve(s.image_url) : fetchPexelsUrl(s.search_query, vertical))
     );
-    const slots = await Promise.all(imageUrls.map((url, i) =>
+    let slots = await Promise.all(imageUrls.map((url, i) =>
       url
-        ? uploadUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.jpg`, deadline }).then(toSlot)
+        ? startImageUpload({ token, url, name: `vmscout-slide-${i + 1}.jpg` }).then(toSlot)
         : Promise.resolve({ error: null })
     ));
+    slots = await pollSlots({ token, slots, stopAt: deadline });
     return await afterUploads({ slots, imageUrls });
 
   } catch (err) {

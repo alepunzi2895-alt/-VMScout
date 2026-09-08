@@ -405,7 +405,7 @@ function CanvaQuickDesignModal({ open, onClose, caption, cta, query, orientation
         if (data.pending) {
           setProgress(data.phase === "autofill" ? "Composizione del design in Canva…" : "Caricamento sfondo su Canva…");
           if (Date.now() > giveUpAt) {
-            setError("Canva ci sta mettendo troppo. Il design potrebbe comparire tra poco in Canva; riprova più tardi.");
+            setError(`Canva non ha completato la fase "${data.phase || "?"}" in 5 minuti. Riprova più tardi, oppure apri /api/canva-test per la diagnostica.`);
             break;
           }
           resume = data.resume;

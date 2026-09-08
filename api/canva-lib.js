@@ -11,6 +11,34 @@ import { ensureCanvaAuthTable } from "./db.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
 
+// Canva limita a ~30 richieste/min per utente: un polling troppo fitto (o N job
+// carosello pollati in parallelo) genera 429 che, se trattati come "job ancora
+// in corso", mandano tutto in loop infinito. Intervallo prudente + backoff.
+const POLL_INTERVAL_MS = 3500;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// GET verso Canva con gestione del 429: aspetta il Retry-After (o 8s) e riprova,
+// senza contare come errore. `{ status, ok, body }`.
+async function canvaGet(token, path) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let r;
+    try {
+      r = await fetch(`${CANVA_API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (e) {
+      return { status: 0, ok: false, body: {}, netError: e.message };
+    }
+    if (r.status === 429) {
+      const retryAfter = Number(r.headers.get("retry-after"));
+      await sleep(Math.min(20_000, (retryAfter > 0 ? retryAfter : 8) * 1000));
+      continue;
+    }
+    const body = await r.json().catch(() => ({}));
+    return { status: r.status, ok: r.ok, body };
+  }
+  return { status: 429, ok: false, body: {} };
+}
+
 // ─── Token OAuth Canva — punto UNICO di lettura/rinnovo ──────────────
 //
 // Canva RUOTA il refresh_token a ogni chiamata /oauth/token: la risposta
@@ -112,44 +140,55 @@ export function bustedUrl(url) {
   }
 }
 
-// Poll di un job asset-uploads binario. `{ assetId }` | `{ pending, jobId }` (job
-// ancora in lavorazione allo scadere di stopAt) | `{ assetId: null, error }`.
-async function pollBinaryJob({ token, jobId, job, stopAt }) {
-  let j = job || { id: jobId, status: "in_progress" };
-  while ((j.status === "in_progress" || j.status === "pending") && Date.now() < stopAt) {
-    await new Promise(res => setTimeout(res, 1200));
-    const poll = await fetch(`${CANVA_API}/asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-    j = (await poll.json().catch(() => ({})))?.job ?? j;
+// Una singola verifica di un job asset-uploads.
+// `{ assetId }` | `{ pending: true }` | `{ error }`.
+export async function checkImageUpload({ token, jobId }) {
+  const { status, ok, body } = await canvaGet(token, `/asset-uploads/${jobId}`);
+  if (ok && body?.job) {
+    const j = body.job;
+    if (j.status === "success" && j.asset?.id) return { assetId: j.asset.id };
+    if (j.status === "failed") return { error: `Canva: ${j.error?.message || j.error?.code || "elaborazione immagine fallita"}` };
+    return { pending: true };
   }
-  if (j.status === "success" && j.asset?.id) return { assetId: j.asset.id };
-  if (j.status === "failed") {
-    return { assetId: null, error: `Canva: ${j.error?.message || j.error?.code || "elaborazione immagine fallita"}` };
+  if (status === 404 || status === 410) return { error: "Job di upload non trovato su Canva (scaduto)." };
+  return { pending: true, transient: status }; // errore transitorio: riprova al giro dopo
+}
+
+// Poll di UN job asset-uploads finché success/failed o scadenza `stopAt`.
+async function pollBinaryJob({ token, jobId, job, stopAt }) {
+  if (job?.status === "success" && job.asset?.id) return { assetId: job.asset.id };
+  let misses = 0;
+  while (Date.now() < stopAt) {
+    await sleep(POLL_INTERVAL_MS);
+    const c = await checkImageUpload({ token, jobId });
+    if (c.assetId) return { assetId: c.assetId };
+    if (c.error) return { assetId: null, error: c.error };
+    if (c.transient && ++misses >= 6) {
+      return { assetId: null, error: `Canva non risponde al polling dell'upload (HTTP ${c.transient}).` };
+    }
+    if (!c.transient) misses = 0;
   }
   return { assetId: null, pending: true, jobId };
 }
 
-// Scarica i byte dell'immagine e li carica su Canva col metodo BINARIO
-// (`POST /v1/asset-uploads`). A differenza di `url-asset-uploads`, qui Canva NON
-// deve fare un fetch esterno da Unsplash/Pexels (che la lasciava "in_progress"
-// 40s+): riceve già i byte e il job si chiude in pochi secondi.
-// Con `resumeJobId` salta download + create e riprende solo il polling.
-async function uploadBinaryAsset({ token, url, name, stopAt, resumeJobId }) {
-  if (resumeJobId) return pollBinaryJob({ token, jobId: resumeJobId, stopAt });
-
+// Scarica i byte dell'immagine e AVVIA l'upload BINARIO (`POST /v1/asset-uploads`).
+// Solo create, niente polling. `{ jobId }` | `{ assetId }` (raro, se già pronto) |
+// `{ error, stop? }`. A differenza di `url-asset-uploads`, Canva non deve fare un
+// fetch esterno lento da Unsplash/Pexels: il job si chiude in pochi secondi.
+export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
   let bytes;
   try {
     const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined;
-    const imgRes = await fetch(url, { headers: { "User-Agent": "VMScout/1.0" }, signal });
-    if (!imgRes.ok) return { assetId: null, error: `Immagine non scaricabile (HTTP ${imgRes.status}).` };
+    const imgRes = await fetch(sizedImageUrl(url), { headers: { "User-Agent": "VMScout/1.0" }, signal });
+    if (!imgRes.ok) return { error: `Immagine non scaricabile (HTTP ${imgRes.status}).` };
     bytes = Buffer.from(await imgRes.arrayBuffer());
   } catch (e) {
-    return { assetId: null, error: `Download immagine fallito: ${e.message}` };
+    return { error: `Download immagine fallito: ${e.message}` };
   }
-  if (!bytes?.length) return { assetId: null, error: "Immagine vuota." };
-  if (bytes.length > 45 * 1024 * 1024) return { assetId: null, error: "Immagine troppo grande (>45MB)." };
+  if (!bytes?.length) return { error: "Immagine vuota." };
+  if (bytes.length > 45 * 1024 * 1024) return { error: "Immagine troppo grande (>45MB)." };
 
   const safeName = (String(name).replace(/[^\w.\- ]/g, "").trim() || "vmscout").slice(0, 50);
-  let d;
   try {
     const r = await fetch(`${CANVA_API}/asset-uploads`, {
       method: "POST",
@@ -160,18 +199,28 @@ async function uploadBinaryAsset({ token, url, name, stopAt, resumeJobId }) {
       },
       body: bytes,
     });
-    d = await r.json().catch(() => ({}));
+    const d = await r.json().catch(() => ({}));
     if (r.status === 401 || r.status === 403) {
-      return { assetId: null, stop: true, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
+      return { stop: true, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
     }
     if (!r.ok || !d?.job?.id) {
-      return { assetId: null, error: `Canva ha rifiutato l'upload binario (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.` };
+      return { error: `Canva ha rifiutato l'upload binario (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.` };
     }
+    if (d.job.status === "success" && d.job.asset?.id) return { assetId: d.job.asset.id };
+    return { jobId: d.job.id };
   } catch (e) {
-    return { assetId: null, error: `Errore di rete verso Canva: ${e.message}` };
+    return { error: `Errore di rete verso Canva: ${e.message}` };
   }
+}
 
-  return pollBinaryJob({ token, jobId: d.job.id, job: d.job, stopAt });
+// Scarica i byte e carica su Canva (binario), aspettando l'asset_id fino a stopAt.
+// Con `resumeJobId` salta download + create e riprende solo il polling.
+async function uploadBinaryAsset({ token, url, name, stopAt, resumeJobId }) {
+  if (resumeJobId) return pollBinaryJob({ token, jobId: resumeJobId, stopAt });
+  const start = await startImageUpload({ token, url, name });
+  if (start.assetId) return { assetId: start.assetId };
+  if (start.error) return { assetId: null, error: start.error, stop: start.stop };
+  return pollBinaryJob({ token, jobId: start.jobId, stopAt });
 }
 
 // Carica un'immagine su Canva e ne restituisce l'asset_id. Prima prova il metodo
@@ -188,7 +237,7 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadlin
   if (!url) return { assetId: null, error: "URL immagine mancante" };
 
   // Metodo 1: byte scaricati da noi → upload binario.
-  const bin = await uploadBinaryAsset({ token, url: sizedImageUrl(url), name, stopAt });
+  const bin = await uploadBinaryAsset({ token, url, name, stopAt });
   if (bin.assetId) return { assetId: bin.assetId };
   if (bin.pending) return { assetId: null, pending: true, jobId: bin.jobId };
   if (bin.stop) return { assetId: null, error: bin.error };
@@ -223,9 +272,9 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadlin
       const jobId = d.job.id;
       let job = d.job;
       while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
-        await new Promise(res => setTimeout(res, 1500));
-        const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-        job = (await poll.json().catch(() => ({})))?.job ?? job;
+        await sleep(POLL_INTERVAL_MS);
+        const poll = await canvaGet(token, `/url-asset-uploads/${jobId}`);
+        job = poll.body?.job ?? job;
       }
       if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
       lastErr = job.status === "failed"
@@ -256,11 +305,8 @@ export function cleanTemplateId(raw) {
 // di inviarlo (il backend manda anche alias tipo Caption/Background).
 async function fetchDataset(token, brandTemplateId) {
   try {
-    const r = await fetch(`${CANVA_API}/brand-templates/${brandTemplateId}/dataset`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const j = await r.json().catch(() => ({}));
-    return j?.dataset && typeof j.dataset === "object" ? j.dataset : null;
+    const { body } = await canvaGet(token, `/brand-templates/${brandTemplateId}/dataset`);
+    return body?.dataset && typeof body.dataset === "object" ? body.dataset : null;
   } catch { return null; }
 }
 
@@ -269,10 +315,9 @@ async function fetchDataset(token, brandTemplateId) {
 async function pollAutofillJob({ token, jobId, job, stopAt }) {
   let j = job || { id: jobId, status: "in_progress" };
   while ((j.status === "in_progress" || j.status === "pending") && Date.now() < stopAt) {
-    await new Promise(r => setTimeout(r, 1500));
-    const pollRes = await fetch(`${CANVA_API}/autofills/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-    const pollJson = await pollRes.json().catch(() => ({}));
-    j = pollJson.job ?? pollJson;
+    await sleep(POLL_INTERVAL_MS);
+    const poll = await canvaGet(token, `/autofills/${jobId}`);
+    j = poll.body?.job ?? poll.body ?? j;
   }
   if (j.status === "success") {
     const design = j.result?.design ?? j.design ?? null;
@@ -384,9 +429,9 @@ export async function trimTrailingPages({ token, designId, keep, deadline }) {
     const jobId = job.id;
     const stopAt = deadline || (Date.now() + 15_000);
     while (jobId && (job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
-      await new Promise(r => setTimeout(r, 1500));
-      const pRes = await fetch(`${CANVA_API}/merges/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-      job = (await pRes.json().catch(() => ({}))).job ?? job;
+      await sleep(POLL_INTERVAL_MS);
+      const p = await canvaGet(token, `/merges/${jobId}`);
+      job = p.body?.job ?? job;
     }
     const rd = job.result?.design ?? job.design ?? null;
     return {
