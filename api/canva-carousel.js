@@ -22,7 +22,8 @@ import {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const POLL_INTERVAL = 3500;
 
-const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
+const PEXELS_KEY  = process.env.VITE_PEXELS_KEY  || "";
+const PIXABAY_KEY = process.env.VITE_PIXABAY_KEY || "";
 const MAX_SLIDES = 6; // il template ha 6 pagine
 
 async function fetchPexelsUrl(query, vertical) {
@@ -49,6 +50,27 @@ async function fetchPexelsVideo(query, vertical) {
     const pick = files.find(f => (f.width || 0) >= 720 && (f.width || 0) <= 1400) || files[files.length - 1] || files[0];
     return pick?.link || null;
   } catch { return null; }
+}
+
+async function fetchPixabayVideo(query) {
+  if (!PIXABAY_KEY || !query) return null;
+  try {
+    const r = await fetch(`https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=5`);
+    const d = await r.json();
+    const v = d.hits?.[0]?.videos || {};
+    return v.large?.url || v.medium?.url || v.small?.url || v.tiny?.url || null;
+  } catch { return null; }
+}
+
+// URL video per la slide in base alla fonte scelta (`video_source`).
+async function resolveVideoUrl(slide, vertical) {
+  if (slide.video_url) return slide.video_url;
+  const q = slide.search_query;
+  if (!q) return null;
+  const src = slide.video_source || "pexels_video";
+  if (src === "pixabay_video") return (await fetchPixabayVideo(q)) || (await fetchPexelsVideo(q, vertical));
+  // pinterest/coverr/instagram: nessuna API → serve un URL incollato (già gestito sopra)
+  return fetchPexelsVideo(q, vertical);
 }
 
 // slot per slide: { assetId, kind } pronto | { jobId, kind } in corso | { error }
@@ -205,7 +227,7 @@ export default async function handler(req, res) {
     const vertical = wantVideoCarousel || format === "story" || format === "reel";
 
     const mediaUrls = await Promise.all(usedSlides.map(async s => {
-      if (wantVideoCarousel) return s.video_url || (s.search_query ? await fetchPexelsVideo(s.search_query, vertical) : null);
+      if (wantVideoCarousel) return resolveVideoUrl(s, vertical);
       return s.image_url || (s.search_query ? await fetchPexelsUrl(s.search_query, vertical) : null);
     }));
 

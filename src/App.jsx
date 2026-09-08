@@ -1072,47 +1072,75 @@ function parseDurSec(d) {
 }
 const fmtT = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
 
-// Picker video per riga: 3 anteprime Pexels + "auto" + il video scelto.
-function RowVideoPicker({ query, videoUrl, onPick }) {
+const VIDEO_SOURCE_KEYS = Object.keys(VIDEO_SOURCES);
+const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split("_")[0]]);
+
+// Picker video per riga: selettore fonte + 3 anteprime VIDEO in loop + "auto" +
+// campo URL. Le fonti senza API (Pinterest, Coverr, IG) danno solo il link.
+function RowVideoPicker({ query, videoUrl, source, onPick, onSourceChange }) {
+  const src = VIDEO_SOURCES[source] || VIDEO_SOURCES.pexels_video;
+  const hasApi = videoSourceHasApi(source);
   const [vids, setVids] = useState(null);
   const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     const q = (query || "").trim();
-    if (!q) { setVids(null); return; }
+    if (!q || !hasApi) { setVids(null); return; }
     let active = true;
     setLoading(true);
     const t = setTimeout(() => {
-      fetchVideos(q, "pexels").then(r => { if (active) { setVids(r || []); setLoading(false); } });
+      fetchVideos(q, source).then(r => { if (active) { setVids(r || []); setLoading(false); } });
     }, 400);
     return () => { active = false; clearTimeout(t); };
-  }, [query]);
+  }, [query, source, hasApi]);
 
   return (
     <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 9, color: "#666" }}>Fonte:</span>
+        {VIDEO_SOURCE_KEYS.map(k => (
+          <button key={k} type="button" onClick={() => onSourceChange(k)}
+            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 9, fontWeight: 600, cursor: "pointer", border: `1px solid ${source === k ? VIDEO_SOURCES[k].color : "#262626"}`, background: source === k ? VIDEO_SOURCES[k].color + "22" : "transparent", color: source === k ? VIDEO_SOURCES[k].color : "#777" }}>
+            {VIDEO_SOURCES[k].name.replace(" Video", "").replace(" Reels", "")}{!videoSourceHasApi(k) ? " ↗" : ""}
+          </button>
+        ))}
+      </div>
+
       {videoUrl && (
         <video src={videoUrl} autoPlay loop muted playsInline
           style={{ width: "100%", maxHeight: 150, objectFit: "cover", borderRadius: 10, marginBottom: 6, background: "#000" }} />
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
-        <button type="button" onClick={() => onPick(null)}
-          style={{ aspectRatio: "1", borderRadius: 8, border: `2px solid ${!videoUrl ? "#00C4CC" : "#262626"}`, background: "#141414", color: !videoUrl ? "#00C4CC" : "#666", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>
-          🔀 Auto
-        </button>
-        {loading && !vids?.length
-          ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 8, background: "#141414" }} />)
-          : (vids || []).slice(0, 3).map((v, i) => {
-              const on = videoUrl === v.videoUrl;
-              return (
-                <button key={v.id || i} type="button" onClick={() => onPick(v.videoUrl)}
-                  style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${on ? "#00C4CC" : "#262626"}`, cursor: "pointer", background: "#141414", position: "relative" }}>
-                  <img src={v.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.75 }} loading="lazy" />
-                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", textShadow: "0 1px 3px #000" }}>▶</span>
-                </button>
-              );
-            })}
-      </div>
+
+      {hasApi ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
+          <button type="button" onClick={() => onPick(null)}
+            style={{ aspectRatio: "1", borderRadius: 8, border: `2px solid ${!videoUrl ? "#00C4CC" : "#262626"}`, background: "#141414", color: !videoUrl ? "#00C4CC" : "#666", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>
+            🔀 Auto
+          </button>
+          {loading && !vids?.length
+            ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 8, background: "#141414" }} />)
+            : (vids || []).slice(0, 3).map((v, i) => {
+                const on = videoUrl === v.videoUrl;
+                return (
+                  <button key={v.id || i} type="button" onClick={() => onPick(v.videoUrl)}
+                    style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${on ? "#00C4CC" : "#262626"}`, cursor: "pointer", background: "#000", position: "relative" }}>
+                    <video src={v.videoUrl} autoPlay loop muted playsInline poster={v.image}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.8 }} />
+                    <a href={v.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                      style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, background: "rgba(0,0,0,0.55)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 9 }}>↗</a>
+                  </button>
+                );
+              })}
+        </div>
+      ) : (
+        <a href={src.webUrl((query || "").trim())} target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", textAlign: "center", padding: "8px", borderRadius: 8, textDecoration: "none", border: `1px solid ${src.color}44`, background: src.color + "12", color: src.color, fontSize: 10.5, fontWeight: 600 }}>
+          Cerca "{(query || "").trim()}" su {src.name} ↗ — poi incolla qui sotto l'URL del video
+        </a>
+      )}
+
       <input value={videoUrl && /^https?:\/\//i.test(videoUrl) ? videoUrl : ""} onChange={e => onPick(e.target.value.trim() || null)}
-        placeholder="…oppure incolla un URL video (.mp4)"
+        placeholder={hasApi ? "…oppure incolla un URL video (.mp4)" : "URL diretto del video (.mp4)"}
         style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 8, padding: "6px 9px", color: "#F0EBE3", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", marginTop: 6 }} />
     </div>
   );
@@ -1126,6 +1154,7 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
   const [url, setUrl] = useState(null);
   const [errMsg, setErrMsg] = useState("");
   const [progress, setProgress] = useState("");
+  const [defSource, setDefSource] = useState("pexels_video");
 
   const ml = (f) => (typeof f === "object" && f ? (f[lang] || f.it || f.en || "") : (f || ""));
 
@@ -1138,30 +1167,50 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
       const row = {
         caption: ml(s.text_overlay) || ml(s.description) || "",
         search_query: s.search_query || "",
-        video_url: null,
+        video_url: null, source: "pexels_video",
         start: acc, end: acc + dur, dur,
       };
       acc += dur;
       return row;
     });
     setRows(init);
-    // precarico il primo video suggerito per riga
-    init.forEach((r, i) => {
+    prefetchAll(init);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function prefetchAll(list) {
+    list.forEach((r, i) => {
       const q = (r.search_query || "").trim();
-      if (!q) return;
-      fetchVideos(q, "pexels").then(v => {
+      if (!q || !videoSourceHasApi(r.source)) return;
+      fetchVideos(q, r.source).then(v => {
         const first = v?.[0]?.videoUrl;
         if (first) setRows(p => p.map((x, idx) => idx === i && !x.video_url ? { ...x, video_url: first } : x));
       }).catch(() => {});
     });
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const patch = (i, k, v) => setRows(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+
+  function setRowSource(i, s) {
+    setRows(p => p.map((r, idx) => idx === i ? { ...r, source: s, video_url: null } : r));
+    const row = rows[i];
+    if (row && videoSourceHasApi(s) && (row.search_query || "").trim()) {
+      fetchVideos(row.search_query.trim(), s).then(v => {
+        const first = v?.[0]?.videoUrl;
+        if (first) setRows(p => p.map((x, idx) => idx === i && !x.video_url ? { ...x, video_url: first } : x));
+      }).catch(() => {});
+    }
+  }
+
+  function setDefaultSource(s) {
+    setDefSource(s);
+    setRows(p => p.map(r => ({ ...r, source: s, video_url: null })));
+    setTimeout(() => prefetchAll(rows.map(r => ({ ...r, source: s, video_url: null }))), 0);
+  }
 
   async function handleCreate() {
     setState("loading"); setErrMsg(""); setProgress("Preparazione…");
     const baseBody = {
-      slides: rows.map(r => ({ caption: r.caption, search_query: r.search_query, video_url: r.video_url || undefined })),
+      slides: rows.map(r => ({ caption: r.caption, search_query: r.search_query, video_url: r.video_url || undefined, video_source: r.source })),
       carouselTemplateId: templateId,
       media: "video",
       format: "post",
@@ -1212,8 +1261,22 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
           <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontWeight: 600 }}>🎬 Carosello video su Canva</div>
           <button onClick={() => onOpenChange(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 12 }}>
           Una pagina per scena. Scegli il video, controlla i secondi da ritagliare per matchare lo storytelling.
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>
+            Fonte video predefinita <span style={{ opacity: 0.6, textTransform: "none", letterSpacing: 0 }}>· poi cambiabile per scena</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {VIDEO_SOURCE_KEYS.map(k => (
+              <button key={k} type="button" onClick={() => setDefaultSource(k)}
+                style={{ padding: "5px 12px", borderRadius: 10, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", border: `1px solid ${defSource === k ? VIDEO_SOURCES[k].color : "#262626"}`, background: defSource === k ? VIDEO_SOURCES[k].color + "1E" : "transparent", color: defSource === k ? VIDEO_SOURCES[k].color : "#888" }}>
+                {VIDEO_SOURCES[k].name}{!videoSourceHasApi(k) ? " ↗" : ""}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
@@ -1229,7 +1292,8 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
               <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query footage (EN, max 3 parole)"
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
-              <RowVideoPicker query={row.search_query} videoUrl={row.video_url} onPick={u => patch(i, "video_url", u)} />
+              <RowVideoPicker query={row.search_query} videoUrl={row.video_url} source={row.source}
+                onPick={u => patch(i, "video_url", u)} onSourceChange={s => setRowSource(i, s)} />
             </div>
           ))}
         </div>
