@@ -589,11 +589,11 @@ const CAROUSEL_MAX_PAGES = 10;
 
 // Selettore foto compatto per una riga del composer carosello: mostra la foto
 // scelta o "Auto", ed espande una griglia di risultati per la query della riga.
-function RowImagePicker({ query, imageUrl, onPick }) {
+function RowImagePicker({ query, imageUrl, onPick, source: sourceProp }) {
   const [openGrid, setOpenGrid] = useState(false);
   const [imgs, setImgs] = useState(null);
   const [loading, setLoading] = useState(false);
-  const source = defaultPhotoSource() || "pexels";
+  const source = sourceProp || defaultPhotoSource() || "pexels";
 
   useEffect(() => {
     if (!openGrid) return;
@@ -668,37 +668,47 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
   const [pickerOpen, setPickerOpen] = useState(false);
   const [progress, setProgress] = useState("");
   const [photosLoading, setPhotosLoading] = useState(false);
+  const [source, setSource] = useState(() => photoSource || defaultPhotoSource() || "pexels");
+  // Pagine con foto scelta a mano dall'utente: il precarico (apertura o cambio
+  // fonte) non le tocca.
+  const lockedRef = useRef(new Set());
+
+  function pickImage(i, u) {
+    if (u) lockedRef.current.add(i); else lockedRef.current.delete(i);
+    setPages(p => p.map((row, idx) => idx === i ? { ...row, image_url: u } : row));
+  }
 
   useEffect(() => {
     if (!open) return;
+    lockedRef.current = new Set();
+    setSource(photoSource || defaultPhotoSource() || "pexels");
     setPages((initialSlides || []).map(s => ({
       caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null,
     })));
     setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false); setProgress("");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // All'apertura, precarica per ogni pagina la prima foto suggerita per la sua
-  // query (quella che Visual Scout mostrava sotto la slide). Resta modificabile
-  // dal RowImagePicker ("🔎 Foto" per cambiarla, "✕ auto" per toglierla).
+  // All'apertura (e a ogni cambio di fonte) precarica per ogni pagina non
+  // "bloccata" la prima foto della fonte scelta per la sua query.
   useEffect(() => {
     if (!open) return;
-    const src = photoSource || defaultPhotoSource() || "pexels";
+    const src = source;
     const toFetch = (initialSlides || [])
-      .map((s, i) => ({ i, q: (s.search_query || "").trim(), has: !!s.image_url }))
-      .filter(x => x.q && !x.has);
+      .map((s, i) => ({ i, q: (s.search_query || "").trim() }))
+      .filter(x => x.q && !lockedRef.current.has(x.i));
     if (!toFetch.length) return;
     let active = true;
     setPhotosLoading(true);
     Promise.allSettled(toFetch.map(x =>
       fetchImages(x.q, "portrait", src).then(o => {
-        if (!active) return;
+        if (!active || lockedRef.current.has(x.i)) return;
         const first = o?.results?.[0];
         const u = first?.full || first?.thumb;
-        if (u) setPages(p => p.map((row, idx) => (idx === x.i && !row.image_url) ? { ...row, image_url: u } : row));
+        if (u) setPages(p => p.map((row, idx) => (idx === x.i ? { ...row, image_url: u } : row)));
       })
     )).finally(() => { if (active) setPhotosLoading(false); });
     return () => { active = false; };
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(i, key, val) {
     setPages(p => p.map((row, idx) => idx === i ? { ...row, [key]: val } : row));
@@ -810,9 +820,21 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
               <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontWeight: 600 }}>✦ Componi carosello</div>
               <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
             </div>
-            <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 12 }}>
               {pages.length} pagine · max {CAROUSEL_MAX_PAGES}. Riordina, cambia foto, aggiungi pagine.
-              {photosLoading && <span style={{ color: "#00C4CC", marginLeft: 6 }}>· carico le foto suggerite…</span>}
+              {photosLoading && <span style={{ color: "#00C4CC", marginLeft: 6 }}>· carico le foto…</span>}
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Fonte foto</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]).map(([k, s]) => (
+                  <button key={k} type="button" onClick={() => setSource(k)}
+                    style={{ padding: "5px 12px", borderRadius: 10, border: `1px solid ${source === k ? "#00C4CC" : "#262626"}`, background: source === k ? "rgba(0,196,204,0.12)" : "transparent", color: source === k ? "#00C4CC" : "#888", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
@@ -832,7 +854,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
                   <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query foto (EN, max 3 parole)"
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
-                  <RowImagePicker query={row.search_query} imageUrl={row.image_url} onPick={u => patch(i, "image_url", u)} />
+                  <RowImagePicker query={row.search_query} imageUrl={row.image_url} source={source} onPick={u => pickImage(i, u)} />
                 </div>
               ))}
             </div>
@@ -1794,9 +1816,25 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
   const [showApiSetup, setShowApiSetup] = useState(false);
   const [planConfig, setPlanConfig] = useState({ duration: "1 settimana", frequency: 3 });
   const [insights, setInsights] = useState(null);
-  const chatEndRef = useRef(null);
+  const chatTopRef = useRef(null);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  // Lo scambio più recente è in cima alla lista: dopo ogni invio riportiamo la
+  // vista lì, non in fondo.
+  useEffect(() => { chatTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [messages, loading]);
+
+  // Raggruppa i messaggi piatti in scambi (domanda + risposta) tenendo gli
+  // indici originali per elimina / aggiornamento / brief.
+  const exchanges = [];
+  messages.forEach((m, idx) => {
+    if (m.role === "user") {
+      exchanges.push({ user: m, userIdx: idx, assistant: null, assistantIdx: -1 });
+    } else {
+      const last = exchanges[exchanges.length - 1];
+      if (last && !last.assistant) { last.assistant = m; last.assistantIdx = idx; }
+      else exchanges.push({ user: null, userIdx: -1, assistant: m, assistantIdx: idx });
+    }
+  });
+  const orderedExchanges = [...exchanges].reverse(); // più recente in alto
 
   const anyKey = Object.values(API_KEYS).some(k => k?.length > 5);
 
@@ -1981,41 +2019,47 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
         )}
 
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
-          {messages.map((msg, i) => (
-            <div key={i} style={{ marginBottom: 20, animation: "fadeSlideUp .4s ease-out" }}>
-              {msg.role === "user" ? (
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <div style={{ maxWidth: "85%", padding: "12px 18px", borderRadius: "18px 18px 4px 18px", background: "#3D3225", color: "#F0E8D8", fontSize: 14, lineHeight: 1.55, fontFamily: "'Space Grotesk', sans-serif" }}>{msg.content}</div>
-                </div>
-              ) : (
-                <div style={{ maxWidth: "95%" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
-                    {msg.requestId != null && (
-                      <button onClick={() => deleteExchange(i)} title="Elimina questa domanda e risposta"
-                        style={{ fontSize: 10, color: "#B45050", background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", fontFamily: "'JetBrains Mono', monospace" }}>
-                        🗑 Elimina
-                      </button>
-                    )}
+          <div ref={chatTopRef} />
+          {orderedExchanges.map((ex) => {
+            const a = ex.assistant;
+            const showTyping = loading && !a && ex.userIdx === messages.length - 1;
+            return (
+              <div key={a ? `a${ex.assistantIdx}` : `u${ex.userIdx}`} style={{ marginBottom: 20, animation: "fadeSlideUp .4s ease-out" }}>
+                {ex.user && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: a || showTyping ? 12 : 0 }}>
+                    <div style={{ maxWidth: "85%", padding: "12px 18px", borderRadius: "18px 18px 4px 18px", background: "#3D3225", color: "#F0E8D8", fontSize: 14, lineHeight: 1.55, fontFamily: "'Space Grotesk', sans-serif" }}>{ex.user.content}</div>
                   </div>
-                  <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'Space Grotesk', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
-                    {msg.type === "strategy" ? <StrategyMessage data={msg.content} originalBrief={messages[i-1]?.role === "user" ? messages[i-1].content : ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[i] = { ...copy[i], content: updated }; return copy; }); }} brand={brand} /> : <p style={{ margin: 0, color: "#3D3225" }}>{msg.content}</p>}
+                )}
+                {a && (
+                  <div style={{ maxWidth: "95%" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
+                      {a.requestId != null && (
+                        <button onClick={() => deleteExchange(ex.assistantIdx)} title="Elimina questa domanda e risposta"
+                          style={{ fontSize: 10, color: "#B45050", background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", fontFamily: "'JetBrains Mono', monospace" }}>
+                          🗑 Elimina
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ padding: "18px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)", fontSize: 14, lineHeight: 1.6, fontFamily: "'Space Grotesk', sans-serif", boxShadow: "0 2px 12px rgba(44,36,24,.04)" }}>
+                      {a.type === "strategy"
+                        ? <StrategyMessage data={a.content} originalBrief={ex.user?.content || ""} onUpdateData={(updated) => { setMessages(prev => { const copy = [...prev]; copy[ex.assistantIdx] = { ...copy[ex.assistantIdx], content: updated }; return copy; }); }} brand={brand} />
+                        : <p style={{ margin: 0, color: "#3D3225" }}>{a.content}</p>}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {loading && (
-            <div style={{ maxWidth: "95%", animation: "fadeSlideUp .3s ease-out" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
-              <div style={{ display: "inline-block", padding: "14px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)" }}>
-                <TypingDots />
-                <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif", marginTop: 4 }}>Strategia, caption e storyboard in arrivo...</div>
+                )}
+                {showTyping && (
+                  <div style={{ maxWidth: "95%", animation: "fadeSlideUp .3s ease-out" }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
+                    <div style={{ display: "inline-block", padding: "14px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)" }}>
+                      <TypingDots />
+                      <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif", marginTop: 4 }}>Strategia, caption e storyboard in arrivo...</div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
+            );
+          })}
         </div>
 
         {/* Input */}
