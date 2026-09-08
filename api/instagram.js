@@ -253,11 +253,16 @@ export default async function handler(req, res) {
             assigned_err: assigned.ok ? null : assigned.data?.error?.message,
           };
         }));
-        const [assignedAA, pageAds] = await Promise.all([
-          fbGraph(token, "me/assigned_ad_accounts", { fields: "name,id", limit: 100 }),
-          // Post della Pagina AURA che hanno un'inserzione dietro
-          fbGraph(token, `${(pages.data?.data || [])[0]?.id || "0"}/ads_posts`, { fields: "id,message,promotion_status", limit: 10 }).catch(() => ({ data: {} })),
+        const personalAct = (adAcc.data?.data || [])[0]?.id;
+        const [personalAds, personalActIg, pageIgId] = await Promise.all([
+          personalAct ? fbGraph(token, `act_${String(personalAct).replace(/^act_/, "")}/ads`, { fields: "name,creative{instagram_permalink_url,object_story_spec{instagram_actor_id},effective_object_story_id}", limit: 250 }) : Promise.resolve({ data: {} }),
+          personalAct ? fbGraph(token, `act_${String(personalAct).replace(/^act_/, "")}/instagram_accounts`, { fields: "username" }) : Promise.resolve({ data: {} }),
+          fbGraph(token, `${(pages.data?.data || [])[0]?.instagram_business_account?.id || (pages.data?.data || [])[0]?.id || "0"}`, { fields: "username,id" }),
         ]);
+        const personalAdsIgUsers = [...new Set((personalAds.data?.data || []).map(a => {
+          const s = String(a.creative?.effective_object_story_id || "").split("_");
+          return s[0] || a.creative?.object_story_spec?.instagram_actor_id || null;
+        }).filter(Boolean))];
 
         return res.status(200).json({
           ok: true,
@@ -272,9 +277,12 @@ export default async function handler(req, res) {
           business_detail: bizDetail,
           user_businesses: (userBizList.data?.data || []),
           user_businesses_error: userBizList.ok ? null : userBizList.data?.error?.message,
-          me_assigned_ad_accounts: (assignedAA.data?.data || []).map(a => ({ name: a.name, id: a.id })),
-          me_assigned_err: assignedAA.ok ? null : assignedAA.data?.error?.message,
-          aura_page_ads_posts: pageAds.data?.data || pageAds.data?.error?.message || null,
+          personal_ad_account: personalAct,
+          personal_ads_count: (personalAds.data?.data || []).length,
+          personal_ads_distinct_page_or_actor_ids: personalAdsIgUsers,
+          personal_ads_err: personalAds.ok ? null : personalAds.data?.error?.message,
+          personal_act_instagram_accounts: (personalActIg.data?.data || []).map(x => x.username),
+          personal_act_ig_err: personalActIg.ok ? null : personalActIg.data?.error?.message,
           ad_accounts: (adAcc.data?.data || []).map(a => ({ name: a.name, id: a.id })),
         });
       }
