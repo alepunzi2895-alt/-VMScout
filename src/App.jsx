@@ -646,9 +646,12 @@ function RowImagePicker({ query, imageUrl, onPick }) {
 // aggiungere/rimuovere/riordinare pagine, cambiare foto per pagina e inserire
 // una pagina da un design Canva già creato (ne riusa foto + titolo). Un solo
 // autofill del template carosello.
-function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
+function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: openProp, onOpenChange, photoSource }) {
   const templateId = canvaTemplates?.carousel || "";
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const controlled = typeof onOpenChange === "function";
+  const open = controlled ? !!openProp : openState;
+  const setOpen = controlled ? onOpenChange : setOpenState;
   const [pages, setPages] = useState([]);
   const [state, setState] = useState("idle");
   const [url, setUrl] = useState(null);
@@ -656,6 +659,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
   const [savedDesigns, setSavedDesigns] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [progress, setProgress] = useState("");
+  const [photosLoading, setPhotosLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -663,6 +667,29 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
       caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null,
     })));
     setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false); setProgress("");
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // All'apertura, precarica per ogni pagina la prima foto suggerita per la sua
+  // query (quella che Visual Scout mostrava sotto la slide). Resta modificabile
+  // dal RowImagePicker ("🔎 Foto" per cambiarla, "✕ auto" per toglierla).
+  useEffect(() => {
+    if (!open) return;
+    const src = photoSource || defaultPhotoSource() || "pexels";
+    const toFetch = (initialSlides || [])
+      .map((s, i) => ({ i, q: (s.search_query || "").trim(), has: !!s.image_url }))
+      .filter(x => x.q && !x.has);
+    if (!toFetch.length) return;
+    let active = true;
+    setPhotosLoading(true);
+    Promise.allSettled(toFetch.map(x =>
+      fetchImages(x.q, "portrait", src).then(o => {
+        if (!active) return;
+        const first = o?.results?.[0];
+        const u = first?.full || first?.thumb;
+        if (u) setPages(p => p.map((row, idx) => (idx === x.i && !row.image_url) ? { ...row, image_url: u } : row));
+      })
+    )).finally(() => { if (active) setPhotosLoading(false); });
+    return () => { active = false; };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(i, key, val) {
@@ -748,6 +775,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
   }
 
   if (!templateId) {
+    if (controlled) return null; // il genitore mostra già l'avviso "configura template"
     return (
       <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, ...)'
         style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
@@ -758,10 +786,12 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)}
-        style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-        ✦ Componi carosello su Canva ({(initialSlides || []).length} slide)
-      </button>
+      {!controlled && (
+        <button onClick={() => setOpen(true)}
+          style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
+          ✦ Componi carosello su Canva ({(initialSlides || []).length} slide)
+        </button>
+      )}
 
       {open && createPortal(
         <div onClick={() => setOpen(false)}
@@ -772,7 +802,10 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId }) {
               <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontWeight: 600 }}>✦ Componi carosello</div>
               <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
             </div>
-            <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 16 }}>{pages.length} pagine · max {CAROUSEL_MAX_PAGES}. Riordina, cambia foto, aggiungi pagine.</div>
+            <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 16 }}>
+              {pages.length} pagine · max {CAROUSEL_MAX_PAGES}. Riordina, cambia foto, aggiungi pagine.
+              {photosLoading && <span style={{ color: "#00C4CC", marginLeft: 6 }}>· carico le foto suggerite…</span>}
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
               {pages.map((row, i) => (
@@ -1172,6 +1205,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
   const [lang, setLang] = useState("it");
   const [platform, setPlatform] = useState("instagram");
   const [selectedSource, setSelectedSource] = useState(() => defaultPhotoSource() || "unsplash");
+  const [carouselOpen, setCarouselOpen] = useState(false);
 
   if (!post_composer?.length) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun post generato.</p>;
 
@@ -1215,6 +1249,13 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
         <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◻</span>
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
       </div>
+
+      {brand?.canvaTemplates?.carousel && post_composer.length > 1 && (
+        <button onClick={() => setCarouselOpen(true)}
+          style={{ width: "100%", padding: "11px 16px", marginBottom: 16, borderRadius: 14, border: "1px solid rgba(0,196,204,0.35)", background: "linear-gradient(135deg, rgba(0,196,204,0.14), rgba(0,196,204,0.06))", color: "#00C4CC", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          🖼 Componi carosello su Canva ({post_composer.length} slide, foto suggerite già caricate)
+        </button>
+      )}
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Anteprime foto da</div>
@@ -1339,12 +1380,27 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       </div>
 
       <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-        <CarouselComposer
-          initialSlides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
-          canvaTemplates={brand?.canvaTemplates}
-          projectId={brand?.id}
-        />
+        {brand?.canvaTemplates?.carousel ? (
+          <button onClick={() => setCarouselOpen(true)}
+            style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
+            🖼 Componi carosello su Canva ({post_composer.length} slide)
+          </button>
+        ) : (
+          <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, ...)'
+            style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
+            ✦ Configura template carosello in Canva Studio
+          </span>
+        )}
       </div>
+
+      <CarouselComposer
+        open={carouselOpen}
+        onOpenChange={setCarouselOpen}
+        photoSource={selectedSource}
+        initialSlides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
+        canvaTemplates={brand?.canvaTemplates}
+        projectId={brand?.id}
+      />
     </div>
   );
 }
