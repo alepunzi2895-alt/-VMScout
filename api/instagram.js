@@ -219,32 +219,50 @@ export default async function handler(req, res) {
       // Diagnostica: cosa raggiunge questo token FB (per capire se un dato
       // account IG / ad account è visibile).
       if (body.fb_action === "diagnose") {
-        const [me, perms, pages, biz, adAcc] = await Promise.all([
-          fbGraph(token, "me", { fields: "id,name" }),
+        const meR = await fbGraph(token, "me", { fields: "id,name" });
+        const uid = meR.data?.id;
+        const [perms, pages, adAcc] = await Promise.all([
           fbGraph(token, "me/permissions", {}),
-          fbGraph(token, "me/accounts", { fields: "id,name,instagram_business_account{username,id},connected_instagram_account{username,id},business{id,name,owned_ad_accounts{name,id},client_ad_accounts{name,id}}", limit: 100 }),
-          fbGraph(token, "me/businesses", { fields: "name,owned_ad_accounts{name},client_ad_accounts{name},instagram_business_accounts{username}", limit: 50 }),
+          fbGraph(token, "me/accounts", { fields: "id,name,instagram_business_account{username,id},connected_instagram_account{username,id},business", limit: 100 }),
           fbGraph(token, "me/adaccounts", { fields: "name,account_status", limit: 200 }),
         ]);
+
+        // Ogni business trovato (dalle Pagine) interrogato DIRETTAMENTE per i suoi
+        // ad account e account IG — più affidabile del campo annidato.
+        const bizIds = [...new Set((pages.data?.data || []).map(p => p.business?.id).filter(Boolean))];
+        const bizDetail = await Promise.all(bizIds.map(async bid => {
+          const [own, cli, igs] = await Promise.all([
+            fbGraph(token, `${bid}/owned_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
+            fbGraph(token, `${bid}/client_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
+            fbGraph(token, `${bid}/instagram_accounts`, { fields: "username", limit: 50 }),
+          ]);
+          return {
+            id: bid,
+            owned_ad_accounts: (own.data?.data || []).map(a => ({ name: a.name, id: a.id })),
+            owned_err: own.ok ? null : own.data?.error?.message,
+            client_ad_accounts: (cli.data?.data || []).map(a => ({ name: a.name, id: a.id })),
+            client_err: cli.ok ? null : cli.data?.error?.message,
+            instagram_accounts: (igs.data?.data || []).map(x => x.username),
+            ig_err: igs.ok ? null : igs.data?.error?.message,
+          };
+        }));
+
+        const userBiz = uid ? await fbGraph(token, `${uid}/businesses`, { fields: "id,name", limit: 50 }) : { data: {} };
+
         return res.status(200).json({
           ok: true,
-          me: me.data,
+          me: meR.data,
           scopes: (perms.data?.data || []).filter(p => p.status === "granted").map(p => p.permission),
           pages: (pages.data?.data || []).map(p => ({
-            page: p.name,
+            page: p.name, page_id: p.id,
             ig: p.instagram_business_account?.username || p.connected_instagram_account?.username || null,
-            business: p.business?.name || null,
-            business_ad_accounts: [...(p.business?.owned_ad_accounts?.data || []), ...(p.business?.client_ad_accounts?.data || [])].map(a => ({ name: a.name, id: a.id })),
+            business: p.business ? { id: p.business.id, name: p.business.name } : null,
           })),
           pages_error: pages.ok ? null : pages.data?.error?.message,
-          businesses: (biz.data?.data || []).map(b => ({
-            name: b.name,
-            ig: (b.instagram_business_accounts?.data || []).map(x => x.username),
-            ad_accounts: [...(b.owned_ad_accounts?.data || []), ...(b.client_ad_accounts?.data || [])].map(a => a.name),
-          })),
-          businesses_error: biz.ok ? null : biz.data?.error?.message,
+          business_detail: bizDetail,
+          user_businesses: (userBiz.data?.data || []),
+          user_businesses_error: userBiz.ok ? null : userBiz.data?.error?.message,
           ad_accounts: (adAcc.data?.data || []).map(a => a.name),
-          ad_accounts_error: adAcc.ok ? null : adAcc.data?.error?.message,
         });
       }
 
