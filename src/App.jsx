@@ -1059,6 +1059,200 @@ const miniBtn = {
   color: "#888", fontSize: 11, cursor: "pointer", lineHeight: 1, padding: 0, fontFamily: "'Space Grotesk', sans-serif",
 };
 
+// "3s" | "0-3s" | "00:03" → secondi
+function parseDurSec(d) {
+  if (typeof d === "number") return d;
+  const s = String(d || "");
+  const range = s.match(/(\d+)\s*-\s*(\d+)/);
+  if (range) return Math.max(0, Number(range[2]) - Number(range[1]));
+  const mmss = s.match(/(\d+):(\d+)/);
+  if (mmss) return Number(mmss[1]) * 60 + Number(mmss[2]);
+  const n = s.match(/(\d+(?:\.\d+)?)/);
+  return n ? Number(n[1]) : 0;
+}
+const fmtT = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+
+// Picker video per riga: 3 anteprime Pexels + "auto" + il video scelto.
+function RowVideoPicker({ query, videoUrl, onPick }) {
+  const [vids, setVids] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const q = (query || "").trim();
+    if (!q) { setVids(null); return; }
+    let active = true;
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetchVideos(q, "pexels").then(r => { if (active) { setVids(r || []); setLoading(false); } });
+    }, 400);
+    return () => { active = false; clearTimeout(t); };
+  }, [query]);
+
+  return (
+    <div>
+      {videoUrl && (
+        <video src={videoUrl} autoPlay loop muted playsInline
+          style={{ width: "100%", maxHeight: 150, objectFit: "cover", borderRadius: 10, marginBottom: 6, background: "#000" }} />
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
+        <button type="button" onClick={() => onPick(null)}
+          style={{ aspectRatio: "1", borderRadius: 8, border: `2px solid ${!videoUrl ? "#00C4CC" : "#262626"}`, background: "#141414", color: !videoUrl ? "#00C4CC" : "#666", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>
+          🔀 Auto
+        </button>
+        {loading && !vids?.length
+          ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 8, background: "#141414" }} />)
+          : (vids || []).slice(0, 3).map((v, i) => {
+              const on = videoUrl === v.videoUrl;
+              return (
+                <button key={v.id || i} type="button" onClick={() => onPick(v.videoUrl)}
+                  style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${on ? "#00C4CC" : "#262626"}`, cursor: "pointer", background: "#141414", position: "relative" }}>
+                  <img src={v.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.75 }} loading="lazy" />
+                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", textShadow: "0 1px 3px #000" }}>▶</span>
+                </button>
+              );
+            })}
+      </div>
+      <input value={videoUrl && /^https?:\/\//i.test(videoUrl) ? videoUrl : ""} onChange={e => onPick(e.target.value.trim() || null)}
+        placeholder="…oppure incolla un URL video (.mp4)"
+        style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 8, padding: "6px 9px", color: "#F0EBE3", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", marginTop: 6 }} />
+    </div>
+  );
+}
+
+// Carosello di VIDEO su Canva a partire dallo storyboard (tab Video Storytelling).
+function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, onOpenChange }) {
+  const templateId = canvaTemplates?.carousel || canvaTemplates?.post || "";
+  const [rows, setRows] = useState([]);
+  const [state, setState] = useState("idle");
+  const [url, setUrl] = useState(null);
+  const [errMsg, setErrMsg] = useState("");
+  const [progress, setProgress] = useState("");
+
+  const ml = (f) => (typeof f === "object" && f ? (f[lang] || f.it || f.en || "") : (f || ""));
+
+  useEffect(() => {
+    if (!open) return;
+    setState("idle"); setUrl(null); setErrMsg(""); setProgress("");
+    let acc = 0;
+    const init = (scenes || []).slice(0, 6).map(s => {
+      const dur = parseDurSec(s.duration) || 3;
+      const row = {
+        caption: ml(s.text_overlay) || ml(s.description) || "",
+        search_query: s.search_query || "",
+        video_url: null,
+        start: acc, end: acc + dur, dur,
+      };
+      acc += dur;
+      return row;
+    });
+    setRows(init);
+    // precarico il primo video suggerito per riga
+    init.forEach((r, i) => {
+      const q = (r.search_query || "").trim();
+      if (!q) return;
+      fetchVideos(q, "pexels").then(v => {
+        const first = v?.[0]?.videoUrl;
+        if (first) setRows(p => p.map((x, idx) => idx === i && !x.video_url ? { ...x, video_url: first } : x));
+      }).catch(() => {});
+    });
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const patch = (i, k, v) => setRows(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+
+  async function handleCreate() {
+    setState("loading"); setErrMsg(""); setProgress("Preparazione…");
+    const baseBody = {
+      slides: rows.map(r => ({ caption: r.caption, search_query: r.search_query, video_url: r.video_url || undefined })),
+      carouselTemplateId: templateId,
+      media: "video",
+      format: "post",
+    };
+    const giveUpAt = Date.now() + 6 * 60_000; // i video sono lenti
+    let resume;
+    try {
+      while (true) {
+        const res = await fetch("/api/canva-carousel", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(resume ? { ...baseBody, resume } : baseBody),
+        });
+        const data = await res.json();
+        if (data.pending) {
+          setProgress(data.phase === "autofill" ? "Composizione del carosello in Canva…" : "Caricamento video su Canva (può volerci qualche minuto)…");
+          if (Date.now() > giveUpAt) { setErrMsg("Canva ci sta mettendo troppo con i video. Riprova tra qualche minuto."); setState("idle"); break; }
+          resume = data.resume;
+          await new Promise(r => setTimeout(r, 3500));
+          continue;
+        }
+        if (data.ok) {
+          setUrl(data.url); setState("done");
+          if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
+          saveCanvaDesign({
+            project_id: projectId || null, kind: "carousel", format: "carousel",
+            title: `Carosello video ${rows.length} scene`, design_url: data.url, slides: rows.length,
+          });
+        } else if (data.error === "CANVA_NOT_CONNECTED") {
+          window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700"); setState("idle");
+        } else {
+          setErrMsg(data.message || "Errore durante la creazione del carosello video."); setState("idle");
+        }
+        break;
+      }
+    } catch (e) {
+      setErrMsg(e.message || "Errore di rete."); setState("idle");
+    } finally { setProgress(""); }
+  }
+
+  if (!templateId || !open) return null;
+
+  return createPortal(
+    <div onClick={() => onOpenChange(false)}
+      style={{ position: "fixed", inset: 0, zIndex: 4000, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 560, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 20, padding: 22, fontFamily: "'Space Grotesk', sans-serif", color: "#F0EBE3" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#00C4CC", fontWeight: 600 }}>🎬 Carosello video su Canva</div>
+          <button onClick={() => onOpenChange(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 14 }}>
+          Una pagina per scena. Scegli il video, controlla i secondi da ritagliare per matchare lo storytelling.
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{ border: "1px solid #1E1E1E", borderRadius: 12, padding: 12, background: "#0E0E0E" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#8B7355", letterSpacing: "0.08em" }}>SCENA {i + 1}</span>
+                <span style={{ fontSize: 10, color: "#00C4CC", fontFamily: "'JetBrains Mono', monospace" }}>
+                  ✂ ritaglia a {row.dur}s · {fmtT(row.start)}–{fmtT(row.end)}
+                </span>
+              </div>
+              <textarea value={row.caption} onChange={e => patch(i, "caption", e.target.value)} rows={2} placeholder="Testo overlay della scena…"
+                style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
+              <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query footage (EN, max 3 parole)"
+                style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+              <RowVideoPicker query={row.search_query} videoUrl={row.video_url} onPick={u => patch(i, "video_url", u)} />
+            </div>
+          ))}
+        </div>
+
+        {errMsg && <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{errMsg}</div>}
+
+        {state === "done" && url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            style={{ display: "block", padding: "12px", borderRadius: 12, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700 }}>
+            ✓ Apri carosello video in Canva →
+          </a>
+        ) : (
+          <button onClick={handleCreate} disabled={state === "loading" || !rows.length}
+            style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !rows.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !rows.length ? 0.5 : 1 }}>
+            {state === "loading" ? `⏳ ${progress || "Compongo il carosello video…"}` : `🎬 Crea carosello video (${rows.length} scene)`}
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
   const src = PHOTO_SOURCES[sourceKey];
   const url = src.webUrl(query, orientation);
@@ -1628,10 +1822,11 @@ function SceneVideoPlayer({ query, sourceKey }) {
   );
 }
 
-function VideoTab({ data }) {
+function VideoTab({ data, brand }) {
   const vs = data.video_storytelling;
   const [lang, setLang] = useState("it");
   const [videoSource, setVideoSource] = useState("pexels_video");
+  const [vcOpen, setVcOpen] = useState(false);
 
   if (!vs?.scenes) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessuno storyboard generato.</p>;
 
@@ -1657,6 +1852,14 @@ function VideoTab({ data }) {
         <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #1A1A2E, #4A1942)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎬</span>
         <SectionLabel color="#1A1A2E">Video Storytelling</SectionLabel>
       </div>
+
+      {(brand?.canvaTemplates?.carousel || brand?.canvaTemplates?.post) && vs.scenes.length > 1 && (
+        <button onClick={() => setVcOpen(true)}
+          style={{ width: "100%", padding: "11px 16px", marginBottom: 16, borderRadius: 14, border: "1px solid rgba(0,196,204,0.35)", background: "linear-gradient(135deg, rgba(0,196,204,0.14), rgba(0,196,204,0.06))", color: "#00C4CC", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          🎬 Componi carosello video su Canva ({vs.scenes.length} scene · video già caricati)
+        </button>
+      )}
+      <VideoCarouselComposer scenes={vs.scenes} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} lang={lang} open={vcOpen} onOpenChange={setVcOpen} />
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
@@ -1919,7 +2122,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
       { activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
       { activeTab === "piano" && <EditorialTab data={data} />}
       { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} brand={brand} />}
-      { activeTab === "video" && <VideoTab data={data} />}
+      { activeTab === "video" && <VideoTab data={data} brand={brand} />}
       { activeTab === "sponsor" && <SponsorTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
