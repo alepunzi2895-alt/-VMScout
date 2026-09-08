@@ -55,14 +55,23 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, step: "create", error: "nessun job.id", createBody, log });
   }
 
-  // 3. poll (max ~40s, ogni 3.5s) — mostra ogni stato
+  // 3. poll (ogni 3s, ~45s totali) — mostra ogni stato grezzo
   let job = createBody.job;
-  for (let i = 0; i < 12 && (job?.status === "in_progress" || job?.status === "pending"); i++) {
-    await new Promise(r => setTimeout(r, 3500));
+  for (let i = 0; i < 15 && (job?.status === "in_progress" || job?.status === "pending"); i++) {
+    await new Promise(r => setTimeout(r, 3000));
     const r = await fetch(`${CANVA_API}/asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
-    const b = await r.json().catch(() => ({}));
+    const raw = await r.text();
+    let b = {};
+    try { b = JSON.parse(raw); } catch { /* non-JSON */ }
     job = b?.job ?? job;
-    mark(`poll #${i + 1}`, { httpStatus: r.status, status: job?.status, assetId: job?.asset?.id, error: job?.error, retryAfter: r.headers.get("retry-after") });
+    mark(`poll #${i + 1}`, {
+      httpStatus: r.status,
+      status: job?.status,
+      assetId: job?.asset?.id,
+      error: job?.error,
+      retryAfter: r.headers.get("retry-after"),
+      rawSnippet: r.ok ? undefined : raw.slice(0, 200),
+    });
   }
 
   return res.status(200).json({
