@@ -54,15 +54,17 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
 
-### canva-upload.js / canva-carousel.js — flusso upload immagini (funzionante)
-1. `POST /v1/url-asset-uploads` con `{name, url}` → Canva scarica il media dal URL
-2. Poll `GET /v1/url-asset-uploads/{jobId}` ogni 1.5s finché `status=success` (max 20s)
-3. `POST /v1/folders/move` con `{to_folder_id: "uploads", item_id: assetId}` → sposta l'asset nella sezione Caricamenti dell'editor (solo `canva-upload.js`)
+### Upload immagini su Canva — `uploadUrlAsset()` in `api/canva-lib.js`
+Due metodi, in cascata:
+1. **Binario (preferito)** — VMScout scarica i byte dell'immagine (già ridimensionata da `sizedImageUrl`, 1280px) e li invia con `POST /v1/asset-uploads` (`Content-Type: application/octet-stream`, header `Asset-Upload-Metadata: {"name_base64": "..."}`), poi poll `GET /v1/asset-uploads/{jobId}`. Il job si chiude in pochi secondi perché Canva non deve fare un fetch esterno.
+2. **Fallback** — `POST /v1/url-asset-uploads` con `{name, url}`: Canva scarica lei dal URL. Era l'unico metodo e lasciava il job `in_progress` 40s+ (timeout) su foto Unsplash/Pexels grandi. Su risposta 400 "already exists" (Canva deduplica per URL) si ritenta con URL reso univoco (`bustedUrl`).
 
-> **NON usare** `POST /v1/asset-uploads` (binary upload diretto) — richiede TUS protocol complesso e dà errori 415/400. Usare sempre `url-asset-uploads`.
+`canva-upload.js` (media scelti a mano nel CarouselComposer) usa ancora solo il metodo 2 + `POST /v1/folders/move` (`to_folder_id: "uploads"`) per far comparire l'asset nel tab Caricamenti.
 
-### Token OAuth Canva — `api/canva-token.js` `getCanvaToken(db)` (punto UNICO)
-Ogni endpoint Canva (`canva-create`, `canva-carousel`, `canva-scaffold`, `canva-upload`, `canva-export`) legge il token **solo** da qui. Canva **ruota** il `refresh_token` a ogni `POST /v1/oauth/token`: la risposta contiene un nuovo `refresh_token` e quello usato viene invalidato subito. `getCanvaToken` ripersiste sempre `td.refresh_token` in `canva_auth`; se il refresh fallisce lancia `CANVA_NOT_CONNECTED` invece di ricadere su un access_token scaduto (→ era la causa di *"Access token is invalid"*: gli endpoint rinnovavano l'access_token senza salvare il refresh_token ruotato, e la volta dopo il refresh moriva).
+> Tutte le funzioni di polling (`uploadUrlAsset`, `runAutofill`, `trimTrailingPages`) accettano una `deadline` assoluta che il chiamante (`canva-create`/`canva-carousel`) calcola per tenere l'intera richiesta sotto `maxDuration:60`.
+
+### Token OAuth Canva — `getCanvaToken(db)` in `api/canva-lib.js` (punto UNICO)
+Ogni endpoint Canva (`canva-create`, `canva-carousel`, `canva-scaffold`, `canva-upload`, `canva-export`) legge il token **solo** da qui. Canva **ruota** il `refresh_token` a ogni `POST /v1/oauth/token`: la risposta contiene un nuovo `refresh_token` e quello usato viene invalidato subito. `getCanvaToken` ripersiste sempre `td.refresh_token` in `canva_auth`; se il refresh fallisce lancia `CANVA_NOT_CONNECTED` invece di ricadere su un access_token scaduto (→ era la causa di *"Access token is invalid"*: gli endpoint rinnovavano l'access_token senza salvare il refresh_token ruotato, e la volta dopo il refresh moriva). *Sta in `canva-lib.js` e non in un file suo per non superare il limite di 12 Serverless Functions del deploy — ogni file in `api/` conta come funzione.*
 
 ### Autofill — `api/canva-lib.js` `runAutofill()` (condiviso da canva-create / canva-carousel / canva-export)
 Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ `Unknown endpoint`). Flusso corrente:
