@@ -238,10 +238,10 @@ export default async function handler(req, res) {
           ...(userBizList.data?.data || []).map(b => b.id),
         ].filter(Boolean))];
         const bizDetail = await Promise.all(bizIds.map(async bid => {
-          const [own, cli, igs] = await Promise.all([
+          const [own, cli, assigned] = await Promise.all([
             fbGraph(token, `${bid}/owned_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
             fbGraph(token, `${bid}/client_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
-            fbGraph(token, `${bid}/instagram_accounts`, { fields: "username", limit: 50 }),
+            fbGraph(token, `${bid}/assigned_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
           ]);
           return {
             id: bid,
@@ -249,10 +249,15 @@ export default async function handler(req, res) {
             owned_err: own.ok ? null : own.data?.error?.message,
             client_ad_accounts: (cli.data?.data || []).map(a => ({ name: a.name, id: a.id })),
             client_err: cli.ok ? null : cli.data?.error?.message,
-            instagram_accounts: (igs.data?.data || []).map(x => x.username),
-            ig_err: igs.ok ? null : igs.data?.error?.message,
+            assigned_ad_accounts: (assigned.data?.data || []).map(a => ({ name: a.name, id: a.id })),
+            assigned_err: assigned.ok ? null : assigned.data?.error?.message,
           };
         }));
+        const [assignedAA, pageAds] = await Promise.all([
+          fbGraph(token, "me/assigned_ad_accounts", { fields: "name,id", limit: 100 }),
+          // Post della Pagina AURA che hanno un'inserzione dietro
+          fbGraph(token, `${(pages.data?.data || [])[0]?.id || "0"}/ads_posts`, { fields: "id,message,promotion_status", limit: 10 }).catch(() => ({ data: {} })),
+        ]);
 
         return res.status(200).json({
           ok: true,
@@ -267,6 +272,9 @@ export default async function handler(req, res) {
           business_detail: bizDetail,
           user_businesses: (userBizList.data?.data || []),
           user_businesses_error: userBizList.ok ? null : userBizList.data?.error?.message,
+          me_assigned_ad_accounts: (assignedAA.data?.data || []).map(a => ({ name: a.name, id: a.id })),
+          me_assigned_err: assignedAA.ok ? null : assignedAA.data?.error?.message,
+          aura_page_ads_posts: pageAds.data?.data || pageAds.data?.error?.message || null,
           ad_accounts: (adAcc.data?.data || []).map(a => ({ name: a.name, id: a.id })),
         });
       }
