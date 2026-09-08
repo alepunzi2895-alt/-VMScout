@@ -50,7 +50,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
 | `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
 | `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, e `imageUrl` opzionale — se il client passa `imageUrl` (foto suggerita scelta a mano nella modale di Visual Scout) si usa quella, altrimenti fallback su ricerca Pexels dalla `search_query` |
-| `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone un **carosello intero** in un solo design: upload di tutte le immagini delle slide + un solo autofill su un template con placeholder ripetuti (vedi §7) |
+| `api/canva-carousel.js` | `POST /api/canva-carousel` | Compone le slide di un carosello: upload immagini + **un autofill del template POST per slide** → restituisce la lista di N design (`data.designs`). Body: `slides[]`, `postTemplateId`, `format`. Vedi §7 |
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
 | `api/canva-test.js` | `GET /api/canva-test` | Diagnostica upload Canva |
 
@@ -68,7 +68,7 @@ Canva a volte impiega minuti per elaborare upload/autofill → non c'è modo di 
 1. Client `POST` col body normale.
 2. Il server fa fino a ~48s di lavoro; se un job Canva è ancora in corso risponde **HTTP 202** `{ pending: true, phase, resume: {...} }`. `resume` contiene solo job-id opachi di Canva (nessuna tabella DB).
 3. Il client (`handleCreate` in `App.jsx`) rimanda `{ ...body, resume }` ogni 3s finché ottiene `{ ok }` o un errore. Cap client: 5 minuti. Il pulsante mostra `progress` ("Caricamento sfondo…" / "Composizione…").
-`uploadUrlAsset` e `runAutofill` accettano `resumeJobId` per riprendere il solo polling. Stati `resume`: `upload` (job asset-uploads) → `autofill` (job autofills). Il carosello ha `slots[]` (un job/asset per slide) nel `resume`.
+`uploadUrlAsset` e `runAutofill` accettano `resumeJobId` per riprendere il solo polling. Stati `resume`: **canva-create** `upload` → `autofill`; **canva-carousel** `upload` (job asset-uploads, `slots[]`) → `slides` (un job autofill per slide, `slideJobs[]`).
 
 ### Token OAuth Canva — `getCanvaToken(db)` in `api/canva-lib.js` (punto UNICO)
 Ogni endpoint Canva (`canva-create`, `canva-carousel`, `canva-scaffold`, `canva-upload`, `canva-export`) legge il token **solo** da qui. Canva **ruota** il `refresh_token` a ogni `POST /v1/oauth/token`: la risposta contiene un nuovo `refresh_token` e quello usato viene invalidato subito. `getCanvaToken` ripersiste sempre `td.refresh_token` in `canva_auth`; se il refresh fallisce lancia `CANVA_NOT_CONNECTED` invece di ricadere su un access_token scaduto (→ era la causa di *"Access token is invalid"*: gli endpoint rinnovavano l'access_token senza salvare il refresh_token ruotato, e la volta dopo il refresh moriva). *Sta in `canva-lib.js` e non in un file suo per non superare il limite di 12 Serverless Functions del deploy — ogni file in `api/` conta come funzione.*
@@ -84,12 +84,16 @@ Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ 
 
 ### Campi autofill attesi dai template (configurati 2026-09-07 via Canva MCP)
 - **post / story / reel** (`EAHUiCrR7F8` / `EAHUiIqblm4` / `EAHUiDPEzhU`): `Immagine_Sfondo` (image, elemento full-bleed dietro al testo) + `Testo_Post` (text).
-- **carosello** (`EAHUiOe8TUA`): template a **6 pagine**. ⚠️ **2026-09-08: verificato in Canva che le 6 pagine hanno SOLO un elemento testo + sfondo pagina nero — NESSUNA cornice/immagine taggata come campo autofill.** Per questo il carosello esce con solo il testo. `canva-carousel.js` manda l'immagine sotto più nomi (`Image_N`/`Immagine_N`/`Sfondo_N`/`Foto_N`/`Background_N`/`Photo_N`/`Img_N`) ma nessuno combacia perché il campo immagine non esiste proprio.
-- **Fix necessario nel template**: per ogni pagina 1-6, aggiungere una **cornice immagine full-bleed** (Elementi → Cornici → quadrato, ridimensionata a coprire la pagina, portata dietro al testo), poi con la cornice selezionata assegnarle il nome campo `Image_1` … `Image_6` (nel Brand Template editor: seleziona elemento → tag/nome campo). Ripubblicare il Modello del brand (stesso ID).
+- **carosello**: ⚠️ il template `EAHUiOe8TUA` (6 pagine testo su nero, nessun campo immagine) **NON è più usato**. Vedi sotto.
 - Non abbiamo lo scope `brandtemplate:content:read` (non abilitato per l'app Canva) → `runAutofill` non può leggere il dataset e filtrare/diagnosticare i campi. `/api/canva-test?dataset=<id>` per verificarlo dà 403.
 
-### Carosello dinamico — `trimTrailingPages()` in `canva-lib.js`
-Il template carosello ha 6 pagine fisse. Dopo l'autofill, `canva-carousel.js` chiama `trimTrailingPages({token, designId, keep: nSlide})` → **Design Merge API** (`POST /v1/merges`, `type:"modify_existing_design"`, `operations:[{type:"delete_pages", page_numbers:[keep+1..total]}]`, poll `GET /v1/merges/{jobId}`) per eliminare le pagine oltre il numero di slide. Best-effort: se fallisce il carosello resta valido con pagine vuote in coda. Scope OAuth VMScout: `design:content:write asset:write design:meta:read` (già presenti).
+### Carosello = N design separati (dal 2026-09-09)
+Il template carosello a 6 pagine non mostrava mai le foto (riquadri non taggati come campi autofill) e la **Design Merge API** per unire N design è **preview e non funzionante** per il nostro account (`insert_pages` risponde `success` ma non aggiunge pagine — verificato). Quindi `canva-carousel.js` ora:
+1. carica le N immagini (`startImageUpload` → `slots[i].assetId`);
+2. per ogni slide fa un `startAutofillJob` sul **template del POST SINGOLO** (`postTemplateId` = `canvaTemplates.post`, campi `Immagine_Sfondo`+`Testo_Post`/`Caption`) → N design da 1 pagina, sfondo foto funzionante;
+3. risponde `{ok, designs:[{url,caption,hasImage}], slidesFilled, ...}`.
+
+Il modale `CarouselComposer` elenca "Slide 1..N" cliccabili; l'utente apre ogni design, scarica le immagini e le carica su IG come carosello. Fasi cicliche `resume.stage`: `upload` → `slides`. `trimTrailingPages()` in `canva-lib.js` è ormai codice morto (nessuno lo chiama).
 
 ---
 
@@ -136,7 +140,7 @@ Meta espone **due famiglie di access token non intercambiabili tra host**:
 - **Design System**: tema scuro (`#0D0D0D`/`#080808` sfondo, `#F0EBE3` testo chiaro), accenti gold `#C9A96E`/`#8B7355`. Font: **`Space Grotesk`** per tutta la UI e i titoli (geometrico/futuristico), **`JetBrains Mono`** per tech/etichette/ID. Caricati in `index.html`; base globale (tipografia, scrollbar, `::selection`, focus glow, sfondo a gradiente radiale, hover `brightness`) in `src/theme.css` (importato in `main.jsx`). Look "tondeggiante": raggi ampi (card ~16-20, bottoni ~12-14, pill ~20+) — token `--r-*` in `theme.css`. Navbar in glassmorphism (`backdrop-filter: blur`). Non reintrodurre `DM Sans`/`Montserrat`/`Instrument Serif`.
 - **Foto**: usare sempre sia Pexels che Pixabay per diversità. Per i caroselli ogni slide deve avere una `search_query` diversa.
 - **Query di ricerca immagini**: preferire soggetti/location ampiamente taggati nelle stock library invece di nomi di luogo di nicchia (spesso restituiscono 0 risultati). `fetchImages`/`fetchVideos` in `App.jsx` fanno comunque un retry automatico allargando la query (tolgono l'ultima parola progressivamente) se la ricerca esatta non trova nulla — vedi `broadenAttempts()`. Ogni `search_query` generata dal system prompt deve essere **globalmente unica** in tutta la risposta (non solo all'interno della singola sezione).
-- **Canva senza template fissi per-slide**: `api/canva-carousel.js` compila un intero carosello in una sola chiamata usando un template con placeholder ripetuti `Image_N`/`Testo_N` (configurato una volta in Canva Studio), invece di richiedere un design per slide.
+- **Carosello Canva = N design separati**: `api/canva-carousel.js` compone ogni slide con il template del **post singolo** (`canvaTemplates.post`) e restituisce la lista dei design (`data.designs`). NON esiste un template carosello a N pagine funzionante e la Merge API per unirli è preview/non funzionante. Vedi §7.
 - **Crea design da suggerimento (Visual Scout)**: ogni slide del Post Composer ha il pulsante "✦ Crea design" → `CanvaQuickDesignModal` (portale, dark). Precompilata con caption/query/cta; l'utente sceglie formato e UNA foto suggerita, "🔀 Auto", **oppure incolla un URL immagine** (Pinterest `i.pinimg.com/...`, sito, ecc. — Canva lo scarica server-side via `url-asset-uploads`). Invia a `/api/canva-create` con `imageUrl`; al successo salva in `canva_designs`. Stessa opzione URL per riga in `RowImagePicker` del carosello.
 - **Composer carosello (Visual Scout)**: `CarouselComposer` (era `CanvaCarouselBtn`) — modale con le slide di partenza editabili + aggiungi/rimuovi/riordina pagine, foto per pagina (`RowImagePicker`), e "+ Da design creato" che aggiunge una pagina riusando `thumb_url`+`title` di un design in `canva_designs`. Max 10 pagine → `/api/canva-carousel` → salva in `canva_designs` (`kind: "carousel"`).
 - **Canva Studio = libreria**: non c'è più "Crea design rapido"; al suo posto `CreatedDesignsPanel` (galleria dei `canva_designs` del progetto, con apri/elimina). La creazione vive in Visual Scout.
