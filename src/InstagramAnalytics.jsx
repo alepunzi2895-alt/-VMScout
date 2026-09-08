@@ -811,6 +811,8 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [tokenPaste, setTokenPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
+  const [datePreset, setDatePreset] = useState(() => localStorage.getItem("fb_ads_date") || "last_90d");
+  useEffect(() => { try { localStorage.setItem("fb_ads_date", datePreset); } catch {} }, [datePreset]);
   // Account IG rilevati tra le sponsorizzate caricate (server risolve a._ig).
   const igOptions = (() => {
     const map = new Map();
@@ -871,10 +873,14 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
     setErr(""); setLoading("ads"); setAds(null);
     localStorage.setItem("fb_ad_account", acctId);
     try {
-      const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "ads", ad_account_id: acctId, date_preset: "last_90d" }) });
-      const d = await r.json();
-      if (d.error) throw new Error(d.message || d.error);
-      const list = d.ads || [];
+      const targets = acctId === "__all__" ? (accounts || []).map(a => a.id) : [acctId];
+      const results = await Promise.all(targets.map(async id => {
+        const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "ads", ad_account_id: id, date_preset: datePreset }) });
+        const d = await r.json();
+        if (d.error) throw new Error(d.message || d.error);
+        return (d.ads || []).map(a => ({ ...a, _acct: id }));
+      }));
+      const list = results.flat();
       setAds(list);
       const now = new Date().toISOString();
       setFetchedAt(now);
@@ -1014,13 +1020,22 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
         <select value={acctId} onChange={e => setAcctId(e.target.value)}
-          style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 12, minWidth: 200 }}>
+          style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 12, minWidth: 180 }}>
           {accounts === null && <option>Carico account…</option>}
+          {accounts?.length > 1 && <option value="__all__">Tutti gli account pubblicitari</option>}
           {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
           {accounts?.length === 0 && <option value="">Nessun account pubblicitario</option>}
         </select>
+        <select value={datePreset} onChange={e => setDatePreset(e.target.value)}
+          style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 12 }}>
+          <option value="last_30d">Ultimi 30 giorni</option>
+          <option value="last_90d">Ultimi 90 giorni</option>
+          <option value="this_year">Quest'anno</option>
+          <option value="last_year">Anno scorso</option>
+          <option value="maximum">Sempre</option>
+        </select>
         <button onClick={loadAds} disabled={!acctId || loading === "ads"} style={{ ...goldBtn(!acctId || loading === "ads"), fontSize: 10 }}>
-          {loading === "ads" ? "Carico…" : "Carica sponsorizzate (90gg)"}
+          {loading === "ads" ? "Carico…" : "Carica sponsorizzate"}
         </button>
         {shownAds?.length > 0 && (
           <button onClick={analyzeAds} disabled={analyzing}
@@ -1031,16 +1046,23 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
       </div>
 
       {ads?.length > 0 && igOptions.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: WARM_GREY }}>Account Instagram:</span>
-          <select value={igFilter} onChange={e => setIgFilter(e.target.value)}
-            style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "6px 8px", fontSize: 11 }}>
-            {autoMatch && <option value="auto">@{autoMatch.username} (del progetto)</option>}
-            <option value="all">Tutti gli account ({ads.length})</option>
-            {igOptions.map(o => (
-              <option key={o.key} value={o.key}>{o.username ? `@${o.username}` : `ID ${o.id}`} ({o.count})</option>
-            ))}
-          </select>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: WARM_GREY }}>Account Instagram:</span>
+            <select value={igFilter} onChange={e => setIgFilter(e.target.value)}
+              style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "6px 8px", fontSize: 11 }}>
+              {autoMatch && <option value="auto">@{autoMatch.username} (del progetto)</option>}
+              <option value="all">Tutti gli account ({ads.length})</option>
+              {igOptions.map(o => (
+                <option key={o.key} value={o.key}>{o.username ? `@${o.username}` : `ID ${o.id}`} ({o.count})</option>
+              ))}
+            </select>
+          </div>
+          {!autoMatch && handle && (
+            <div style={{ fontSize: 10, color: "#E4A050", marginTop: 6 }}>
+              Nessuna sponsorizzata di @{handle} in questo periodo/account. Trovate: {igOptions.map(o => o.username ? `@${o.username}` : `ID ${o.id}`).join(", ")}. Prova "Sempre" o "Tutti gli account pubblicitari" qui sopra.
+            </div>
+          )}
         </div>
       )}
 
