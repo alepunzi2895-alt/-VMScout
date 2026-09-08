@@ -112,16 +112,79 @@ export function bustedUrl(url) {
   }
 }
 
-// Carica un'immagine su Canva da URL (job asincrono) e ne restituisce l'asset_id.
-// Prova prima la versione normalizzata/ridimensionata, poi l'URL grezzo.
+// Scarica i byte dell'immagine e li carica su Canva col metodo BINARIO
+// (`POST /v1/asset-uploads`). A differenza di `url-asset-uploads`, qui Canva NON
+// deve fare un fetch esterno da Unsplash/Pexels (che la lasciava "in_progress"
+// 40s+): riceve già i byte e il job si chiude in pochi secondi.
+async function uploadBinaryAsset({ token, url, name, stopAt }) {
+  let bytes;
+  try {
+    const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined;
+    const imgRes = await fetch(url, { headers: { "User-Agent": "VMScout/1.0" }, signal });
+    if (!imgRes.ok) return { assetId: null, error: `Immagine non scaricabile (HTTP ${imgRes.status}).` };
+    bytes = Buffer.from(await imgRes.arrayBuffer());
+  } catch (e) {
+    return { assetId: null, error: `Download immagine fallito: ${e.message}` };
+  }
+  if (!bytes?.length) return { assetId: null, error: "Immagine vuota." };
+  if (bytes.length > 45 * 1024 * 1024) return { assetId: null, error: "Immagine troppo grande (>45MB)." };
+
+  const safeName = (String(name).replace(/[^\w.\- ]/g, "").trim() || "vmscout").slice(0, 50);
+  let d;
+  try {
+    const r = await fetch(`${CANVA_API}/asset-uploads`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/octet-stream",
+        "Asset-Upload-Metadata": JSON.stringify({ name_base64: Buffer.from(safeName, "utf8").toString("base64") }),
+      },
+      body: bytes,
+    });
+    d = await r.json().catch(() => ({}));
+    if (r.status === 401 || r.status === 403) {
+      return { assetId: null, stop: true, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
+    }
+    if (!r.ok || !d?.job?.id) {
+      return { assetId: null, error: `Canva ha rifiutato l'upload binario (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.` };
+    }
+  } catch (e) {
+    return { assetId: null, error: `Errore di rete verso Canva: ${e.message}` };
+  }
+
+  const jobId = d.job.id;
+  let job = d.job;
+  while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
+    await new Promise(res => setTimeout(res, 1200));
+    const poll = await fetch(`${CANVA_API}/asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
+    job = (await poll.json().catch(() => ({})))?.job ?? job;
+  }
+  if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
+  return {
+    assetId: null,
+    error: job.status === "failed"
+      ? `Canva: ${job.error?.message || job.error?.code || "elaborazione immagine fallita"}`
+      : `Upload immagine ancora in corso (job ${job.status}).`,
+  };
+}
+
+// Carica un'immagine su Canva e ne restituisce l'asset_id. Prima prova il metodo
+// binario (veloce), poi come fallback `url-asset-uploads` (Canva scarica l'URL).
 // `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
-// `deadline` (ms assoluti) limita create + polling di TUTTI i candidati, così il
+// `deadline` (ms assoluti) limita TUTTO (download + create + polling), così il
 // chiamante può garantire che upload + autofill stiano sotto il maxDuration:60.
 export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadline }) {
   if (!url) return { assetId: null, error: "URL immagine mancante" };
-  const stopAt = deadline || (Date.now() + 40_000);
+  const stopAt = deadline || (Date.now() + 45_000);
+
+  // Metodo 1: byte scaricati da noi → upload binario.
+  const bin = await uploadBinaryAsset({ token, url: sizedImageUrl(url), name, stopAt });
+  if (bin.assetId) return { assetId: bin.assetId };
+  if (bin.stop) return { assetId: null, error: bin.error };
+  let lastErr = bin.error || "Canva non è riuscita a caricare l'immagine.";
+
+  // Metodo 2 (fallback): url-asset-uploads.
   const candidates = [...new Set([sizedImageUrl(url), url])];
-  let lastErr = "Canva non è riuscita a caricare l'immagine.";
   for (let i = 0; i < candidates.length && Date.now() < stopAt; i++) {
     const candidate = candidates[i];
     try {
