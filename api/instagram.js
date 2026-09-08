@@ -190,29 +190,31 @@ export default async function handler(req, res) {
     try {
       if (body.fb_action === "adaccounts") {
         const fields = "id,name,currency,account_status";
-        // Le promozioni fatte dall'app Instagram girano su un ad account del
-        // Business della Pagina collegata → NON sempre in me/adaccounts. Le
-        // raccogliamo da tre fonti: me/adaccounts, me/businesses (serve
-        // business_management), e me/accounts → pagina → business → ad accounts.
-        const [mine, biz, pages] = await Promise.all([
+        // Le promozioni fatte dall'app Instagram girano su un ad account di un
+        // Business, spesso NON in me/adaccounts. Raccogliamo da: me/adaccounts +
+        // ogni Business dell'utente (<uid>/businesses, non me/businesses che è
+        // buggato) → owned_ad_accounts + client_ad_accounts.
+        const meR = await fbGraph(token, "me", { fields: "id" });
+        const uid = meR.data?.id;
+        const [mine, ubiz] = await Promise.all([
           fbGraph(token, "me/adaccounts", { fields, limit: 200 }),
-          fbGraph(token, "me/businesses", { fields: `owned_ad_accounts{${fields}},client_ad_accounts{${fields}}`, limit: 50 }),
-          fbGraph(token, "me/accounts", { fields: `name,business{owned_ad_accounts{${fields}},client_ad_accounts{${fields}}}`, limit: 100 }),
+          uid ? fbGraph(token, `${uid}/businesses`, { fields: "id,name", limit: 50 }) : Promise.resolve({ data: {} }),
         ]);
-        if (!mine.ok && !biz.ok && !pages.ok) {
-          return res.status(mine.status || 400).json({ error: mine.data?.error?.message || "Errore Meta", details: mine.data });
-        }
         const byId = new Map();
         const add = a => a?.id && byId.set(a.id, a);
         (mine.data?.data || []).forEach(add);
-        (biz.data?.data || []).forEach(b => {
-          (b.owned_ad_accounts?.data || []).forEach(add);
-          (b.client_ad_accounts?.data || []).forEach(add);
-        });
-        (pages.data?.data || []).forEach(p => {
-          (p.business?.owned_ad_accounts?.data || []).forEach(add);
-          (p.business?.client_ad_accounts?.data || []).forEach(add);
-        });
+        const bizIds = (ubiz.data?.data || []).map(b => b.id);
+        await Promise.all(bizIds.map(async bid => {
+          const [own, cli] = await Promise.all([
+            fbGraph(token, `${bid}/owned_ad_accounts`, { fields, limit: 100 }),
+            fbGraph(token, `${bid}/client_ad_accounts`, { fields, limit: 100 }),
+          ]);
+          (own.data?.data || []).forEach(add);
+          (cli.data?.data || []).forEach(add);
+        }));
+        if (!byId.size && !mine.ok) {
+          return res.status(mine.status || 400).json({ error: mine.data?.error?.message || "Errore Meta", details: mine.data });
+        }
         return res.status(200).json({ ok: true, accounts: [...byId.values()] });
       }
 
@@ -227,9 +229,14 @@ export default async function handler(req, res) {
           fbGraph(token, "me/adaccounts", { fields: "name,account_status", limit: 200 }),
         ]);
 
-        // Ogni business trovato (dalle Pagine) interrogato DIRETTAMENTE per i suoi
-        // ad account e account IG — più affidabile del campo annidato.
-        const bizIds = [...new Set((pages.data?.data || []).map(p => p.business?.id).filter(Boolean))];
+        const userBizList = uid ? await fbGraph(token, `${uid}/businesses`, { fields: "id,name", limit: 50 }) : { data: {} };
+
+        // Ogni business (dalle Pagine E da <uid>/businesses) interrogato
+        // DIRETTAMENTE per i suoi ad account e account IG.
+        const bizIds = [...new Set([
+          ...(pages.data?.data || []).map(p => p.business?.id),
+          ...(userBizList.data?.data || []).map(b => b.id),
+        ].filter(Boolean))];
         const bizDetail = await Promise.all(bizIds.map(async bid => {
           const [own, cli, igs] = await Promise.all([
             fbGraph(token, `${bid}/owned_ad_accounts`, { fields: "name,id,account_status", limit: 50 }),
@@ -247,8 +254,6 @@ export default async function handler(req, res) {
           };
         }));
 
-        const userBiz = uid ? await fbGraph(token, `${uid}/businesses`, { fields: "id,name", limit: 50 }) : { data: {} };
-
         return res.status(200).json({
           ok: true,
           me: meR.data,
@@ -260,9 +265,9 @@ export default async function handler(req, res) {
           })),
           pages_error: pages.ok ? null : pages.data?.error?.message,
           business_detail: bizDetail,
-          user_businesses: (userBiz.data?.data || []),
-          user_businesses_error: userBiz.ok ? null : userBiz.data?.error?.message,
-          ad_accounts: (adAcc.data?.data || []).map(a => a.name),
+          user_businesses: (userBizList.data?.data || []),
+          user_businesses_error: userBizList.ok ? null : userBizList.data?.error?.message,
+          ad_accounts: (adAcc.data?.data || []).map(a => ({ name: a.name, id: a.id })),
         });
       }
 
