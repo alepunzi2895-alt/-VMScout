@@ -589,11 +589,12 @@ const CAROUSEL_MAX_PAGES = 10;
 
 // Selettore foto compatto per una riga del composer carosello: mostra la foto
 // scelta o "Auto", ed espande una griglia di risultati per la query della riga.
-function RowImagePicker({ query, imageUrl, onPick, source: sourceProp }) {
+function RowImagePicker({ query, imageUrl, onPick, source: sourceProp, onSourceChange }) {
   const [openGrid, setOpenGrid] = useState(false);
   const [imgs, setImgs] = useState(null);
   const [loading, setLoading] = useState(false);
   const source = sourceProp || defaultPhotoSource() || "pexels";
+  const availSources = Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]);
 
   useEffect(() => {
     if (!openGrid) return;
@@ -620,6 +621,12 @@ function RowImagePicker({ query, imageUrl, onPick, source: sourceProp }) {
             style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid #262626", background: "transparent", color: "#666", fontSize: 10, cursor: "pointer" }}>
             ✕ auto
           </button>
+        )}
+        {onSourceChange && availSources.length > 1 && (
+          <select value={source} onChange={e => onSourceChange(e.target.value)} title="Fonte foto di questa pagina"
+            style={{ marginLeft: "auto", background: "#141414", border: "1px solid #262626", borderRadius: 8, color: "#888", fontSize: 10, padding: "4px 6px", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+            {availSources.map(([k, s]) => <option key={k} value={k}>{s.name}</option>)}
+          </select>
         )}
       </div>
       {openGrid && (
@@ -668,9 +675,10 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
   const [pickerOpen, setPickerOpen] = useState(false);
   const [progress, setProgress] = useState("");
   const [photosLoading, setPhotosLoading] = useState(false);
+  // Fonte foto PREDEFINITA (usata per le pagine nuove e dal pulsante "applica a
+  // tutte"). Ogni pagina ha però la sua `source` sovrascrivibile.
   const [source, setSource] = useState(() => photoSource || defaultPhotoSource() || "pexels");
-  // Pagine con foto scelta a mano dall'utente: il precarico (apertura o cambio
-  // fonte) non le tocca.
+  // Pagine con foto scelta a mano dall'utente: il precarico non le tocca.
   const lockedRef = useRef(new Set());
 
   function pickImage(i, u) {
@@ -678,21 +686,55 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
     setPages(p => p.map((row, idx) => idx === i ? { ...row, image_url: u } : row));
   }
 
+  // Precarica per la pagina `i` la prima foto della fonte `src` per la sua query.
+  function prefetchRow(i, q, src) {
+    const query = (q || "").trim();
+    if (!query) return;
+    fetchImages(query, "portrait", src).then(o => {
+      const first = o?.results?.[0];
+      const u = first?.full || first?.thumb;
+      if (u && !lockedRef.current.has(i)) setPages(p => p.map((row, idx) => idx === i ? { ...row, image_url: u } : row));
+    }).catch(() => {});
+  }
+
+  // Cambia la fonte di UNA pagina e ricarica la sua foto suggerita.
+  function setRowSource(i, src, q) {
+    lockedRef.current.delete(i);
+    setPages(p => p.map((row, idx) => idx === i ? { ...row, source: src } : row));
+    prefetchRow(i, q, src);
+  }
+
+  // Cambia la fonte predefinita e la applica a tutte le pagine non bloccate.
+  function setDefaultSource(src) {
+    setSource(src);
+    setPages(p => p.map((row, idx) => lockedRef.current.has(idx) ? row : { ...row, source: src }));
+    setPhotosLoading(true);
+    Promise.allSettled(
+      pages.map((row, i) => (lockedRef.current.has(i) || !(row.search_query || "").trim())
+        ? Promise.resolve()
+        : fetchImages(row.search_query.trim(), "portrait", src).then(o => {
+            const first = o?.results?.[0]; const u = first?.full || first?.thumb;
+            if (u && !lockedRef.current.has(i)) setPages(p => p.map((r, idx) => idx === i ? { ...r, image_url: u } : r));
+          }))
+    ).finally(() => setPhotosLoading(false));
+  }
+
   useEffect(() => {
     if (!open) return;
     lockedRef.current = new Set();
-    setSource(photoSource || defaultPhotoSource() || "pexels");
+    const def = photoSource || defaultPhotoSource() || "pexels";
+    setSource(def);
     setPages((initialSlides || []).map(s => ({
-      caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null,
+      caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null, source: def,
     })));
     setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false); setProgress("");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // All'apertura (e a ogni cambio di fonte) precarica per ogni pagina non
-  // "bloccata" la prima foto della fonte scelta per la sua query.
+  // All'apertura: precarica per ogni pagina non bloccata la prima foto della sua
+  // fonte per la sua query.
   useEffect(() => {
     if (!open) return;
-    const src = source;
+    const def = photoSource || defaultPhotoSource() || "pexels";
     const toFetch = (initialSlides || [])
       .map((s, i) => ({ i, q: (s.search_query || "").trim() }))
       .filter(x => x.q && !lockedRef.current.has(x.i));
@@ -700,7 +742,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
     let active = true;
     setPhotosLoading(true);
     Promise.allSettled(toFetch.map(x =>
-      fetchImages(x.q, "portrait", src).then(o => {
+      fetchImages(x.q, "portrait", def).then(o => {
         if (!active || lockedRef.current.has(x.i)) return;
         const first = o?.results?.[0];
         const u = first?.full || first?.thumb;
@@ -708,7 +750,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
       })
     )).finally(() => { if (active) setPhotosLoading(false); });
     return () => { active = false; };
-  }, [open, source]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(i, key, val) {
     setPages(p => p.map((row, idx) => idx === i ? { ...row, [key]: val } : row));
@@ -723,7 +765,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
     });
   }
   function removeRow(i) { setPages(p => p.filter((_, idx) => idx !== i)); }
-  function addBlank() { setPages(p => p.length >= CAROUSEL_MAX_PAGES ? p : [...p, { caption: "", search_query: "", image_url: null }]); }
+  function addBlank() { setPages(p => p.length >= CAROUSEL_MAX_PAGES ? p : [...p, { caption: "", search_query: "", image_url: null, source }]); }
 
   async function openDesignPicker() {
     setPickerOpen(true);
@@ -826,10 +868,12 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Fonte foto</div>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>
+                Fonte foto predefinita <span style={{ opacity: 0.6, textTransform: "none", letterSpacing: 0 }}>· applica a tutte le pagine (poi puoi cambiarla per singola pagina)</span>
+              </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {Object.entries(PHOTO_SOURCES).filter(([k, s]) => s.apiUrl && API_KEYS[k]).map(([k, s]) => (
-                  <button key={k} type="button" onClick={() => setSource(k)}
+                  <button key={k} type="button" onClick={() => setDefaultSource(k)}
                     style={{ padding: "5px 12px", borderRadius: 10, border: `1px solid ${source === k ? "#00C4CC" : "#262626"}`, background: source === k ? "rgba(0,196,204,0.12)" : "transparent", color: source === k ? "#00C4CC" : "#888", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
                     {s.name}
                   </button>
@@ -854,7 +898,8 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
                   <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query foto (EN, max 3 parole)"
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
-                  <RowImagePicker query={row.search_query} imageUrl={row.image_url} source={source} onPick={u => pickImage(i, u)} />
+                  <RowImagePicker query={row.search_query} imageUrl={row.image_url} source={row.source || source}
+                    onPick={u => pickImage(i, u)} onSourceChange={src => setRowSource(i, src, row.search_query)} />
                 </div>
               ))}
             </div>
