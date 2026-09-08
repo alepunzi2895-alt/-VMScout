@@ -43,8 +43,17 @@ export default async function handler(req, res) {
   // feature) funziona per l'account.
   if (req.query.video) {
     const TPL = String(req.query.video).split(/[/?#\s]/)[0];
-    const VURL = "https://videos.pexels.com/video-files/3571264/3571264-hd_1080_1920_30fps.mp4"; // ~4MB, portrait
     const dbg = [];
+    // prendi un vero URL video da Pexels (chiave su Vercel)
+    let VURL = "";
+    try {
+      const pr = await fetch("https://api.pexels.com/videos/search?query=ocean%20aerial&per_page=3&orientation=portrait", { headers: { Authorization: process.env.VITE_PEXELS_KEY || "" } });
+      const pj = await pr.json();
+      const vf = (pj.videos?.[0]?.video_files || []).sort((a, b) => (a.width || 0) - (b.width || 0));
+      VURL = (vf.find(f => (f.width || 0) >= 720) || vf[0])?.link || "";
+      dbg.push({ step: "pexels video", url: VURL, all: (pj.videos?.[0]?.video_files || []).map(f => ({ w: f.width, h: f.height, link: f.link })) });
+    } catch (e) { dbg.push({ step: "pexels error", error: e.message }); }
+    if (!VURL) return res.status(200).json({ ok: false, step: "no video url", dbg });
     const g = async (path, init) => {
       const r = await fetch(`${CANVA_API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers || {}) } });
       const j = await r.json().catch(() => ({}));
