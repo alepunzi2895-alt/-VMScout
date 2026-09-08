@@ -61,14 +61,31 @@ export default async function handler(req, res) {
       }
       return { status: "timeout" };
     };
-    const pageCount = async (id) => {
-      const { j } = await g(`/designs/${id}`);
-      return j?.design?.page_count ?? j?.page_count ?? null;
+    const pageInfo = async (id) => {
+      const a = await g(`/designs/${id}`);
+      const b = await g(`/designs/${id}/pages`);
+      return {
+        page_count: a.j?.design?.page_count ?? a.j?.page_count ?? null,
+        pages_len: Array.isArray(b.j?.items) ? b.j.items.length : (Array.isArray(b.j?.pages) ? b.j.pages.length : null),
+        pages_raw: b.j,
+      };
+    };
+    const doMerge = async (label, body) => {
+      const { status, j: mj } = await g(`/merges`, { method: "POST", body: JSON.stringify(body) });
+      if (!mj || (!mj.job && !mj.id)) { dbg.push({ step: label, httpStatus: status, createResp: mj }); return null; }
+      const job = await pollJob("merges", (mj.job ?? mj).id);
+      const resultId = job.result?.design?.id;
+      dbg.push({
+        step: label, httpStatus: status, jobStatus: job.status, jobError: job.error || null,
+        sent: body, resultDesignId: resultId,
+        resultPageInfo: resultId ? await pageInfo(resultId) : null,
+      });
+      return resultId;
     };
 
-    // 1) crea 3 autofill
+    // 1) crea 2 autofill (1 pagina ciascuno)
     const designIds = [];
-    for (let n = 1; n <= 3; n++) {
+    for (let n = 1; n <= 2; n++) {
       const { j: cj } = await g(`/autofills`, {
         method: "POST",
         body: JSON.stringify({
@@ -80,31 +97,31 @@ export default async function handler(req, res) {
       const job = await pollJob("autofills", (cj.job ?? cj).id);
       const id = job.result?.design?.id;
       designIds.push(id);
-      dbg.push({ step: `autofill ${n}`, jobStatus: job.status, designId: id, pages: await pageCount(id) });
+      dbg.push({ step: `autofill ${n}`, jobStatus: job.status, designId: id, info: await pageInfo(id) });
     }
+    const [A, B] = designIds;
 
-    // 2) merge a catena: base = designIds[0], append designIds[1], poi [2]
-    let base = designIds[0];
-    for (let k = 1; k < designIds.length; k++) {
-      const { status, j: mj } = await g(`/merges`, {
-        method: "POST",
-        body: JSON.stringify({
-          type: "modify_existing_design", design_id: base,
-          operations: [{ type: "insert_pages", source: { type: "design", design_id: designIds[k], page_numbers: [1] } }],
-        }),
+    // 2) varianti di insert_pages su modify_existing_design(A) inserendo da B
+    await doMerge("modify A: insert B all pages, append", {
+      type: "modify_existing_design", design_id: A,
+      operations: [{ type: "insert_pages", source: { type: "design", design_id: B } }],
+    });
+    await doMerge("modify A: insert B page_numbers[1], after 1", {
+      type: "modify_existing_design", design_id: A,
+      operations: [{ type: "insert_pages", source: { type: "design", design_id: B }, after_page_number: 1 }],
+    });
+    // 3) create_new_design inserendo tutte le pagine di A
+    const NN = await doMerge("create_new: insert A all pages", {
+      type: "create_new_design", title: "DBG merged",
+      operations: [{ type: "insert_pages", source: { type: "design", design_id: A } }],
+    });
+    if (NN) {
+      await doMerge("modify NEW: insert B all pages append", {
+        type: "modify_existing_design", design_id: NN,
+        operations: [{ type: "insert_pages", source: { type: "design", design_id: B } }],
       });
-      const job = await pollJob("merges", (mj.job ?? mj).id);
-      const resultId = job.result?.design?.id;
-      dbg.push({
-        step: `merge append ${k}`, httpStatus: status, jobStatus: job.status,
-        jobError: job.error || null,
-        baseSent: base, resultDesignId: resultId,
-        resultPages: resultId ? await pageCount(resultId) : null,
-        basePagesAfter: await pageCount(base),
-      });
-      if (resultId) base = resultId;
     }
-    return res.status(200).json({ ok: true, finalDesign: base, finalUrl: `https://www.canva.com/design/${base}/edit`, designIds, dbg });
+    return res.status(200).json({ ok: true, designIds, dbg });
   }
 
   // 1. scarica i byte della foto di prova
