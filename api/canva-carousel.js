@@ -42,6 +42,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Budget totale sotto maxDuration:60 (margine 5s). Upload immagini (in
+    // parallelo), autofill e trim delle pagine in eccesso condividono deadline
+    // assolute crescenti: ogni step cede il tempo residuo al successivo.
+    const startedAt      = Date.now();
+    const uploadDeadline = startedAt + 34_000;
+    const autofillDeadline = startedAt + 48_000;
+    const trimDeadline   = startedAt + 55_000;
+
     const vertical = format === "story" || format === "reel";
     const usedSlides = slides.slice(0, MAX_SLIDES);
 
@@ -54,7 +62,7 @@ export default async function handler(req, res) {
     // 2. Upload in parallelo di tutte le immagini trovate
     const assetIds = await Promise.all(
       imageUrls.map(async (url, i) =>
-        url ? (await uploadUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.jpg` })).assetId : null
+        url ? (await uploadUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.jpg`, deadline: uploadDeadline })).assetId : null
       )
     );
 
@@ -73,7 +81,7 @@ export default async function handler(req, res) {
       }
     });
 
-    const af = await runAutofill({ token, templateId, data: autofillData, title: `Carosello ${usedSlides.length} slide` });
+    const af = await runAutofill({ token, templateId, data: autofillData, title: `Carosello ${usedSlides.length} slide`, deadline: autofillDeadline });
 
     if (!af.ok) {
       if (af.status === 401) {
@@ -91,7 +99,7 @@ export default async function handler(req, res) {
     // risultato è dinamico (4 slide → 4 pagine). Best-effort.
     let finalUrl = af.designUrl;
     if (af.designId) {
-      const trim = await trimTrailingPages({ token, designId: af.designId, keep: usedSlides.length });
+      const trim = await trimTrailingPages({ token, designId: af.designId, keep: usedSlides.length, deadline: trimDeadline });
       if (trim.ok && trim.designUrl) finalUrl = trim.designUrl;
     }
 

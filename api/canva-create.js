@@ -34,6 +34,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Budget totale sotto il maxDuration:60 di vercel.json (5s di margine per
+    // rete/serializzazione). Upload immagine e autofill condividono la stessa
+    // deadline assoluta: l'upload cede il tempo residuo all'autofill.
+    const startedAt = Date.now();
+    const hardDeadline   = startedAt + 55_000;
+    const uploadDeadline = Math.min(hardDeadline, startedAt + 40_000);
+
     const vertical = format === "story" || format === "reel";
     const templateId = bodyTemplateId;
 
@@ -50,7 +57,7 @@ export default async function handler(req, res) {
     const imageUrl = bodyImageUrl || (search_query ? await fetchPexelsUrl(search_query, vertical) : null);
 
     // 2. Upload image to Canva and wait for asset_id
-    const up = imageUrl ? await uploadUrlAsset({ token, url: imageUrl, name: "vmscout-bg.jpg" }) : { assetId: null };
+    const up = imageUrl ? await uploadUrlAsset({ token, url: imageUrl, name: "vmscout-bg.jpg", deadline: uploadDeadline }) : { assetId: null };
     const assetId = up.assetId;
 
     // 3. Autofill template with text + image
@@ -67,7 +74,7 @@ export default async function handler(req, res) {
       autofillData["Background"]      = { type: "image", asset_id: assetId };
     }
 
-    const af = await runAutofill({ token, templateId, data: autofillData, title: (caption || "VMScout").slice(0, 60) });
+    const af = await runAutofill({ token, templateId, data: autofillData, title: (caption || "VMScout").slice(0, 60), deadline: hardDeadline });
     if (!af.ok) {
       // 401 da Canva = token non più valido: fai riconnettere (il frontend
       // riapre la finestra di login su questo codice d'errore).

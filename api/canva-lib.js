@@ -68,20 +68,30 @@ export async function getCanvaToken(db) {
   return td.access_token;
 }
 
-// Canva `url-asset-uploads` fallisce / va in timeout su file enormi: il caso
-// tipico è Unsplash `urls.full`/`urls.raw` = foto a piena risoluzione (6000px+,
-// molti MB). Unsplash serve via imgix, quindi basta chiedere una versione
-// ridimensionata con i suoi parametri. (wsrv.nl come proxy si è rivelato
-// inaffidabile su alcune foto → niente proxy, solo normalizzazione host-aware.)
+// Canva `url-asset-uploads` scarica l'immagine lato server e va in timeout /
+// resta "in_progress" a lungo su file grossi: il caso tipico è Unsplash
+// `urls.full`/`urls.raw` (6000px+, molti MB) o Pexels `large2x` (~1880px).
+// Unsplash e Pexels servono via imgix: basta chiedere una versione più piccola
+// con i loro parametri. 1280px di larghezza bastano per un post/story IG
+// (1080px) e dimezzano i byte → download Canva molto più rapido.
+// (wsrv.nl come proxy si è rivelato inaffidabile su alcune foto → niente proxy.)
 function sizedImageUrl(url) {
   if (!url) return url;
   try {
     const u = new URL(url);
     if (u.hostname === "images.unsplash.com") {
-      u.searchParams.set("w", "1600");
-      u.searchParams.set("q", "80");
+      u.searchParams.set("w", "1280");
+      u.searchParams.set("q", "75");
       u.searchParams.set("fm", "jpg");
       u.searchParams.set("fit", "max");
+      return u.toString();
+    }
+    if (u.hostname === "images.pexels.com") {
+      u.searchParams.set("auto", "compress");
+      u.searchParams.set("cs", "tinysrgb");
+      u.searchParams.set("w", "1280");
+      u.searchParams.delete("h");
+      u.searchParams.delete("dpr");
       return u.toString();
     }
   } catch { /* URL non parsabile: usala com'è */ }
@@ -105,11 +115,14 @@ export function bustedUrl(url) {
 // Carica un'immagine su Canva da URL (job asincrono) e ne restituisce l'asset_id.
 // Prova prima la versione normalizzata/ridimensionata, poi l'URL grezzo.
 // `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
-export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
+// `deadline` (ms assoluti) limita create + polling di TUTTI i candidati, così il
+// chiamante può garantire che upload + autofill stiano sotto il maxDuration:60.
+export async function uploadUrlAsset({ token, url, name = "vmscout.jpg", deadline }) {
   if (!url) return { assetId: null, error: "URL immagine mancante" };
+  const stopAt = deadline || (Date.now() + 40_000);
   const candidates = [...new Set([sizedImageUrl(url), url])];
   let lastErr = "Canva non è riuscita a caricare l'immagine.";
-  for (let i = 0; i < candidates.length; i++) {
+  for (let i = 0; i < candidates.length && Date.now() < stopAt; i++) {
     const candidate = candidates[i];
     try {
       const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
@@ -134,9 +147,8 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
       }
 
       const jobId = d.job.id;
-      const deadline = Date.now() + 28_000;
       let job = d.job;
-      while ((job.status === "in_progress" || job.status === "pending") && Date.now() < deadline) {
+      while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
         await new Promise(res => setTimeout(res, 1500));
         const poll = await fetch(`${CANVA_API}/url-asset-uploads/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
         job = (await poll.json().catch(() => ({})))?.job ?? job;
@@ -144,8 +156,8 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
       if (job.status === "success" && job.asset?.id) return { assetId: job.asset.id };
       lastErr = job.status === "failed"
         ? `Canva: ${job.error?.message || job.error?.code || "download dell'immagine fallito"}`
-        : `Upload immagine ancora in corso dopo 28s (${job.status}). Riprova o usa una foto più piccola.`;
-      // job fallito/lento: prova il candidato successivo (URL grezzo)
+        : `Canva ci sta ancora scaricando l'immagine (job ${job.status}). Il design è stato creato senza sfondo: aprilo in Canva e trascina la foto, oppure riprova tra un minuto.`;
+      // job fallito/lento: prova il candidato successivo (URL grezzo) se resta tempo
     } catch (e) {
       lastErr = `Errore di rete verso Canva: ${e.message}`;
     }
@@ -178,7 +190,7 @@ async function fetchDataset(token, brandTemplateId) {
   } catch { return null; }
 }
 
-export async function runAutofill({ token, templateId, data, title }) {
+export async function runAutofill({ token, templateId, data, title, deadline }) {
   const brandTemplateId = cleanTemplateId(templateId);
   if (!brandTemplateId) {
     return { ok: false, status: 400, message: "Brand Template ID mancante o non valido." };
@@ -234,10 +246,10 @@ export async function runAutofill({ token, templateId, data, title }) {
   }
 
   // Ceiling di polling: gli step precedenti (upload immagini) + questo devono
-  // stare sotto il maxDuration:60 di vercel.json. L'autofill di norma finisce in
-  // pochi secondi; 35s è un margine ampio.
-  const deadline = Date.now() + 35_000;
-  while ((job.status === "in_progress" || job.status === "pending") && Date.now() < deadline) {
+  // stare sotto il maxDuration:60 di vercel.json. Il chiamante passa un
+  // `deadline` assoluto condiviso con l'upload; in mancanza, 35s.
+  const stopAt = deadline || (Date.now() + 35_000);
+  while ((job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
     await new Promise(r => setTimeout(r, 1500));
     const pollRes = await fetch(`${CANVA_API}/autofills/${jobId}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -266,7 +278,7 @@ export async function runAutofill({ token, templateId, data, title }) {
 // l'utente compone meno slide le pagine extra restano con il placeholder.
 // Best-effort: se fallisce, il design resta comunque valido (solo con qualche
 // pagina vuota in coda). Richiede scope design:content:write + design:meta:read.
-export async function trimTrailingPages({ token, designId, keep }) {
+export async function trimTrailingPages({ token, designId, keep, deadline }) {
   if (!designId || !keep || keep < 1) return { ok: false, trimmed: 0 };
   try {
     const dRes = await fetch(`${CANVA_API}/designs/${designId}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -291,8 +303,8 @@ export async function trimTrailingPages({ token, designId, keep }) {
 
     let job = mJson.job ?? mJson;
     const jobId = job.id;
-    const deadline = Date.now() + 15_000;
-    while (jobId && (job.status === "in_progress" || job.status === "pending") && Date.now() < deadline) {
+    const stopAt = deadline || (Date.now() + 15_000);
+    while (jobId && (job.status === "in_progress" || job.status === "pending") && Date.now() < stopAt) {
       await new Promise(r => setTimeout(r, 1500));
       const pRes = await fetch(`${CANVA_API}/merges/${jobId}`, { headers: { Authorization: `Bearer ${token}` } });
       job = (await pRes.json().catch(() => ({}))).job ?? job;
