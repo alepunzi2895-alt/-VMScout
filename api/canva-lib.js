@@ -449,6 +449,116 @@ export async function runAutofill({ token, templateId, data, title, deadline, re
   return result;
 }
 
+// ─── Primitive di basso livello per orchestrazioni multi-job ────────
+//
+// Il carosello NON usa più un template a N pagine (i placeholder immagine
+// non erano taggati e Canva non ci fa leggere il dataset per verificarlo).
+// Compone invece UNA slide per volta con il template del POST SINGOLO — che
+// ha `Immagine_Sfondo` e quindi lo sfondo foto funziona davvero — e poi
+// unisce gli N design con la Design Merge API. Servono create/poll separati
+// per creare tutti i job in un ciclo e pollarli nei cicli successivi.
+
+// Crea SOLO il job autofill (niente polling). { jobId } | { error, status }.
+export async function startAutofillJob({ token, templateId, data, title }) {
+  const brandTemplateId = cleanTemplateId(templateId);
+  if (!brandTemplateId) return { error: "Brand Template ID mancante o non valido.", status: 400 };
+  let res, j;
+  try {
+    res = await fetch(`${CANVA_API}/autofills`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "create_from_brand_template",
+        brand_template_id: brandTemplateId,
+        data: data || {},
+        ...(title ? { title: String(title).slice(0, 255) } : {}),
+      }),
+    });
+    j = await res.json().catch(() => ({}));
+  } catch (e) {
+    return { error: `Errore di rete verso Canva: ${e.message}`, status: 0 };
+  }
+  if (res.status === 429) return { retry: true };
+  if (!res.ok) {
+    return { error: j.message || j.error || `Canva Autofill HTTP ${res.status}`, status: res.status, details: j };
+  }
+  const job = j.job ?? j;
+  if (!job.id) return { error: "Canva non ha restituito un job di autofill.", status: 502 };
+  return { jobId: job.id };
+}
+
+// Una verifica di un job autofill.
+// { designId, designUrl } | { pending: true } | { error }.
+export async function checkAutofillJob({ token, jobId }) {
+  const { status, ok, body } = await canvaGet(token, `/autofills/${jobId}`);
+  if (!ok) {
+    if (status === 404 || status === 410) return { error: "Job autofill non trovato su Canva (scaduto)." };
+    return { pending: true };
+  }
+  const j = body?.job ?? body ?? {};
+  if (j.status === "success") {
+    const design = j.result?.design ?? j.design ?? null;
+    const designId = design?.id ?? null;
+    const designUrl = design?.url || (designId ? `https://www.canva.com/design/${designId}/edit` : null);
+    return designId ? { designId, designUrl } : { error: "Autofill riuscito ma senza design." };
+  }
+  if (j.status === "in_progress" || j.status === "pending") return { pending: true };
+  return { error: j.error?.message || `Autofill non riuscito (stato: ${j.status || "sconosciuto"}).` };
+}
+
+// Design Merge API — inserisce pagine da un design sorgente in uno esistente
+// (o ne crea uno nuovo se `baseDesignId` è assente).
+// { jobId } | { retry: true } (429) | { error, status }.
+export async function startMergeInsert({ token, baseDesignId, sourceDesignId, pageNumbers, afterPageNumber, title }) {
+  const operation = {
+    type: "insert_pages",
+    source: {
+      type: "design",
+      design_id: sourceDesignId,
+      ...(Array.isArray(pageNumbers) && pageNumbers.length ? { page_numbers: pageNumbers } : {}),
+    },
+    ...(Number.isInteger(afterPageNumber) ? { after_page_number: afterPageNumber } : {}),
+  };
+  const payload = baseDesignId
+    ? { type: "modify_existing_design", design_id: baseDesignId, operations: [operation], ...(title ? { title: String(title).slice(0, 255) } : {}) }
+    : { type: "create_new_design", operations: [operation], title: String(title || "Carosello VMScout").slice(0, 255) };
+  let res, j;
+  try {
+    res = await fetch(`${CANVA_API}/merges`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    j = await res.json().catch(() => ({}));
+  } catch (e) {
+    return { error: `Errore di rete verso Canva: ${e.message}`, status: 0 };
+  }
+  if (res.status === 429) return { retry: true };
+  if (!res.ok) return { error: j.message || j.error || `Merge Canva HTTP ${res.status}`, status: res.status, details: j };
+  const job = j.job ?? j;
+  if (!job.id) return { error: "Canva non ha restituito un job di merge.", status: 502 };
+  return { jobId: job.id };
+}
+
+// Una verifica di un job merge.
+// { designId, designUrl } | { pending: true } | { error }.
+export async function checkMergeJob({ token, jobId }) {
+  const { status, ok, body } = await canvaGet(token, `/merges/${jobId}`);
+  if (!ok) {
+    if (status === 404 || status === 410) return { error: "Job merge non trovato su Canva (scaduto)." };
+    return { pending: true };
+  }
+  const j = body?.job ?? body ?? {};
+  if (j.status === "success") {
+    const d = j.result?.design ?? j.design ?? null;
+    return d?.id
+      ? { designId: d.id, designUrl: d.url || `https://www.canva.com/design/${d.id}/edit` }
+      : { error: "Merge riuscito ma senza design." };
+  }
+  if (j.status === "in_progress" || j.status === "pending") return { pending: true };
+  return { error: j.error?.message || `Merge non riuscito (stato: ${j.status || "sconosciuto"}).` };
+}
+
 // Elimina le pagine in coda a un design (Design Merge API, preview). Serve al
 // carosello: il template ha N pagine fisse (Image_1..N/Testo_1..N), ma se
 // l'utente compone meno slide le pagine extra restano con il placeholder.

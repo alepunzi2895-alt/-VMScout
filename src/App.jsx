@@ -669,7 +669,9 @@ function RowImagePicker({ query, imageUrl, onPick, source: sourceProp, onSourceC
 // una pagina da un design Canva già creato (ne riusa foto + titolo). Un solo
 // autofill del template carosello.
 function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: openProp, onOpenChange, photoSource }) {
-  const templateId = canvaTemplates?.carousel || "";
+  // Il carosello compone ogni pagina col template del POST SINGOLO (sfondo foto
+  // + testo, verificato funzionante) e poi unisce le pagine con la Merge API.
+  const templateId = canvaTemplates?.post || canvaTemplates?.carousel || "";
   const [openState, setOpenState] = useState(false);
   const controlled = typeof onOpenChange === "function";
   const open = controlled ? !!openProp : openState;
@@ -789,7 +791,8 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
     setState("loading"); setErrMsg(""); setProgress("Preparazione…");
     const baseBody = {
       slides: pages.map(p => ({ caption: p.caption, search_query: p.search_query, image_url: p.image_url || undefined })),
-      templateId, format: "post",
+      postTemplateId: canvaTemplates?.post || canvaTemplates?.carousel || templateId,
+      format: "post",
     };
     // Il backend lavora a cicli: finché risponde { pending, resume } lo
     // richiamiamo. Cap lato client a 5 minuti.
@@ -805,7 +808,11 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
         const data = await res.json();
 
         if (data.pending) {
-          setProgress(data.phase === "autofill" ? "Composizione del carosello in Canva…" : "Caricamento immagini su Canva…");
+          setProgress(
+            data.phase === "merge"  ? "Unione delle pagine in Canva…" :
+            data.phase === "slides" ? "Composizione delle slide in Canva…" :
+            "Caricamento immagini su Canva…"
+          );
           if (Date.now() > giveUpAt) {
             setErrMsg("Canva ci sta mettendo troppo. Riprova tra qualche minuto.");
             setState("idle");
@@ -1332,7 +1339,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
         <SectionLabel>Post Composer — {post_composer.length} Slide</SectionLabel>
       </div>
 
-      {brand?.canvaTemplates?.carousel && post_composer.length > 1 && (
+      {(brand?.canvaTemplates?.post || brand?.canvaTemplates?.carousel) && post_composer.length > 1 && (
         <button onClick={() => setCarouselOpen(true)}
           style={{ width: "100%", padding: "11px 16px", marginBottom: 16, borderRadius: 14, border: "1px solid rgba(0,196,204,0.35)", background: "linear-gradient(135deg, rgba(0,196,204,0.14), rgba(0,196,204,0.06))", color: "#00C4CC", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           🖼 Componi carosello su Canva ({post_composer.length} slide, foto suggerite già caricate)
@@ -1462,15 +1469,15 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
       </div>
 
       <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-        {brand?.canvaTemplates?.carousel ? (
+        {(brand?.canvaTemplates?.post || brand?.canvaTemplates?.carousel) ? (
           <button onClick={() => setCarouselOpen(true)}
             style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
             🖼 Componi carosello su Canva ({post_composer.length} slide)
           </button>
         ) : (
-          <span title='Configura il "Template Carosello" in Canva Studio (placeholder Image_1/Testo_1, ...)'
+          <span title='Configura il "Template Post" in Canva Studio (sfondo Immagine_Sfondo + testo Testo_Post/Caption)'
             style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(139,115,85,0.15)", color: "#B5A88A", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", cursor: "help", userSelect: "none" }}>
-            ✦ Configura template carosello in Canva Studio
+            ✦ Configura template post in Canva Studio
           </span>
         )}
       </div>
