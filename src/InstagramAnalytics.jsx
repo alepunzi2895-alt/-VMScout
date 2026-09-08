@@ -1000,6 +1000,14 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
         tips: parsed.corrections || [],
         strengths: parsed.visual_storytelling?.strengths || [],
         weaknesses: parsed.visual_storytelling?.weaknesses || [],
+        strategy: {
+          winning_formats: parsed.patterns?.winning_formats || [],
+          patterns_summary: parsed.patterns?.summary || "",
+          best_slot: parsed.timing?.best_slot || "",
+          timing_summary: parsed.timing?.summary || "",
+          content_pillars: parsed.content_pillars || [],
+          visual_style: parsed.visual_storytelling?.style_description || "",
+        },
         calendar_entries: (parsed.next_posts || []).map(p => ({
           idea: p.idea, rationale: p.rationale, content_type: p.content_type,
           hook: p.hook, hook_type: p.hook_type,

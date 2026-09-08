@@ -55,7 +55,7 @@ async function ensureTables(db) {
   }
 }
 
-const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null };
+const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null, strategy: null };
 
 const MAX_DIRECTIVES_CHARS = 4000;
 
@@ -226,7 +226,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "merge_insights" && req.method === "POST") {
-      const { project_id, tips, strengths, weaknesses, calendar_entries, directives } = req.body;
+      const { project_id, tips, strengths, weaknesses, calendar_entries, directives, strategy } = req.body;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
 
       const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
@@ -238,6 +238,19 @@ export default async function handler(req, res) {
       current.tips = dedupAppend(current.tips, tips, 30);
       current.strengths = dedupAppend(current.strengths, strengths, 20);
       current.weaknesses = dedupAppend(current.weaknesses, weaknesses, 20);
+
+      // La strategia è uno SNAPSHOT dell'ultima analisi (non si accumula): formati
+      // vincenti, timing, pilastri, stile visivo. La leggono Dashboard e Visual Scout.
+      if (strategy && typeof strategy === "object") {
+        const s = current.strategy && typeof current.strategy === "object" ? { ...current.strategy } : {};
+        for (const k of ["winning_formats", "content_pillars"]) {
+          if (Array.isArray(strategy[k]) && strategy[k].length) s[k] = strategy[k].slice(0, 8).map(String);
+        }
+        for (const k of ["patterns_summary", "timing_summary", "best_slot", "visual_style"]) {
+          if (typeof strategy[k] === "string" && strategy[k].trim()) s[k] = strategy[k].trim().slice(0, 400);
+        }
+        if (Object.keys(s).length) { s.updated_at = new Date().toISOString(); current.strategy = s; }
+      }
 
       if (typeof directives === "string" && directives.trim()) {
         current.directives = directives.slice(0, MAX_DIRECTIVES_CHARS);

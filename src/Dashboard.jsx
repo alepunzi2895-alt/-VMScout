@@ -148,6 +148,18 @@ export default function Dashboard({ brand, onSuggestBrief }) {
   const calendar = (data?.calendar || []).slice().reverse();
   const filteredCalendar = calendarFilter === "all" ? calendar : calendar.filter(e => e.status === calendarFilter);
 
+  // Voci extra dall'ultima analisi Instagram, mescolate nelle liste esistenti.
+  const strat = data?.strategy || null;
+  const stratStrengths = strat ? [strat.patterns_summary, strat.visual_style].filter(Boolean) : [];
+  const stratTips = strat ? [
+    strat.best_slot && `⏰ Orario migliore: ${strat.best_slot}`,
+    strat.winning_formats?.length && `📊 Formati vincenti: ${strat.winning_formats.join(", ")}`,
+    strat.timing_summary && `🕓 ${strat.timing_summary}`,
+  ].filter(Boolean) : [];
+  const pillars = strat?.content_pillars || [];
+  const strengthsAll = [...stratStrengths, ...(data?.strengths || [])];
+  const tipsAll = [...stratTips, ...(data?.tips || [])];
+
   return (
     <div style={{ background: DARK, minHeight: "100vh", padding: "32px 24px 60px", maxWidth: 900, margin: "0 auto" }}>
       <div style={{ marginBottom: 28 }}>
@@ -204,8 +216,8 @@ export default function Dashboard({ brand, onSuggestBrief }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
             <div style={{ ...card }}>
               <div style={{ ...label, marginBottom: 12, color: "#5ABA5A" }}>✓ Punti di Forza</div>
-              {data.strengths?.length ? data.strengths.map((s, i) => (
-                <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.9, padding: "4px 0", borderBottom: i < data.strengths.length - 1 ? "1px solid rgba(201,169,110,0.06)" : "none" }}>• {s}</div>
+              {strengthsAll.length ? strengthsAll.map((s, i) => (
+                <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.9, padding: "4px 0", borderBottom: i < strengthsAll.length - 1 ? "1px solid rgba(201,169,110,0.06)" : "none" }}>• {s}</div>
               )) : <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>Nessuno ancora</div>}
             </div>
             <div style={{ ...card }}>
@@ -216,11 +228,22 @@ export default function Dashboard({ brand, onSuggestBrief }) {
             </div>
           </div>
 
+          {pillars.length > 0 && (
+            <div style={{ ...card, marginBottom: 20 }}>
+              <div style={{ ...label, marginBottom: 12 }}>🎯 Pilastri di Contenuto</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {pillars.map((p, i) => (
+                  <span key={i} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 20, background: `${IG_PINK}15`, color: IG_PINK, fontWeight: 600 }}>{p}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ ...card, marginBottom: 20 }}>
             <div style={{ ...label, marginBottom: 12 }}>💡 Consigli Accumulati</div>
-            {data.tips?.length ? (
+            {tipsAll.length ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {data.tips.map((t, i) => (
+                {tipsAll.map((t, i) => (
                   <span key={i} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 20, background: `${GOLD}15`, color: GOLD }}>{t}</span>
                 ))}
               </div>

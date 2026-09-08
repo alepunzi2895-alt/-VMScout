@@ -42,6 +42,13 @@ const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, bra
     ? `\n\nMEMORIA DI PROGETTO (da analisi Instagram precedenti — usala per migliorare la strategia, non ripetere consigli già dati):${insights.strengths?.length ? `\n- Punti di forza confermati: ${insights.strengths.join(" | ")}` : ""}${insights.weaknesses?.length ? `\n- Debolezze da correggere: ${insights.weaknesses.join(" | ")}` : ""}${insights.tips?.length ? `\n- Consigli accumulati: ${insights.tips.join(" | ")}` : ""}`
     : "";
 
+  // Snapshot della strategia vincente dall'ultima analisi Instagram: orienta
+  // formati, temi, timing e il target sponsorizzata proposto.
+  const s = insights?.strategy;
+  const strategyCtx = s && (s.winning_formats?.length || s.content_pillars?.length || s.best_slot || s.visual_style)
+    ? `\n\nSTRATEGIA VINCENTE DI QUESTO ACCOUNT (dall'ultima analisi Instagram — orienta formati, temi, timing e target sponsorizzata su questi dati reali):${s.winning_formats?.length ? `\n- Formati che performano: ${s.winning_formats.join(", ")}` : ""}${s.patterns_summary ? `\n- Pattern: ${s.patterns_summary}` : ""}${s.best_slot ? `\n- Orario migliore: ${s.best_slot}` : ""}${s.content_pillars?.length ? `\n- Pilastri di contenuto: ${s.content_pillars.join(", ")}` : ""}${s.visual_style ? `\n- Stile visivo riconoscibile: ${s.visual_style}` : ""}`
+    : "";
+
   // IMPORTANTE — trovato testando ripetutamente contro produzione (curl diretto
   // su vmscout.vercel.app/api/chat): questo modello, se non vincolato con limiti
   // di parole ESPLICITI e RIGIDI su ogni campo, scrive risposte molto più lunghe
@@ -58,7 +65,7 @@ GOLDEN RULE: "Anti-AI Aesthetic" — authentic, real, imperfect visuals only. No
 CONCISION IS MANDATORY. Every field below has a hard word limit — respect it exactly, this is the single most important rule. Short, direct, professional copy. Zero flowery preamble, zero filler, zero repeated ideas across fields.
 
 Structure (word limits in parentheses):
-{"strategy":{"emotion":"(2 words)","framework":"carousel architecture: Value-Stack|Problem-Proof|Hack-List|Rant|Demo","palette":["c1","c2","c3","c4"],"palette_hex":["#h1","#h2","#h3","#h4"],"narrative":"Italian, max 18 words"},"direction":{"style":"max 5 words","composition":"max 5 words","lighting":"max 5 words"},"queries":{"primary":["q1","q2","q3"],"secondary":["q4","q5"],"avoid":["bad1","bad2"]},"video_queries":{"primary":["vq1","vq2","vq3"],"secondary":["vq4","vq5"],"style_notes":"max 8 words"},"post_composer":[{"slide_number":1,"hook_type":"Curiosity|Story|Value|Contrarian","visual_description":"max 10 words, in the user's language","search_query":"max 3 English words","instagram_hashtag":"#tag","captions":{"it":"max 18 words","en":"max 18 words","es":"max 18 words"},"hashtags_instagram":["6 tags"],"hashtags_facebook":["3 tags"],"cta":{"it":"max 4 words","en":"max 4 words","es":"max 4 words"},"platform_tip":"max 6 words"}],"editorial_plan":{"duration_context":"${duration}","weekly_focus":"max 6 words","days":[{"day":"Lunedì","content_type":"Post|Story|Reel|Carousel","topic":"max 4 words","goal":"Awareness|Engagement|Conversion|Community","best_time":"18:30","fb_cross_post_tip":"max 6 words","story_reel_hint":"max 6 words"}]},"video_storytelling":{"concept":{"it":"max 8 words","en":"max 8 words","es":"max 8 words"},"duration":"15s","aspect_ratio":"9:16","music_mood":"2 words","scenes":[{"scene_number":1,"duration":"3s","footage_type":"type","description":{"it":"max 5 words","en":"max 5 words","es":"max 5 words"},"search_query":"max 3 English words","text_overlay":{"it":"max 3 words","en":"max 3 words","es":"max 3 words"},"transition":"cut"}],"audio_notes":{"it":"max 6 words","en":"max 6 words","es":"max 6 words"}},"orientation":"portrait|landscape|square","mood_tags":["t1","t2","t3"]}
+{"strategy":{"emotion":"(2 words)","framework":"carousel architecture: Value-Stack|Problem-Proof|Hack-List|Rant|Demo","palette":["c1","c2","c3","c4"],"palette_hex":["#h1","#h2","#h3","#h4"],"narrative":"Italian, max 18 words"},"direction":{"style":"max 5 words","composition":"max 5 words","lighting":"max 5 words"},"queries":{"primary":["q1","q2","q3"],"secondary":["q4","q5"],"avoid":["bad1","bad2"]},"video_queries":{"primary":["vq1","vq2","vq3"],"secondary":["vq4","vq5"],"style_notes":"max 8 words"},"post_composer":[{"slide_number":1,"hook_type":"Curiosity|Story|Value|Contrarian","visual_description":"max 10 words, in the user's language","search_query":"max 3 English words","instagram_hashtag":"#tag","captions":{"it":"max 18 words","en":"max 18 words","es":"max 18 words"},"hashtags_instagram":["6 tags"],"hashtags_facebook":["3 tags"],"cta":{"it":"max 4 words","en":"max 4 words","es":"max 4 words"},"platform_tip":"max 6 words"}],"editorial_plan":{"duration_context":"${duration}","weekly_focus":"max 6 words","days":[{"day":"Lunedì","content_type":"Post|Story|Reel|Carousel","topic":"max 4 words","goal":"Awareness|Engagement|Conversion|Community","best_time":"18:30","fb_cross_post_tip":"max 6 words","story_reel_hint":"max 6 words"}]},"video_storytelling":{"concept":{"it":"max 8 words","en":"max 8 words","es":"max 8 words"},"duration":"15s","aspect_ratio":"9:16","music_mood":"2 words","scenes":[{"scene_number":1,"duration":"3s","footage_type":"type","description":{"it":"max 5 words","en":"max 5 words","es":"max 5 words"},"search_query":"max 3 English words","text_overlay":{"it":"max 3 words","en":"max 3 words","es":"max 3 words"},"transition":"cut"}],"audio_notes":{"it":"max 6 words","en":"max 6 words","es":"max 6 words"}},"ad_targeting":{"worth_boosting":true,"objective":"Awareness|Traffic|Engagement|Leads|Sales","audience_summary":"Italian, max 14 words","interests":["Meta interest 1","interest 2","interest 3","interest 4"],"keywords":["kw1","kw2","kw3"],"age_range":"25-45","genders":"all|female|male","geo":"max 8 words","lookalike":"max 10 words","budget_hint":"max 8 words"},"orientation":"portrait|landscape|square","mood_tags":["t1","t2","t3"]}
 
 RULES:
 - Generate exactly 3 post_composer slides, exactly 3 video_storytelling scenes.
@@ -75,8 +82,9 @@ FRAMEWORK APPLICATION (apply the toolkit below concretely — do not name framew
 - Each cta is one concrete action leveraging exactly one ethical lever (social proof, loss aversion, curiosity gap) — no fake scarcity.
 - editorial_plan: rotate 3-5 content pillars across the days, vary the goal each day, max 1 promotional day per week.
 - video_storytelling: scene 1 is a 0-3s hook (visual + text_overlay); each later scene is a distinct narrative beat; the final scene carries the CTA.
+- ad_targeting: propose ONE paid-promotion audience for this content (a boosted post / single ad). Ground it in BRAND CONTEXT, the account's real follower demographics and winning STRATEGIA if given. "interests" = real Meta Ads detailed-targeting interests (broad, findable — e.g. "Luxury goods", "Boutique hotels"), not hashtags. "keywords" = 2-3 plain search terms the ideal buyer would use. "audience_summary" in Italian, concrete (who + why they convert). If the content is not worth boosting (pure community/BTS), set worth_boosting=false and keep the other fields short but still filled.
 
-${MARKETING_TOOLKIT}${directivesBlock(insights?.directives)}${brandCtx}${insightsCtx}`;
+${MARKETING_TOOLKIT}${directivesBlock(insights?.directives)}${brandCtx}${insightsCtx}${strategyCtx}`;
 };
 
 // ─────────────────────────────────────────────────
@@ -1621,6 +1629,72 @@ function EditorialTab({ data }) {
   );
 }
 
+// Target sponsorizzata proposto per questo contenuto (post/carosello/video):
+// audience Meta Ads, interessi, keyword, fascia età/geo. Da usare come base
+// quando si mette in evidenza il post.
+function SponsorTab({ data }) {
+  const t = data.ad_targeting;
+  if (!t) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun target sponsorizzata proposto.</p>;
+  const chip = (bg, col) => ({ fontSize: 11, padding: "5px 12px", borderRadius: 20, background: bg, color: col, fontWeight: 600 });
+  const Row = ({ label, value }) => value ? (
+    <div style={{ display: "flex", gap: 10, padding: "7px 0", borderBottom: "1px solid rgba(139,115,85,0.08)" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", minWidth: 90, paddingTop: 1 }}>{label}</div>
+      <div style={{ fontSize: 13, color: "#3D3225", flex: 1 }}>{value}</div>
+    </div>
+  ) : null;
+
+  return (
+    <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🎯</span>
+        <SectionLabel>Target Sponsorizzata Consigliato</SectionLabel>
+      </div>
+      <div style={{ fontSize: 11, color: "#8B7355", marginBottom: 14 }}>
+        Base per mettere in evidenza questo contenuto su Instagram/Facebook. Adatta budget e durata al tuo obiettivo.
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {t.objective && <span style={chip("rgba(225,48,108,0.12)", "#E1306C")}>Obiettivo: {t.objective}</span>}
+        <span style={chip(t.worth_boosting === false ? "rgba(139,115,85,0.12)" : "rgba(90,186,90,0.14)", t.worth_boosting === false ? "#8B7355" : "#3E8E3E")}>
+          {t.worth_boosting === false ? "Meglio non sponsorizzare (contenuto organico)" : "Vale la sponsorizzazione"}
+        </span>
+      </div>
+
+      {t.audience_summary && (
+        <div style={{ background: "rgba(139,115,85,0.05)", borderRadius: 14, padding: "12px 16px", marginBottom: 14, borderLeft: "3px solid #E1306C", fontSize: 13.5, color: "#3D3225", lineHeight: 1.6 }}>
+          {t.audience_summary}
+        </div>
+      )}
+
+      {!!t.interests?.length && (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Interessi Meta Ads</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+            {t.interests.map((x, i) => <span key={i} style={chip("rgba(60,100,180,0.1)", "#3C64B4")}>{x}</span>)}
+          </div>
+        </>
+      )}
+
+      {!!t.keywords?.length && (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#8B7355", marginBottom: 6 }}>Parole chiave del pubblico</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+            {t.keywords.map((x, i) => <span key={i} style={chip("rgba(139,115,85,0.1)", "#8B7355")}>{x}</span>)}
+          </div>
+        </>
+      )}
+
+      <div style={{ background: "#FBF8F3", border: "1px solid rgba(139,115,85,0.12)", borderRadius: 14, padding: "6px 14px" }}>
+        <Row label="Età" value={t.age_range} />
+        <Row label="Genere" value={t.genders && t.genders !== "all" ? (t.genders === "female" ? "Donne" : "Uomini") : (t.genders === "all" ? "Tutti" : null)} />
+        <Row label="Area" value={t.geo} />
+        <Row label="Lookalike" value={t.lookalike} />
+        <Row label="Budget" value={t.budget_hint} />
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────
 // STRATEGY MESSAGE (MAIN WRAPPER)
 // ─────────────────────────────────────────────────
@@ -1664,6 +1738,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
     { id: "piano", label: "Piano", icon: "📅", show: !!data.editorial_plan },
     { id: "posts", label: "Post", icon: "◻", show: data.post_composer?.length > 0 },
     { id: "video", label: "Video", icon: "▶", show: !!data.video_storytelling?.scenes },
+    { id: "sponsor", label: "Sponsor", icon: "🎯", show: !!data.ad_targeting },
   ].filter(t => t.show !== false);
 
   return (
@@ -1681,6 +1756,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
       { activeTab === "piano" && <EditorialTab data={data} />}
       { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} brand={brand} />}
       { activeTab === "video" && <VideoTab data={data} />}
+      { activeTab === "sponsor" && <SponsorTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
         <summary style={{ fontSize: 11, color: "#8B7355", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" }}>{"{ }"} Mostra JSON per API</summary>
@@ -1858,6 +1934,15 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
             Descrivi il tuo obiettivo di marketing. Riceverai strategia visiva, caption pronte per i post, storyboard video e query per Unsplash, Pexels e Pixabay.
           </p>}
         </header>
+
+        {(insights?.strategy || insights?.directives?.trim()) && (
+          <div style={{ margin: "0 auto 20px", maxWidth: 520, padding: "8px 14px", borderRadius: 12, background: "rgba(0,196,204,0.07)", border: "1px solid rgba(0,196,204,0.2)", color: "#7FD8DC", fontSize: 11, lineHeight: 1.5, textAlign: "center", fontFamily: "'Space Grotesk', sans-serif" }}>
+            ↳ Sto usando la memoria di {brand?.name || "questo progetto"}
+            {insights?.strategy?.winning_formats?.length ? ` · formati: ${insights.strategy.winning_formats.slice(0, 3).join(", ")}` : ""}
+            {insights?.strategy?.content_pillars?.length ? ` · pilastri: ${insights.strategy.content_pillars.slice(0, 3).join(", ")}` : ""}
+            {insights?.strategy?.best_slot ? ` · orario: ${insights.strategy.best_slot}` : ""}
+          </div>
+        )}
 
         {showApiSetup && (
           <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 18, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'Space Grotesk', sans-serif" }}>
