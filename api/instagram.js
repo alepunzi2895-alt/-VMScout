@@ -255,7 +255,7 @@ export default async function handler(req, res) {
         }));
         const personalAct = (adAcc.data?.data || [])[0]?.id;
         const [personalAds, personalActIg, pageIgId] = await Promise.all([
-          personalAct ? fbGraph(token, `act_${String(personalAct).replace(/^act_/, "")}/ads`, { fields: "name,creative{instagram_permalink_url,object_story_spec{instagram_actor_id},effective_object_story_id}", limit: 250 }) : Promise.resolve({ data: {} }),
+          personalAct ? fbGraph(token, `act_${String(personalAct).replace(/^act_/, "")}/ads`, { fields: "name,effective_status,creative{instagram_permalink_url,object_story_spec{instagram_actor_id},effective_object_story_id}", filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "DELETED", "DISAPPROVED", "PENDING_REVIEW", "WITH_ISSUES", "IN_PROCESS"] }]), limit: 400 }) : Promise.resolve({ data: {} }),
           personalAct ? fbGraph(token, `act_${String(personalAct).replace(/^act_/, "")}/instagram_accounts`, { fields: "username" }) : Promise.resolve({ data: {} }),
           fbGraph(token, `${(pages.data?.data || [])[0]?.instagram_business_account?.id || (pages.data?.data || [])[0]?.id || "0"}`, { fields: "username,id" }),
         ]);
@@ -298,7 +298,16 @@ export default async function handler(req, res) {
           "creative{name,title,body,object_type,instagram_permalink_url,thumbnail_url,image_url,effective_object_story_id,effective_instagram_media_id,object_story_spec}",
           `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr,cpc,frequency,actions,cost_per_action_type}`,
         ].join(",");
-        const r = await fbGraph(token, `act_${acct}/ads`, { fields, limit: body.limit || 250 });
+        // IMPORTANTE: act/ads di default ESCLUDE le inserzioni archiviate (le
+        // promozioni finiscono archiviate poco dopo la fine). `filtering` con
+        // tutti gli stati le riporta dentro.
+        const allStatuses = JSON.stringify([{
+          field: "ad.effective_status",
+          operator: "IN",
+          value: ["ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
+            "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES"],
+        }]);
+        const r = await fbGraph(token, `act_${acct}/ads`, { fields, filtering: allStatuses, limit: body.limit || 400 });
         if (!r.ok) return res.status(r.status).json({ error: r.data?.error?.message || "Errore Meta", details: r.data });
         const ads = r.data.data || [];
 
