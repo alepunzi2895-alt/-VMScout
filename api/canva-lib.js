@@ -29,6 +29,20 @@ function sizedImageUrl(url) {
   return url;
 }
 
+// Aggiunge un parametro univoco all'URL: Canva `url-asset-uploads` deduplica
+// per URL e, se la stessa foto era già stata caricata, risponde 400 "already
+// exists" SENZA restituirci l'asset_id esistente. Cambiare l'URL forza un nuovo
+// upload. Unsplash/Pexels ignorano i parametri sconosciuti.
+export function bustedUrl(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("_vmsu", Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 // Carica un'immagine su Canva da URL (job asincrono) e ne restituisce l'asset_id.
 // Prova prima la versione normalizzata/ridimensionata, poi l'URL grezzo.
 // `error` riporta il motivo REALE di Canva per poterlo mostrare all'utente.
@@ -36,7 +50,8 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
   if (!url) return { assetId: null, error: "URL immagine mancante" };
   const candidates = [...new Set([sizedImageUrl(url), url])];
   let lastErr = "Canva non è riuscita a caricare l'immagine.";
-  for (const candidate of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
     try {
       const r = await fetch(`${CANVA_API}/url-asset-uploads`, {
         method: "POST",
@@ -48,6 +63,13 @@ export async function uploadUrlAsset({ token, url, name = "vmscout.jpg" }) {
         return { assetId: null, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
       }
       if (!r.ok || !d?.job?.id) {
+        const blob = `${d?.code || ""} ${d?.message || ""}`.toLowerCase();
+        // Asset già presente sull'account ma senza id restituito → riprova lo
+        // stesso URL reso univoco, così Canva crea un nuovo asset.
+        if (/already exist|duplicate/.test(blob) && !/[?&]_vmsu=/.test(candidate)) {
+          const busted = bustedUrl(candidate);
+          if (busted) candidates.push(busted);
+        }
         lastErr = `Canva ha rifiutato l'upload (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.`;
         continue;
       }
@@ -134,7 +156,9 @@ export async function runAutofill({ token, templateId, data, title }) {
     const blob = JSON.stringify(createJson).toLowerCase();
     const msg = createJson.message || createJson.error || "Errore Canva Autofill API";
     let hint = "";
-    if (/autofill capable elements|no autofill|autofillable/.test(blob)) {
+    if (createRes.status === 401 || /access token|invalid.*token|token.*(invalid|expired)|unauthenticated/.test(blob)) {
+      hint = " — la sessione Canva è scaduta o è stata revocata. In VMScout: disconnetti Canva e riconnettilo, poi riprova.";
+    } else if (/autofill capable elements|no autofill|autofillable/.test(blob)) {
       hint = " — il Brand Template non ha campi di autofill. In Canva apri il template, seleziona ogni riquadro immagine e ogni casella di testo, click destro → 'Aggiungi al modello del brand' (o pannello Dati) e assegna un nome campo: per il carosello Image_1/Testo_1, Image_2/Testo_2, ... (per un post singolo: Immagine_Sfondo e Testo_Post/Caption). Poi ripubblica il Modello del brand.";
     } else if (/not found|invalid|brand_template|permission|not authorized/.test(blob)) {
       hint = " — verifica che l'ID sia quello di un Brand Template pubblicato (non di un design) e che l'account Canva collegato abbia accesso al template. In Canva: apri il template → Condividi → 'Modello del brand', poi copia l'ID dall'URL /brand-templates/<ID>.";

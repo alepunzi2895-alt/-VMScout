@@ -1,30 +1,6 @@
 import { getDb } from "./db.js";
+import { getCanvaToken } from "./canva-token.js";
 import { runAutofill } from "./canva-lib.js";
-
-const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
-const clientSecret = process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "";
-
-async function refreshAccessToken(db, refreshToken) {
-  const creds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch("https://api.canva.com/rest/v1/oauth/token", {
-    method: "POST",
-    headers: {
-      "Content-Type":  "application/x-www-form-urlencoded",
-      "Authorization": `Basic ${creds}`,
-    },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-  });
-  const data = await res.json();
-  if (!data.access_token) throw new Error(data.message || "Token refresh fallito");
-
-  await db.execute({
-    sql: `UPDATE canva_auth
-          SET access_token=?, expires_in=?, created_at=datetime('now')
-          WHERE id=1`,
-    args: [data.access_token, data.expires_in || 3600],
-  });
-  return data.access_token;
-}
 
 async function uploadImageFromUrl(imageUrl, accessToken) {
   try {
@@ -65,30 +41,14 @@ export default async function handler(req, res) {
   }
 
   const db = getDb();
-  let authRow;
-
+  let accessToken;
   try {
-    authRow = await db.execute(
-      "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
-    );
-  } catch {
-    return res.status(401).json({ error: "CANVA_NOT_CONNECTED", message: "Canva non connesso." });
-  }
-
-  if (!authRow.rows.length) {
-    return res.status(401).json({ error: "CANVA_NOT_CONNECTED", message: "Canva non connesso. Clicca 'Connetti Canva' nell'header." });
-  }
-
-  let { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, created_at: createdAt } = authRow.rows[0];
-
-  // Auto-refresh if token is close to expiry
-  const ageSeconds = (Date.now() - new Date(createdAt + "Z").getTime()) / 1000;
-  if (ageSeconds > (expiresIn || 3600) - 120 && refreshToken) {
-    try {
-      accessToken = await refreshAccessToken(db, refreshToken);
-    } catch {
-      return res.status(401).json({ error: "CANVA_TOKEN_EXPIRED", message: "Token Canva scaduto. Rieffettua il login." });
-    }
+    accessToken = await getCanvaToken(db);
+  } catch (e) {
+    return res.status(401).json({
+      error: e.code || "CANVA_NOT_CONNECTED",
+      message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva.",
+    });
   }
 
   try {

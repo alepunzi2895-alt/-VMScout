@@ -61,6 +61,9 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 
 > **NON usare** `POST /v1/asset-uploads` (binary upload diretto) — richiede TUS protocol complesso e dà errori 415/400. Usare sempre `url-asset-uploads`.
 
+### Token OAuth Canva — `api/canva-token.js` `getCanvaToken(db)` (punto UNICO)
+Ogni endpoint Canva (`canva-create`, `canva-carousel`, `canva-scaffold`, `canva-upload`, `canva-export`) legge il token **solo** da qui. Canva **ruota** il `refresh_token` a ogni `POST /v1/oauth/token`: la risposta contiene un nuovo `refresh_token` e quello usato viene invalidato subito. `getCanvaToken` ripersiste sempre `td.refresh_token` in `canva_auth`; se il refresh fallisce lancia `CANVA_NOT_CONNECTED` invece di ricadere su un access_token scaduto (→ era la causa di *"Access token is invalid"*: gli endpoint rinnovavano l'access_token senza salvare il refresh_token ruotato, e la volta dopo il refresh moriva).
+
 ### Autofill — `api/canva-lib.js` `runAutofill()` (condiviso da canva-create / canva-carousel / canva-export)
 Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ `Unknown endpoint`). Flusso corrente:
 1. `GET /v1/brand-templates/{id}/dataset` → filtra `data` ai soli campi definiti (Canva rifiuta chiavi sconosciute)

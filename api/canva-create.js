@@ -1,43 +1,10 @@
-import { getDb, ensureCanvaAuthTable } from "./db.js";
+import { getDb } from "./db.js";
+import { getCanvaToken } from "./canva-token.js";
 import { runAutofill, uploadUrlAsset } from "./canva-lib.js";
 
-const CANVA_API  = "https://api.canva.com/rest/v1";
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 
 // ─── helpers ────────────────────────────────────────────
-
-async function getToken(db) {
-  await ensureCanvaAuthTable(db);
-  const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
-  );
-  if (!r.rows.length) {
-    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
-  }
-  const row    = r.rows[0];
-  const ageS   = (Date.now() - new Date(row.created_at + "Z").getTime()) / 1000;
-  const expiry = row.expires_in || 3600;
-
-  if (ageS > expiry - 120 && row.refresh_token) {
-    const creds = Buffer.from(
-      `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`
-    ).toString("base64");
-    const tr = await fetch(`${CANVA_API}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": `Basic ${creds}` },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
-    });
-    const td = await tr.json();
-    if (td.access_token) {
-      await db.execute({
-        sql: "UPDATE canva_auth SET access_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
-        args: [td.access_token, td.expires_in || 3600],
-      });
-      return td.access_token;
-    }
-  }
-  return row.access_token;
-}
 
 async function fetchPexelsUrl(query, vertical) {
   if (!PEXELS_KEY) return null;
@@ -62,9 +29,9 @@ export default async function handler(req, res) {
   const db = getDb();
   let token;
   try {
-    token = await getToken(db);
+    token = await getCanvaToken(db);
   } catch (e) {
-    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso. Clicca 'Connetti Canva'." });
+    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }
 
   try {
@@ -103,6 +70,11 @@ export default async function handler(req, res) {
 
     const af = await runAutofill({ token, templateId, data: autofillData, title: (caption || "VMScout").slice(0, 60) });
     if (!af.ok) {
+      // 401 da Canva = token non più valido: fai riconnettere (il frontend
+      // riapre la finestra di login su questo codice d'errore).
+      if (af.status === 401) {
+        return res.status(401).json({ error: "CANVA_NOT_CONNECTED", message: af.message });
+      }
       return res.status(af.status >= 400 && af.status < 600 ? af.status : 400).json({
         error:   true,
         message: af.message,

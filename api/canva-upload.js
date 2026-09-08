@@ -1,43 +1,17 @@
-import { getDb, ensureCanvaAuthTable } from "./db.js";
+import { getDb } from "./db.js";
+import { getCanvaToken } from "./canva-token.js";
+import { bustedUrl } from "./canva-lib.js";
 
 const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 
-async function getToken(db) {
-  await ensureCanvaAuthTable(db);
-  const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
-  );
-  if (!r.rows.length) {
-    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
-  }
-  const row    = r.rows[0];
-  const ageS   = (Date.now() - new Date(row.created_at + "Z").getTime()) / 1000;
-  const expiry = row.expires_in || 3600;
-
-  if (ageS > expiry - 120 && row.refresh_token) {
-    const creds = Buffer.from(
-      `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`
-    ).toString("base64");
-    const tr = await fetch(`${CANVA_API_BASE}/oauth/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${creds}`,
-      },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
-    });
-    const td = await tr.json();
-    if (td.access_token) {
-      await db.execute({
-        sql: "UPDATE canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
-        args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600],
-      });
-      return td.access_token;
-    }
-    // Refresh token scaduto → forza re-login
-    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
-  }
-  return row.access_token;
+async function createUploadJob(token, assetName, url) {
+  const r = await fetch(`${CANVA_API_BASE}/url-asset-uploads`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: assetName, url }),
+  });
+  const d = await r.json().catch(() => ({}));
+  return { r, d };
 }
 
 function nameWithExt(name, url) {
@@ -57,9 +31,9 @@ export default async function handler(req, res) {
   const db = getDb();
   let token;
   try {
-    token = await getToken(db);
+    token = await getCanvaToken(db);
   } catch (e) {
-    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso." });
+    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }
 
   try {
@@ -67,16 +41,14 @@ export default async function handler(req, res) {
     console.log("[canva-upload] url-import", { assetName, url: url.slice(0, 80) });
 
     // ── 1. Create upload job ───────────────────────────────────────
-    const r = await fetch(`${CANVA_API_BASE}/url-asset-uploads`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type":  "application/json",
-      },
-      body: JSON.stringify({ name: assetName, url }),
-    });
+    let { r, d } = await createUploadJob(token, assetName, url);
 
-    const d = await r.json();
+    // Canva deduplica per URL: se la foto era già stata importata risponde
+    // 400 "already exists" senza darci l'asset_id → riprova con URL univoco.
+    if (!r.ok && /already exist|duplicate/.test(`${d?.code || ""} ${d?.message || ""}`.toLowerCase())) {
+      const busted = bustedUrl(url);
+      if (busted) ({ r, d } = await createUploadJob(token, assetName, busted));
+    }
 
     if (!r.ok) {
       console.error("[canva-upload] create error", r.status, JSON.stringify(d).slice(0, 300));

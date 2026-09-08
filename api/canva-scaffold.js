@@ -4,42 +4,10 @@
 // il link, aggiunge foto/testo e li collega ai campi Autofill (quel passaggio
 // è editor-only, l'API di Canva non lo espone).
 
-import { getDb, ensureCanvaAuthTable } from "./db.js";
+import { getDb } from "./db.js";
+import { getCanvaToken } from "./canva-token.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
-
-async function getToken(db) {
-  await ensureCanvaAuthTable(db);
-  const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
-  );
-  if (!r.rows.length) {
-    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
-  }
-  const row    = r.rows[0];
-  const ageS   = (Date.now() - new Date(row.created_at + "Z").getTime()) / 1000;
-  const expiry = row.expires_in || 3600;
-
-  if (ageS > expiry - 120 && row.refresh_token) {
-    const creds = Buffer.from(
-      `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`
-    ).toString("base64");
-    const tr = await fetch(`${CANVA_API}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": `Basic ${creds}` },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
-    });
-    const td = await tr.json();
-    if (td.access_token) {
-      await db.execute({
-        sql: "UPDATE canva_auth SET access_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
-        args: [td.access_token, td.expires_in || 3600],
-      });
-      return td.access_token;
-    }
-  }
-  return row.access_token;
-}
 
 const DIMENSIONS = {
   post: { width: 1080, height: 1080 },
@@ -54,9 +22,9 @@ export default async function handler(req, res) {
   const db = getDb();
   let token;
   try {
-    token = await getToken(db);
+    token = await getCanvaToken(db);
   } catch (e) {
-    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso. Clicca 'Connetti Canva'." });
+    return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }
 
   const format = (req.query.format || "post").toLowerCase();
