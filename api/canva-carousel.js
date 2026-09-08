@@ -4,8 +4,7 @@
 // Image_1..N / Testo_1..N, invece di dover creare/compilare un design per slide.
 
 import { getDb } from "./db.js";
-import { getCanvaToken } from "./canva-token.js";
-import { runAutofill, trimTrailingPages, uploadUrlAsset } from "./canva-lib.js";
+import { getCanvaToken, runAutofill, trimTrailingPages, uploadUrlAsset } from "./canva-lib.js";
 
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 const MAX_SLIDES = 10;

@@ -1,6 +1,5 @@
 import { getDb } from "./db.js";
-import { getCanvaToken } from "./canva-token.js";
-import { runAutofill, uploadUrlAsset } from "./canva-lib.js";
+import { getCanvaToken, runAutofill, uploadUrlAsset } from "./canva-lib.js";
 
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
 

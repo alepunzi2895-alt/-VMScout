@@ -5,7 +5,7 @@
 // è editor-only, l'API di Canva non lo espone).
 
 import { getDb } from "./db.js";
-import { getCanvaToken } from "./canva-token.js";
+import { getCanvaToken } from "./canva-lib.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
 

@@ -1,6 +1,5 @@
 import { getDb } from "./db.js";
-import { getCanvaToken } from "./canva-token.js";
-import { runAutofill } from "./canva-lib.js";
+import { getCanvaToken, runAutofill } from "./canva-lib.js";
 
 async function uploadImageFromUrl(imageUrl, accessToken) {
   try {

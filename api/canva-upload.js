@@ -1,6 +1,5 @@
 import { getDb } from "./db.js";
-import { getCanvaToken } from "./canva-token.js";
-import { bustedUrl } from "./canva-lib.js";
+import { getCanvaToken, bustedUrl } from "./canva-lib.js";
 
 const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 

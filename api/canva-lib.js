@@ -7,7 +7,66 @@
 //   GET  /v1/autofills/{jobId}    → polling finché status = "success"
 // e richiede un ID di **Brand Template** (non l'ID di un design).
 
+import { ensureCanvaAuthTable } from "./db.js";
+
 const CANVA_API = "https://api.canva.com/rest/v1";
+
+// ─── Token OAuth Canva — punto UNICO di lettura/rinnovo ──────────────
+//
+// Canva RUOTA il refresh_token a ogni chiamata /oauth/token: la risposta
+// contiene un NUOVO refresh_token e quello usato viene invalidato subito. Se un
+// endpoint rinnova l'access_token ma NON ripersiste il nuovo refresh_token, il
+// refresh successivo fallisce → si ricade sull'access_token scaduto → Canva
+// risponde "Access token is invalid". Tutti gli endpoint devono usare questo.
+//
+// (Sta in canva-lib.js e non in un file suo per non superare il limite di
+// Serverless Functions del deploy: ogni file in api/ conta come funzione.)
+export async function getCanvaToken(db) {
+  await ensureCanvaAuthTable(db);
+  const r = await db.execute(
+    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
+  );
+  if (!r.rows.length) {
+    const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
+  }
+
+  const row    = r.rows[0];
+  const ageS   = (Date.now() - new Date(row.created_at + "Z").getTime()) / 1000;
+  const expiry = row.expires_in || 3600;
+
+  // Ancora valido (margine 120s): usa l'access_token corrente.
+  if (ageS <= expiry - 120 || !row.refresh_token) return row.access_token;
+
+  // Vicino alla scadenza → refresh + rotazione refresh_token.
+  const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
+  const clientSecret = process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "";
+  const creds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+  let td = {};
+  try {
+    const tr = await fetch(`${CANVA_API}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": `Basic ${creds}` },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
+    });
+    td = await tr.json().catch(() => ({}));
+  } catch {
+    // Errore di rete durante il refresh: prova comunque l'access_token esistente.
+    return row.access_token;
+  }
+
+  if (!td.access_token) {
+    // refresh_token morto (già ruotato altrove, revocato o scaduto): serve
+    // riconnettere Canva.
+    const e = new Error("CANVA_TOKEN_EXPIRED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
+  }
+
+  await db.execute({
+    sql: "UPDATE canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
+    args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600],
+  });
+  return td.access_token;
+}
 
 // Canva `url-asset-uploads` fallisce / va in timeout su file enormi: il caso
 // tipico è Unsplash `urls.full`/`urls.raw` = foto a piena risoluzione (6000px+,
