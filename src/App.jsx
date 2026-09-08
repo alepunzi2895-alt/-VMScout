@@ -679,6 +679,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
   const [pages, setPages] = useState([]);
   const [state, setState] = useState("idle");
   const [url, setUrl] = useState(null);
+  const [madeDesigns, setMadeDesigns] = useState(null); // [{url, caption, hasImage}]
   const [errMsg, setErrMsg] = useState("");
   const [savedDesigns, setSavedDesigns] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -736,7 +737,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
     setPages((initialSlides || []).map(s => ({
       caption: s.caption || "", search_query: s.search_query || "", image_url: s.image_url || null, source: def,
     })));
-    setState("idle"); setUrl(null); setErrMsg(""); setPickerOpen(false); setProgress("");
+    setState("idle"); setUrl(null); setMadeDesigns(null); setErrMsg(""); setPickerOpen(false); setProgress("");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // All'apertura: precarica per ogni pagina non bloccata la prima foto della sua
@@ -824,13 +825,18 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
         }
 
         if (data.ok) {
-          setUrl(data.url); setState("done");
+          const list = data.designs && data.designs.length
+            ? data.designs
+            : (data.url ? [{ url: data.url, caption: "", hasImage: true }] : []);
+          setMadeDesigns(list);
+          setUrl(list[0]?.url || data.url);
+          setState("done");
           if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
           saveCanvaDesign({
             project_id: projectId || null, kind: "carousel", format: "carousel",
-            title: `Carosello ${pages.length} pagine`, design_url: data.url,
+            title: `Carosello ${list.length || pages.length} slide`, design_url: list[0]?.url || data.url,
             thumb_url: (pages.find(p => p.image_url)?.image_url) || data.imageUrls?.[0] || null,
-            slides: pages.length,
+            slides: list.length || pages.length,
           });
         } else if (data.error === "CANVA_NOT_CONNECTED") {
           window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
@@ -952,11 +958,28 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
 
             {errMsg && <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{errMsg}</div>}
 
-            {state === "done" && url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", padding: "12px", borderRadius: 12, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700 }}>
-                ✓ Apri carosello in Canva →
-              </a>
+            {state === "done" && (madeDesigns?.length || url) ? (
+              <div>
+                <div style={{ fontSize: 11, color: "#5ABA5A", fontWeight: 700, marginBottom: 8 }}>
+                  ✓ {madeDesigns?.length || 1} slide pronte su Canva
+                </div>
+                <div style={{ fontSize: 10.5, color: "#6A6258", marginBottom: 10, lineHeight: 1.5 }}>
+                  Ogni slide è un design con lo sfondo foto. Aprile, ritocca se serve,
+                  poi <b>Condividi → Scarica</b> le immagini e caricale su Instagram come carosello.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(madeDesigns?.length ? madeDesigns : [{ url }]).map((d, i) => (
+                    <a key={i} href={d.url} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderRadius: 10, textDecoration: "none", border: "1px solid rgba(90,186,90,0.3)", background: "rgba(90,186,90,0.08)", color: "#8FCF8F", fontSize: 12 }}>
+                      <span style={{ fontWeight: 700, color: "#5ABA5A", flexShrink: 0 }}>Slide {i + 1}</span>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.75, fontStyle: "italic" }}>
+                        {d.caption || "—"}{d.hasImage === false ? " (senza foto)" : ""}
+                      </span>
+                      <span style={{ flexShrink: 0 }}>↗</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
             ) : (
               <button onClick={handleCreate} disabled={state === "loading" || !pages.length}
                 style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !pages.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !pages.length ? 0.5 : 1 }}>

@@ -1,32 +1,36 @@
-// /api/canva-carousel.js — compone in UN solo design Canva un intero carosello
-// a partire dall'output di Visual Scout (post_composer).
+// /api/canva-carousel.js — compone le slide di un carosello su Canva a partire
+// dall'output di Visual Scout (post_composer).
 //
-// COME funziona (dal 2026-09-09): il vecchio approccio "un template a N pagine
-// con placeholder Image_1..N/Testo_1..N" non funzionava — i riquadri immagine
-// del template carosello non erano taggati come campi di autofill e Canva non ci
-// fa leggere il dataset del brand template (scope brandtemplate:* non abilitato)
-// per accorgercene. Le foto venivano caricate ma il carosello restava con solo
-// il testo su fondo nero.
+// COME funziona (dal 2026-09-09):
 //
-// Ora ogni slide viene composta col template del POST SINGOLO (`Immagine_Sfondo`
-// + `Testo_Post`/`Caption`), che è verificato funzionante con lo sfondo foto.
-// Poi gli N design di una pagina vengono uniti con la Design Merge API in un
-// unico carosello di N pagine.
+// Il vecchio approccio ("un unico template a N pagine con placeholder
+// Image_1..N/Testo_1..N") non funzionava: i riquadri immagine del template
+// carosello non erano taggati come campi di autofill e Canva non ci fa leggere
+// il dataset del brand template per accorgercene → le foto venivano caricate ma
+// il carosello restava con solo testo su fondo nero.
+//
+// Anche la Design Merge API (unire N design da una pagina in un carosello) è
+// stata scartata: è in "preview", per il nostro account l'operazione
+// `insert_pages` risponde success ma NON aggiunge davvero le pagine.
+//
+// Quindi: ogni slide è un design a sé, composto con il template del POST
+// SINGOLO (`Immagine_Sfondo` + `Testo_Post`/`Caption`) — verificato funzionante
+// con lo sfondo foto. La risposta è la LISTA degli N design: l'utente li apre,
+// esporta le immagini e le carica su Instagram come carosello (è comunque il
+// flusso IG: un carosello sono singole immagini).
 //
 // Lavora a CICLI (maxDuration:60 di Vercel): a fine ciclo, se Canva sta ancora
 // lavorando, risponde { pending, resume } e il client lo richiama (cap 5 min).
 //
 // Fasi (campo `resume.stage`):
-//   upload  → carica le N immagini su Canva            → slots[i].assetId
-//   slides  → N job autofill (template post)           → slideJobs[i].designId
-//   merge   → N-1 job merge (insert_pages)             → un unico design
+//   upload  → carica le N immagini su Canva     → slots[i].assetId
+//   slides  → N job autofill (template post)    → slideJobs[i].designId
 //
 import { getDb } from "./db.js";
 import {
   getCanvaToken,
   startImageUpload, checkImageUpload,
   startAutofillJob, checkAutofillJob,
-  startMergeInsert, checkMergeJob,
 } from "./canva-lib.js";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -114,7 +118,7 @@ export default async function handler(req, res) {
         data["Immagine_Sfondo"] = { type: "image", asset_id: slots[i].assetId };
         data["Background"]      = { type: "image", asset_id: slots[i].assetId };
       }
-      const r = await startAutofillJob({ token, templateId: postTemplateId, data, title: `Slide ${i + 1}` });
+      const r = await startAutofillJob({ token, templateId: postTemplateId, data, title: captions[i] ? captions[i].slice(0, 40) : `Slide ${i + 1}` });
       if (r.jobId) jobs[i] = { jobId: r.jobId };
       else if (r.retry) { /* 429: riprova al ciclo dopo */ }
       else jobs[i] = { error: r.error || "Autofill slide non riuscito." };
@@ -126,133 +130,59 @@ export default async function handler(req, res) {
       for (let i = 0; i < jobs.length; i++) {
         if (!jobs[i].jobId || jobs[i].designId || jobs[i].error || Date.now() >= deadline) continue;
         const c = await checkAutofillJob({ token, jobId: jobs[i].jobId });
-        if (c.designId) jobs[i] = { designId: c.designId, designUrl: c.designUrl, hadImage: !!slots[i]?.assetId };
+        if (c.designId) jobs[i] = { designId: c.designId, designUrl: c.designUrl };
         else if (c.error) jobs[i] = { error: c.error };
       }
     }
 
     // ancora job da creare (429) o da finire → altro ciclo
-    const unfinished = jobs.some(j => (!j.designId && !j.error));
-    if (unfinished && Date.now() >= deadline) {
+    if (jobs.some(j => !j.designId && !j.error) && Date.now() >= deadline) {
       return res.status(202).json({
         pending: true, phase: "slides",
         resume: { stage: "slides", slots, imageUrls, slideJobs: jobs },
       });
     }
 
-    const good = jobs.map((j, i) => j.designId ? { designId: j.designId, designUrl: j.designUrl, hadImage: !!slots[i]?.assetId } : null).filter(Boolean);
-    if (!good.length) {
+    const designs = jobs.map((j, i) => j.designId ? {
+      url: j.designUrl || `https://www.canva.com/design/${j.designId}/edit`,
+      caption: captions[i],
+      hasImage: !!slots[i]?.assetId,
+    } : null).filter(Boolean);
+
+    if (!designs.length) {
       const firstErr = jobs.find(j => j.error)?.error;
       return res.status(502).json({ error: true, message: `Canva non è riuscita a comporre nessuna slide.${firstErr ? " " + firstErr : ""}` });
     }
 
     const slideErrors = jobs.map((j, i) => j.error ? `Slide ${i + 1}: ${j.error}` : null).filter(Boolean);
+    const withImage = designs.filter(d => d.hasImage).length;
+    const noImage   = designs.length - withImage;
 
-    if (good.length === 1) {
-      // niente da unire
-      return finalize({ designId: good[0].designId, designUrl: good[0].designUrl, good, slots, imageUrls, slideErrors, insertedCount: 0 });
-    }
-
-    return runMergePhase({
-      slots, imageUrls, slideErrors,
-      baseDesignId: good[0].designId,
-      good,
-      mergeSources: good.slice(1).map(g => g.designId),
-      mergeIdx: 0,
-      insertedCount: 0,
-    });
-  }
-
-  // ── FASE merge: inserisce le pagine slide 2..N nel design della slide 1 ──
-  async function runMergePhase(st) {
-    let { baseDesignId, mergeSources, mergeIdx, insertedCount, mergeJobId, slots, imageUrls, slideErrors, good } = st;
-    slideErrors = slideErrors || [];
-
-    while (mergeIdx < mergeSources.length && Date.now() < deadline) {
-      if (!mergeJobId) {
-        const r = await startMergeInsert({
-          token,
-          baseDesignId,
-          sourceDesignId: mergeSources[mergeIdx],
-          pageNumbers: [1],
-          afterPageNumber: 1 + insertedCount,
-          title: `Carosello ${good.length} pagine`,
-        });
-        if (r.jobId) mergeJobId = r.jobId;
-        else if (r.retry) break; // 429: altro ciclo
-        else { slideErrors.push(`Unione pagina ${mergeIdx + 2}: ${r.error}`); mergeIdx++; continue; }
-      }
-      // polla il job merge corrente
-      let done = false;
-      while (mergeJobId && !done && Date.now() < deadline) {
-        await sleep(POLL_INTERVAL);
-        const c = await checkMergeJob({ token, jobId: mergeJobId });
-        if (c.designId) {
-          baseDesignId = c.designId;
-          insertedCount++;
-          mergeIdx++;
-          mergeJobId = null;
-          done = true;
-        } else if (c.error) {
-          slideErrors.push(`Unione pagina ${mergeIdx + 2}: ${c.error}`);
-          mergeIdx++;
-          mergeJobId = null;
-          done = true;
-        }
-        // pending: continua a pollare
-      }
-    }
-
-    if (mergeIdx < mergeSources.length) {
-      return res.status(202).json({
-        pending: true, phase: "merge",
-        resume: {
-          stage: "merge", baseDesignId, mergeSources, mergeIdx, insertedCount,
-          mergeJobId: mergeJobId || null, slots, imageUrls, slideErrors, good,
-        },
-      });
-    }
-
-    return finalize({
-      designId: baseDesignId,
-      designUrl: `https://www.canva.com/design/${baseDesignId}/edit`,
-      good, slots, imageUrls, slideErrors, insertedCount,
-    });
-  }
-
-  // ── Risposta finale ────────────────────────────────────────────────
-  function finalize({ designId, designUrl, good, slots, imageUrls, slideErrors, insertedCount }) {
-    const pages = 1 + (insertedCount || 0);
-    const withImage = (good || []).slice(0, pages).filter(g => g.hadImage).length;
-    const errs = slideErrors || [];
     return res.status(200).json({
       ok: true,
-      url: designUrl || `https://www.canva.com/design/${designId}/edit`,
+      designs,
+      url: designs[0].url,                 // retrocompat
       slidesFilled: withImage,
       totalSlides: usedSlides.length,
-      pages,
+      madeSlides: designs.length,
       imageUrls: (imageUrls || []).filter(Boolean),
-      slotErrors: errs,
-      imageWarning: errs.length
-        ? errs.join(" · ")
-        : (withImage < pages ? `${pages - withImage} slide senza foto di sfondo.` : null),
+      slotErrors: slideErrors,
+      imageWarning: [
+        slideErrors.length ? slideErrors.join(" · ") : null,
+        noImage > 0 ? `${noImage} slide senza foto di sfondo.` : null,
+      ].filter(Boolean).join(" · ") || null,
     });
   }
 
   try {
-    // ── Resume: merge in corso ──────────────────────────────────────
-    if (resume?.stage === "merge") {
-      return await runMergePhase(resume);
-    }
-
-    // ── Resume: autofill slide in corso ─────────────────────────────
+    // ── Resume: autofill slide in corso ────────────────────────────
     if (resume?.stage === "slides") {
       return await runSlidesPhase({
         slots: resume.slots || [], imageUrls: resume.imageUrls || [], slideJobs: resume.slideJobs,
       });
     }
 
-    // ── Resume: upload immagini in corso ────────────────────────────
+    // ── Resume: upload immagini in corso ───────────────────────────
     if (resume?.stage === "upload" && Array.isArray(resume.slots)) {
       const slots = await pollSlots({ token, slots: resume.slots, stopAt: deadline });
       if (slots.some(s => s?.jobId)) {
@@ -264,7 +194,7 @@ export default async function handler(req, res) {
       return await runSlidesPhase({ slots, imageUrls: resume.imageUrls || [] });
     }
 
-    // ── Fresh: risolvi immagini → avvia gli upload ──────────────────
+    // ── Fresh: risolvi immagini → avvia gli upload ─────────────────
     const vertical = format === "story" || format === "reel";
     const imageUrls = await Promise.all(
       usedSlides.map(s => s.image_url ? Promise.resolve(s.image_url) : fetchPexelsUrl(s.search_query, vertical))

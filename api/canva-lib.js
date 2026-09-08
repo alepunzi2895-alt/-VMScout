@@ -506,58 +506,10 @@ export async function checkAutofillJob({ token, jobId }) {
   return { error: j.error?.message || `Autofill non riuscito (stato: ${j.status || "sconosciuto"}).` };
 }
 
-// Design Merge API — inserisce pagine da un design sorgente in uno esistente
-// (o ne crea uno nuovo se `baseDesignId` è assente).
-// { jobId } | { retry: true } (429) | { error, status }.
-export async function startMergeInsert({ token, baseDesignId, sourceDesignId, pageNumbers, afterPageNumber, title }) {
-  const operation = {
-    type: "insert_pages",
-    source: {
-      type: "design",
-      design_id: sourceDesignId,
-      ...(Array.isArray(pageNumbers) && pageNumbers.length ? { page_numbers: pageNumbers } : {}),
-    },
-    ...(Number.isInteger(afterPageNumber) ? { after_page_number: afterPageNumber } : {}),
-  };
-  const payload = baseDesignId
-    ? { type: "modify_existing_design", design_id: baseDesignId, operations: [operation], ...(title ? { title: String(title).slice(0, 255) } : {}) }
-    : { type: "create_new_design", operations: [operation], title: String(title || "Carosello VMScout").slice(0, 255) };
-  let res, j;
-  try {
-    res = await fetch(`${CANVA_API}/merges`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    j = await res.json().catch(() => ({}));
-  } catch (e) {
-    return { error: `Errore di rete verso Canva: ${e.message}`, status: 0 };
-  }
-  if (res.status === 429) return { retry: true };
-  if (!res.ok) return { error: j.message || j.error || `Merge Canva HTTP ${res.status}`, status: res.status, details: j };
-  const job = j.job ?? j;
-  if (!job.id) return { error: "Canva non ha restituito un job di merge.", status: 502 };
-  return { jobId: job.id };
-}
-
-// Una verifica di un job merge.
-// { designId, designUrl } | { pending: true } | { error }.
-export async function checkMergeJob({ token, jobId }) {
-  const { status, ok, body } = await canvaGet(token, `/merges/${jobId}`);
-  if (!ok) {
-    if (status === 404 || status === 410) return { error: "Job merge non trovato su Canva (scaduto)." };
-    return { pending: true };
-  }
-  const j = body?.job ?? body ?? {};
-  if (j.status === "success") {
-    const d = j.result?.design ?? j.design ?? null;
-    return d?.id
-      ? { designId: d.id, designUrl: d.url || `https://www.canva.com/design/${d.id}/edit` }
-      : { error: "Merge riuscito ma senza design." };
-  }
-  if (j.status === "in_progress" || j.status === "pending") return { pending: true };
-  return { error: j.error?.message || `Merge non riuscito (stato: ${j.status || "sconosciuto"}).` };
-}
+// NOTA: la Design Merge API `insert_pages` (unire N design in un carosello) è
+// stata provata e SCARTATA — è "preview" e per il nostro account risponde
+// success ma NON aggiunge le pagine. Il carosello ora restituisce N design
+// separati (vedi api/canva-carousel.js).
 
 // Elimina le pagine in coda a un design (Design Merge API, preview). Serve al
 // carosello: il template ha N pagine fisse (Image_1..N/Testo_1..N), ma se
