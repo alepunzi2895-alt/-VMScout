@@ -783,8 +783,24 @@ function AdsPanel({ brand }) {
   const [err, setErr] = useState("");
   const [analysis, setAnalysis] = useState(() => readJsonLS("fb_ads_analysis", null));
   const [analyzing, setAnalyzing] = useState(false);
+  const [tokenPaste, setTokenPaste] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
 
   const checkStatus = () => fetch("/api/instagram?action=fb_status").then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false }));
+
+  async function connectWithToken() {
+    if (!tokenPaste.trim()) return;
+    setErr(""); setLoading("token");
+    try {
+      const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "connect_token", token: tokenPaste.trim() }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setTokenPaste(""); setShowPaste(false);
+      await checkStatus();
+      loadAccounts();
+    } catch (e) { setErr(e.message); }
+    setLoading("");
+  }
   useEffect(() => { checkStatus(); }, []);
   useEffect(() => {
     const onMsg = e => { if (e.data === "fb_connected") { checkStatus(); loadAccounts(); } };
@@ -858,12 +874,33 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
           Collega Facebook per vedere il <strong>target e gli interessi usati</strong> nelle tue promozioni Instagram/Facebook, spesa, reach e costo per risultato — e farti consigliare il targeting migliore.
           <br /><span style={{ fontSize: 11, opacity: 0.7 }}>Serve un account IG collegato a una Pagina FB dentro un Business Manager con un account pubblicitario.</span>
         </div>
-        <button
-          onClick={() => window.open("/api/instagram?action=fb_login", "_blank", "width=680,height=760")}
-          style={{ ...goldBtn(false), background: "linear-gradient(135deg, #1877F2, #0C5AC7)", color: "#fff" }}
-        >
-          Connetti Facebook (Ads)
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            onClick={() => window.open("/api/instagram?action=fb_login", "_blank", "width=680,height=760")}
+            style={{ ...goldBtn(false), background: "linear-gradient(135deg, #1877F2, #0C5AC7)", color: "#fff" }}
+          >
+            Connetti Facebook (Ads)
+          </button>
+          <button onClick={() => setShowPaste(v => !v)}
+            style={{ background: "transparent", border: "1px solid #333", borderRadius: 9, color: WARM_GREY, padding: "10px 14px", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+            {showPaste ? "Chiudi" : "oppure incolla un token"}
+          </button>
+        </div>
+
+        {showPaste && (
+          <div style={{ marginTop: 14, padding: 14, background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10 }}>
+            <div style={{ fontSize: 11, color: WARM_GREY, lineHeight: 1.6, marginBottom: 10 }}>
+              Da <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ color: "#4A90E2" }}>Graph API Explorer</a>: seleziona la tua app → aggiungi il permesso <code style={{ color: GOLD }}>ads_read</code> → <strong>Generate Access Token</strong> → copia e incolla qui. Lo converto in token da ~60 giorni.
+            </div>
+            <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={3} placeholder="EAAxxxxxxxxxxxx..."
+              style={{ width: "100%", background: "#141414", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "9px 11px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+            <button onClick={connectWithToken} disabled={!tokenPaste.trim() || loading === "token"}
+              style={{ ...goldBtn(!tokenPaste.trim() || loading === "token"), marginTop: 8, fontSize: 10 }}>
+              {loading === "token" ? "Verifico…" : "Collega con questo token"}
+            </button>
+          </div>
+        )}
+
         {err && <div style={{ marginTop: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
       </div>
     );

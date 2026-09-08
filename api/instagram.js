@@ -148,6 +148,37 @@ export default async function handler(req, res) {
   const body = req.body || {};
 
   if (body.fb_action) {
+    // Collegamento via token incollato (fallback all'OAuth): scambia per un
+    // long-lived e lo salva come farebbe il callback.
+    if (body.fb_action === "connect_token") {
+      const pasted = (body.token || "").replace(INVISIBLE, "").replace(/^Bearer\s+/i, "");
+      if (!pasted) return res.status(400).json({ error: "Token mancante" });
+      try {
+        let finalToken = pasted, expires = null;
+        if (fbAppId && fbSecret) {
+          const ex = await fbGraph(null, "oauth/access_token", {
+            grant_type: "fb_exchange_token", client_id: fbAppId, client_secret: fbSecret, fb_exchange_token: pasted,
+          });
+          if (ex.data?.access_token) { finalToken = ex.data.access_token; expires = ex.data.expires_in || null; }
+        }
+        // Valida: deve poter leggere gli account pubblicitari.
+        const check = await fbGraph(finalToken, "me/adaccounts", { fields: "id", limit: 1 });
+        if (!check.ok) {
+          return res.status(400).json({ error: check.data?.error?.message || "Token non valido o senza permesso ads_read." });
+        }
+        const db = getDb();
+        await ensureFbAuthTable(db);
+        await db.execute({
+          sql: `INSERT INTO fb_auth (id, access_token, expires_in) VALUES (1, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token, expires_in=excluded.expires_in, created_at=datetime('now')`,
+          args: [finalToken, expires],
+        });
+        return res.status(200).json({ ok: true, long_lived: expires != null, expires_in: expires });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
     let token;
     try { token = await getFbToken(getDb()); }
     catch (e) { return res.status(401).json({ error: e.code || "FB_NOT_CONNECTED", message: "Collega Facebook per le sponsorizzate." }); }
