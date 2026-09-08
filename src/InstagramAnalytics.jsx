@@ -774,6 +774,14 @@ function adResults(ins) {
   };
 }
 
+// L'ID dell'account Instagram che ha pubblicato la sponsorizzata (per filtrare
+// solo quelle della pagina del progetto).
+function adInstagramActorId(cr) {
+  if (!cr) return null;
+  const spec = cr.object_story_spec || {};
+  return String(spec.instagram_actor_id || spec.instagram_user_id || cr.instagram_actor_id || "") || null;
+}
+
 // Da quale contenuto è partita la sponsorizzata (post IG, immagine, ecc.).
 function adCreativeInfo(cr) {
   if (!cr) return null;
@@ -791,7 +799,7 @@ function adCreativeInfo(cr) {
   return { link, caption: caption.slice(0, 160), thumb, kind, name: cr.name };
 }
 
-function AdsPanel({ brand }) {
+function AdsPanel({ brand, igAccountId, igUsername }) {
   const [status, setStatus] = useState(null); // null=checking, {connected,...}
   const [accounts, setAccounts] = useState(null);
   const [acctId, setAcctId] = useState(() => localStorage.getItem("fb_ad_account") || "");
@@ -803,6 +811,21 @@ function AdsPanel({ brand }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [tokenPaste, setTokenPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(() => { try { return localStorage.getItem("fb_ads_only_mine") !== "0"; } catch { return true; } });
+
+  useEffect(() => { try { localStorage.setItem("fb_ads_only_mine", onlyMine ? "1" : "0"); } catch {} }, [onlyMine]);
+
+  // Sponsorizzate dell'account IG del progetto: match sull'instagram_actor_id
+  // del creative. Se il filtro non trova nulla ma ci sono ads con permalink IG,
+  // mostra comunque quelle (il match per id può fallire se l'IG-Login usa un id
+  // diverso da quello lato Ads).
+  const igMatched = (ads || []).filter(a => adInstagramActorId(a.creative) && String(adInstagramActorId(a.creative)) === String(igAccountId || ""));
+  const igLike = (ads || []).filter(a => a.creative?.instagram_permalink_url || a.creative?.effective_instagram_media_id || adInstagramActorId(a.creative));
+  const filterActive = onlyMine && !!igAccountId;
+  const shownAds = !filterActive ? (ads || [])
+    : igMatched.length ? igMatched
+    : igLike;
+  const filterFellBack = filterActive && !igMatched.length && igLike.length > 0;
 
   const checkStatus = () => fetch("/api/instagram?action=fb_status").then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false }));
 
@@ -862,9 +885,9 @@ function AdsPanel({ brand }) {
   useEffect(() => { if (status?.connected && accounts === null) loadAccounts(); /* eslint-disable-next-line */ }, [status?.connected]);
 
   async function analyzeAds() {
-    if (!ads?.length) return;
+    if (!shownAds?.length) return;
     setAnalyzing(true); setErr("");
-    const rows = ads.map(a => {
+    const rows = shownAds.map(a => {
       const tg = summarizeTargeting(a.adset?.targeting);
       const m = adResults(a.insights);
       const cr = adCreativeInfo(a.creative);
@@ -889,7 +912,7 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
       setAnalysis(parsed);
       // Storico + memoria di progetto (Dashboard + Visual Scout).
       if (brand?.id) {
-        saveToHistory({ project_id: brand.id, type: "ads_analysis", prompt: `Analisi ${ads.length} sponsorizzate`, result_json: parsed });
+        saveToHistory({ project_id: brand.id, type: "ads_analysis", prompt: `Analisi ${shownAds.length} sponsorizzate`, result_json: parsed });
         const rt = parsed.target_consigliato || {};
         fetch("/api/history?action=merge_insights", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -995,7 +1018,7 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
         <button onClick={loadAds} disabled={!acctId || loading === "ads"} style={{ ...goldBtn(!acctId || loading === "ads"), fontSize: 10 }}>
           {loading === "ads" ? "Carico…" : "Carica sponsorizzate (90gg)"}
         </button>
-        {ads?.length > 0 && (
+        {shownAds?.length > 0 && (
           <button onClick={analyzeAds} disabled={analyzing}
             style={{ ...goldBtn(analyzing), background: analyzing ? "#2a2a2a" : "linear-gradient(135deg, #E1306C, #c0254e)", color: analyzing ? WARM_GREY : "#fff", fontSize: 10 }}>
             {analyzing ? "Analisi…" : "🎯 Analizza con Claude"}
@@ -1003,19 +1026,30 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
         )}
       </div>
 
+      {ads?.length > 0 && igAccountId && (
+        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: WARM_GREY, marginBottom: 12, cursor: "pointer" }}>
+          <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} />
+          Solo le sponsorizzate di {igUsername ? `@${igUsername}` : "questo account IG"}
+        </label>
+      )}
+
       {err && <div style={{ marginBottom: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
 
       {fetchedAt && ads?.length > 0 && (
         <div style={{ fontSize: 10, color: "#555", marginBottom: 10 }}>
-          {ads.length} sponsorizzate · aggiornate il {new Date(fetchedAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          {shownAds.length}{filterActive && shownAds.length !== ads.length ? ` di ${ads.length}` : ""} sponsorizzate · aggiornate il {new Date(fetchedAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          {filterFellBack && <span style={{ color: "#E4A050" }}> · match esatto per account IG non riuscito, mostro tutte quelle con placement Instagram</span>}
         </div>
       )}
 
       {ads?.length === 0 && <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata negli ultimi 90 giorni su questo account.</div>}
+      {ads?.length > 0 && shownAds.length === 0 && (
+        <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata di {igUsername ? `@${igUsername}` : "questo account IG"} tra le {ads.length} trovate. Togli la spunta per vederle tutte.</div>
+      )}
 
-      {ads?.length > 0 && (
+      {shownAds.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: analysis ? 20 : 0 }}>
-          {ads.map((a, i) => {
+          {shownAds.map((a, i) => {
             const tg = summarizeTargeting(a.adset?.targeting);
             const m = adResults(a.insights);
             const cr = adCreativeInfo(a.creative);
@@ -1674,7 +1708,7 @@ REGOLE FERREE:
         </div>
       )}
 
-      <AdsPanel brand={brand} />
+      <AdsPanel brand={brand} igAccountId={accountId} igUsername={username} />
 
       {/* Empty state */}
       {!posts.length && !loading && (

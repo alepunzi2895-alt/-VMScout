@@ -198,7 +198,7 @@ export default async function handler(req, res) {
         const fields = [
           "name", "effective_status", "created_time",
           "adset{name,daily_budget,lifetime_budget,start_time,end_time,targeting}",
-          "creative{name,title,body,object_type,instagram_permalink_url,thumbnail_url,image_url,effective_object_story_id,object_story_spec}",
+          "creative{name,title,body,object_type,instagram_permalink_url,thumbnail_url,image_url,effective_object_story_id,effective_instagram_media_id,object_story_spec}",
           `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr,cpc,frequency,actions,cost_per_action_type}`,
         ].join(",");
         const r = await fbGraph(token, `act_${acct}/ads`, { fields, limit: body.limit || 50 });
