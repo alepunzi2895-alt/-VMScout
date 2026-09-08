@@ -126,6 +126,49 @@ function sizedImageUrl(url) {
   return url;
 }
 
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+function refererFor(url) {
+  try {
+    const h = new URL(url).hostname;
+    if (h.includes("pixabay")) return "https://pixabay.com/";
+    if (h.includes("unsplash")) return "https://unsplash.com/";
+    if (h.includes("pexels")) return "https://www.pexels.com/";
+  } catch { /* */ }
+  return undefined;
+}
+
+// Scarica i byte di un'immagine con header "da browser" (alcune CDN — Pixabay,
+// plus.unsplash.com — rispondono 403 a fetch senza referer/UA). Se fallisce,
+// riprova tramite il proxy wsrv.nl che sa gestire l'hotlink.
+async function downloadImage(url) {
+  const headers = { "User-Agent": BROWSER_UA, "Accept": "image/avif,image/webp,image/*,*/*;q=0.8" };
+  const ref = refererFor(url);
+  if (ref) headers.Referer = ref;
+  const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined;
+
+  try {
+    const r = await fetch(url, { headers, signal });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length) return { bytes: buf };
+    }
+  } catch { /* passa al proxy */ }
+
+  // Fallback: proxy wsrv.nl (ridimensiona anche a 1280 e forza JPEG).
+  try {
+    const prox = `https://wsrv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//, ""))}&w=1280&output=jpg&q=80`;
+    const r = await fetch(prox, { signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length) return { bytes: buf };
+    }
+    return { error: `Immagine non scaricabile (HTTP ${r.status} anche via proxy).` };
+  } catch (e) {
+    return { error: `Download immagine fallito: ${e.message}` };
+  }
+}
+
 // Aggiunge un parametro univoco all'URL: Canva `url-asset-uploads` deduplica
 // per URL e, se la stessa foto era già stata caricata, risponde 400 "already
 // exists" SENZA restituirci l'asset_id esistente. Cambiare l'URL forza un nuovo
@@ -176,15 +219,9 @@ async function pollBinaryJob({ token, jobId, job, stopAt }) {
 // `{ error, stop? }`. A differenza di `url-asset-uploads`, Canva non deve fare un
 // fetch esterno lento da Unsplash/Pexels: il job si chiude in pochi secondi.
 export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
-  let bytes;
-  try {
-    const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15_000) : undefined;
-    const imgRes = await fetch(sizedImageUrl(url), { headers: { "User-Agent": "VMScout/1.0" }, signal });
-    if (!imgRes.ok) return { error: `Immagine non scaricabile (HTTP ${imgRes.status}).` };
-    bytes = Buffer.from(await imgRes.arrayBuffer());
-  } catch (e) {
-    return { error: `Download immagine fallito: ${e.message}` };
-  }
+  const dl = await downloadImage(sizedImageUrl(url));
+  if (dl.error) return { error: dl.error };
+  const bytes = dl.bytes;
   if (!bytes?.length) return { error: "Immagine vuota." };
   if (bytes.length > 45 * 1024 * 1024) return { error: "Immagine troppo grande (>45MB)." };
 
