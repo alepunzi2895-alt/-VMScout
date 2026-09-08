@@ -37,6 +37,59 @@ export default async function handler(req, res) {
     });
   }
 
+  // ?video=<brandTemplateId> — DIAGNOSTICA TEMPORANEA: carica un video Pexels
+  // su Canva (url-asset-uploads) e prova l'autofill { type:"video" } nel campo
+  // Immagine_Sfondo del template. Serve a capire se l'autofill video (preview
+  // feature) funziona per l'account.
+  if (req.query.video) {
+    const TPL = String(req.query.video).split(/[/?#\s]/)[0];
+    const VURL = "https://videos.pexels.com/video-files/3571264/3571264-hd_1080_1920_30fps.mp4"; // ~4MB, portrait
+    const dbg = [];
+    const g = async (path, init) => {
+      const r = await fetch(`${CANVA_API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers || {}) } });
+      const j = await r.json().catch(() => ({}));
+      return { status: r.status, ok: r.ok, j };
+    };
+    // 1) url-asset-uploads del video
+    const up = await g(`/url-asset-uploads`, { method: "POST", body: JSON.stringify({ name: "vmscout-test.mp4", url: VURL }) });
+    dbg.push({ step: "create url-asset-upload", status: up.status, job: up.j?.job });
+    let job = up.j?.job, assetId = job?.asset?.id;
+    for (let i = 0; i < 20 && job && (job.status === "in_progress" || job.status === "pending"); i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const p = await g(`/url-asset-uploads/${job.id}`);
+      job = p.j?.job ?? job;
+      assetId = job?.asset?.id;
+    }
+    dbg.push({ step: "poll upload", finalStatus: job?.status, assetId, error: job?.error });
+    if (!assetId) return res.status(200).json({ ok: false, step: "upload video", dbg });
+    // 2) autofill { type: "video" }
+    const af = await g(`/autofills`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: "create_from_brand_template", brand_template_id: TPL,
+        data: {
+          Immagine_Sfondo: { type: "video", asset_id: assetId },
+          Testo_Post: { type: "text", text: "DBG video reel" },
+        },
+        title: "DBG video",
+      }),
+    });
+    dbg.push({ step: "create autofill(video)", status: af.status, resp: af.j });
+    let aj = af.j?.job ?? af.j;
+    for (let i = 0; i < 25 && aj && (aj.status === "in_progress" || aj.status === "pending"); i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const p = await g(`/autofills/${aj.id}`);
+      aj = p.j?.job ?? p.j ?? aj;
+    }
+    const design = aj?.result?.design ?? aj?.design ?? null;
+    dbg.push({ step: "poll autofill", finalStatus: aj?.status, error: aj?.error, design });
+    return res.status(200).json({
+      ok: aj?.status === "success",
+      designUrl: design?.url || (design?.id ? `https://www.canva.com/design/${design.id}/edit` : null),
+      dbg,
+    });
+  }
+
   // 1. scarica i byte della foto di prova
   let bytes;
   try {
