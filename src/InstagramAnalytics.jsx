@@ -722,6 +722,268 @@ function NextPostCard({ post, onSuggestBrief, saved, onMarkUsed }) {
   );
 }
 
+// ── Sponsorizzate (Meta Ads) ───────────────────────────────────────────────
+
+const GENDER_LABEL = { 1: "Uomini", 2: "Donne" };
+
+// Riassume l'oggetto targeting di un adset in qualcosa di leggibile + estrae gli
+// interessi (le "parole chiave del target" richieste dall'utente).
+function summarizeTargeting(t) {
+  if (!t || typeof t !== "object") return { line: "Targeting non disponibile", interests: [] };
+  const parts = [];
+  if (t.age_min || t.age_max) parts.push(`${t.age_min || 13}-${t.age_max || 65} anni`);
+  const g = Array.isArray(t.genders) ? t.genders.map(x => GENDER_LABEL[x]).filter(Boolean).join("/") : "";
+  if (g) parts.push(g); else parts.push("tutti i generi");
+
+  const geo = t.geo_locations || {};
+  const geoBits = [
+    ...(geo.countries || []),
+    ...(geo.regions || []).map(r => r.name),
+    ...(geo.cities || []).map(c => c.name),
+  ];
+  if (geoBits.length) parts.push(geoBits.slice(0, 4).join(", "));
+  if (geo.custom_locations?.length) parts.push(`${geo.custom_locations.length} aree su mappa`);
+  if (t.custom_audiences?.length) parts.push(`${t.custom_audiences.length} pubblici personalizzati`);
+
+  const interests = [];
+  (t.flexible_spec || []).forEach(spec => {
+    (spec.interests || []).forEach(i => i.name && interests.push(i.name));
+    (spec.behaviors || []).forEach(b => b.name && interests.push(b.name));
+    (spec.life_events || []).forEach(l => l.name && interests.push(l.name));
+  });
+  (t.interests || []).forEach(i => i.name && interests.push(i.name));
+
+  const advantage = t.targeting_automation?.advantage_audience === 1 || t.targeting_optimization === "expansion_all";
+  return {
+    line: parts.join(" · ") + (advantage ? " · Advantage+ (pubblico automatico)" : ""),
+    interests: [...new Set(interests)],
+    advantage,
+  };
+}
+
+function adResults(ins) {
+  const row = ins?.data?.[0] || {};
+  const n = v => (v == null ? null : Number(v));
+  const actions = {};
+  (row.actions || []).forEach(a => { actions[a.action_type] = n(a.value); });
+  const cpa = {};
+  (row.cost_per_action_type || []).forEach(a => { cpa[a.action_type] = n(a.value); });
+  return {
+    spend: n(row.spend), reach: n(row.reach), impressions: n(row.impressions),
+    clicks: n(row.clicks), ctr: n(row.ctr), cpc: n(row.cpc), actions, cpa,
+  };
+}
+
+function AdsPanel({ brand }) {
+  const [status, setStatus] = useState(null); // null=checking, {connected,...}
+  const [accounts, setAccounts] = useState(null);
+  const [acctId, setAcctId] = useState(() => localStorage.getItem("fb_ad_account") || "");
+  const [ads, setAds] = useState(null);
+  const [loading, setLoading] = useState("");
+  const [err, setErr] = useState("");
+  const [analysis, setAnalysis] = useState(() => readJsonLS("fb_ads_analysis", null));
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const checkStatus = () => fetch("/api/instagram?action=fb_status").then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false }));
+  useEffect(() => { checkStatus(); }, []);
+  useEffect(() => {
+    const onMsg = e => { if (e.data === "fb_connected") { checkStatus(); loadAccounts(); } };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  useEffect(() => { try { analysis ? localStorage.setItem("fb_ads_analysis", JSON.stringify(analysis)) : localStorage.removeItem("fb_ads_analysis"); } catch {} }, [analysis]);
+
+  async function loadAccounts() {
+    setErr(""); setLoading("accounts");
+    try {
+      const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "adaccounts" }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.message || d.error);
+      setAccounts(d.accounts || []);
+      if (!acctId && d.accounts?.[0]) { setAcctId(d.accounts[0].id); localStorage.setItem("fb_ad_account", d.accounts[0].id); }
+    } catch (e) { setErr(e.message); }
+    setLoading("");
+  }
+
+  async function loadAds() {
+    if (!acctId) return;
+    setErr(""); setLoading("ads"); setAds(null);
+    localStorage.setItem("fb_ad_account", acctId);
+    try {
+      const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "ads", ad_account_id: acctId, date_preset: "last_90d" }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.message || d.error);
+      setAds(d.ads || []);
+    } catch (e) { setErr(e.message); }
+    setLoading("");
+  }
+
+  useEffect(() => { if (status?.connected && accounts === null) loadAccounts(); /* eslint-disable-next-line */ }, [status?.connected]);
+
+  async function analyzeAds() {
+    if (!ads?.length) return;
+    setAnalyzing(true); setErr("");
+    const rows = ads.map(a => {
+      const tg = summarizeTargeting(a.adset?.targeting);
+      const m = adResults(a.insights);
+      const results = Object.entries(m.actions).filter(([k]) => /lead|purchase|link_click|landing_page_view|messaging|onsite_conversion/.test(k));
+      return {
+        nome: a.name, stato: a.effective_status,
+        target: tg.line, interessi: tg.interests.slice(0, 10),
+        spesa: m.spend, reach: m.reach, ctr: m.ctr, cpc: m.cpc,
+        risultati: Object.fromEntries(results),
+        costo_per_risultato: Object.fromEntries(Object.entries(m.cpa).filter(([k]) => results.some(([rk]) => rk === k))),
+      };
+    });
+    const brandCtx = brand?.name ? ` BRAND: ${brand.name}${brand.sector ? ` (${brand.sector})` : ""}.` : "";
+    const system = `Sei un media buyer Meta Ads senior.${brandCtx} Analizza le sponsorizzate Instagram/Facebook e rispondi SOLO con JSON valido (no markdown, no testo extra).
+Struttura ESATTA:
+{"riepilogo":"UNA frase, max 22 parole","audience_migliori":[{"chi":"max 10 parole","perche":"cita numeri: spesa/CPC/costo per risultato, max 16 parole"}],"da_tagliare":[{"chi":"max 10 parole","perche":"max 14 parole"}],"target_consigliato":{"eta":"25-45","genere":"tutti|donne|uomini","aree":"max 8 parole","interessi":["interesse Meta 1","interesse 2","interesse 3","interesse 4"],"note":"max 16 parole"},"prossimo_test":"max 20 parole","budget":"max 16 parole"}
+REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Interessi = interessi reali di targeting Meta (ampi e trovabili).`;
+    try {
+      const raw = await callClaude(system, `Sponsorizzate reali (ultimi 90 giorni):\n${JSON.stringify(rows)}`, []);
+      setAnalysis(parseJsonResponse(raw));
+    } catch (e) { setErr("Analisi AI: " + e.message); }
+    setAnalyzing(false);
+  }
+
+  // ── Render ──
+  if (status === null) return null;
+
+  if (!status.connected) {
+    return (
+      <div style={{ ...card, marginBottom: 24, borderColor: "rgba(24,119,242,0.25)" }}>
+        <div style={{ ...label, marginBottom: 8, color: "#4A90E2" }}>💰 Analisi Sponsorizzate (Meta Ads)</div>
+        <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.6, marginBottom: 14 }}>
+          Collega Facebook per vedere il <strong>target e gli interessi usati</strong> nelle tue promozioni Instagram/Facebook, spesa, reach e costo per risultato — e farti consigliare il targeting migliore.
+          <br /><span style={{ fontSize: 11, opacity: 0.7 }}>Serve un account IG collegato a una Pagina FB dentro un Business Manager con un account pubblicitario.</span>
+        </div>
+        <button
+          onClick={() => window.open("/api/instagram?action=fb_login", "_blank", "width=680,height=760")}
+          style={{ ...goldBtn(false), background: "linear-gradient(135deg, #1877F2, #0C5AC7)", color: "#fff" }}
+        >
+          Connetti Facebook (Ads)
+        </button>
+        {err && <div style={{ marginTop: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...card, marginBottom: 24, borderColor: "rgba(24,119,242,0.25)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+        <div style={{ ...label, marginBottom: 0, color: "#4A90E2" }}>💰 Analisi Sponsorizzate</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {status.expires_in_days != null && <span style={{ fontSize: 9, color: "#555" }}>token valido ~{status.expires_in_days}gg</span>}
+          <button onClick={() => fetch("/api/instagram?action=fb_logout").then(() => { setStatus({ connected: false }); setAds(null); setAccounts(null); })}
+            style={{ background: "transparent", border: "1px solid #333", borderRadius: 8, color: WARM_GREY, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>
+            Disconnetti FB
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={acctId} onChange={e => setAcctId(e.target.value)}
+          style={{ background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 12, minWidth: 200 }}>
+          {accounts === null && <option>Carico account…</option>}
+          {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+          {accounts?.length === 0 && <option value="">Nessun account pubblicitario</option>}
+        </select>
+        <button onClick={loadAds} disabled={!acctId || loading === "ads"} style={{ ...goldBtn(!acctId || loading === "ads"), fontSize: 10 }}>
+          {loading === "ads" ? "Carico…" : "Carica sponsorizzate (90gg)"}
+        </button>
+        {ads?.length > 0 && (
+          <button onClick={analyzeAds} disabled={analyzing}
+            style={{ ...goldBtn(analyzing), background: analyzing ? "#2a2a2a" : "linear-gradient(135deg, #E1306C, #c0254e)", color: analyzing ? WARM_GREY : "#fff", fontSize: 10 }}>
+            {analyzing ? "Analisi…" : "🎯 Analizza con Claude"}
+          </button>
+        )}
+      </div>
+
+      {err && <div style={{ marginBottom: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
+
+      {ads?.length === 0 && <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata negli ultimi 90 giorni su questo account.</div>}
+
+      {ads?.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: analysis ? 20 : 0 }}>
+          {ads.map((a, i) => {
+            const tg = summarizeTargeting(a.adset?.targeting);
+            const m = adResults(a.insights);
+            return (
+              <div key={i} style={{ background: "#141414", border: "1px solid rgba(201,169,110,0.1)", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                  <div style={{ fontSize: 12.5, color: OFF_WHITE, fontWeight: 600 }}>{a.name}</div>
+                  <span style={{ fontSize: 9, color: a.effective_status === "ACTIVE" ? "#5ABA5A" : "#888", fontWeight: 700, whiteSpace: "nowrap" }}>{a.effective_status}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#B9AE98", marginBottom: 8, lineHeight: 1.5 }}>🎯 {tg.line}</div>
+                {tg.interests.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                    {tg.interests.slice(0, 12).map((x, j) => (
+                      <span key={j} style={{ fontSize: 10, padding: "3px 9px", borderRadius: 20, background: "rgba(74,144,226,0.12)", color: "#7FB4EE" }}>{x}</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11, color: WARM_GREY }}>
+                  {m.spend != null && <span>Spesa <strong style={{ color: GOLD }}>{m.spend.toFixed(2)}</strong></span>}
+                  {m.reach != null && <span>Reach <strong style={{ color: OFF_WHITE }}>{m.reach.toLocaleString("it-IT")}</strong></span>}
+                  {m.ctr != null && <span>CTR <strong style={{ color: OFF_WHITE }}>{m.ctr.toFixed(2)}%</strong></span>}
+                  {m.cpc != null && <span>CPC <strong style={{ color: OFF_WHITE }}>{m.cpc.toFixed(2)}</strong></span>}
+                  {Object.entries(m.actions).filter(([k]) => /lead|purchase|link_click|messaging_conversation|landing_page_view/.test(k)).slice(0, 2).map(([k, v]) => (
+                    <span key={k}>{k.replace(/_/g, " ").replace("onsite conversion.", "")} <strong style={{ color: "#5ABA5A" }}>{v}</strong>{m.cpa[k] != null ? ` (${m.cpa[k].toFixed(2)}/cad)` : ""}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {analyzing && <div style={{ fontSize: 12, color: WARM_GREY, marginTop: 12 }}>Claude sta analizzando il targeting e i risultati…</div>}
+
+      {analysis && <AdsAnalysis data={analysis} />}
+    </div>
+  );
+}
+
+function AdsAnalysis({ data }) {
+  const List = ({ items, color }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {(items || []).map((it, i) => (
+        <div key={i} style={{ fontSize: 12, color: OFF_WHITE, lineHeight: 1.5 }}>
+          <span style={{ color, fontWeight: 700 }}>{it.chi}</span>{it.perche ? ` — ${it.perche}` : ""}
+        </div>
+      ))}
+    </div>
+  );
+  const rt = data.target_consigliato || {};
+  return (
+    <div style={{ marginTop: 6, paddingTop: 16, borderTop: "1px solid rgba(201,169,110,0.12)" }}>
+      <div style={{ ...label, marginBottom: 10, color: "#E1306C" }}>🎯 Analisi Claude</div>
+      {data.riepilogo && <div style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.6, marginBottom: 16, background: "rgba(225,48,108,0.06)", borderLeft: "3px solid #E1306C", borderRadius: 10, padding: "10px 14px" }}>{data.riepilogo}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div><div style={{ ...label, marginBottom: 8, color: "#5ABA5A" }}>✓ Audience migliori</div><List items={data.audience_migliori} color="#5ABA5A" /></div>
+        <div><div style={{ ...label, marginBottom: 8, color: "#E4A050" }}>✕ Da tagliare</div><List items={data.da_tagliare} color="#E4A050" /></div>
+      </div>
+      <div style={{ background: "#141414", borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+        <div style={{ ...label, marginBottom: 10 }}>Target consigliato per il prossimo boost</div>
+        <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.7 }}>
+          {rt.eta && <>Età <strong style={{ color: OFF_WHITE }}>{rt.eta}</strong> · </>}
+          {rt.genere && <>Genere <strong style={{ color: OFF_WHITE }}>{rt.genere}</strong> · </>}
+          {rt.aree && <>Aree <strong style={{ color: OFF_WHITE }}>{rt.aree}</strong></>}
+        </div>
+        {!!rt.interessi?.length && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+            {rt.interessi.map((x, i) => <span key={i} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: "rgba(74,144,226,0.14)", color: "#7FB4EE" }}>{x}</span>)}
+          </div>
+        )}
+        {rt.note && <div style={{ fontSize: 11, color: WARM_GREY, fontStyle: "italic", marginTop: 8 }}>{rt.note}</div>}
+      </div>
+      {data.prossimo_test && <div style={{ fontSize: 12, color: OFF_WHITE, marginBottom: 6 }}><strong style={{ color: GOLD }}>Prossimo test:</strong> {data.prossimo_test}</div>}
+      {data.budget && <div style={{ fontSize: 12, color: OFF_WHITE }}><strong style={{ color: GOLD }}>Budget:</strong> {data.budget}</div>}
+    </div>
+  );
+}
+
 function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Claude" }) {
   if (!data) return null;
   const { patterns, timing, content_pillars, visual_storytelling: vs, corrections, next_posts } = data;
@@ -1289,6 +1551,8 @@ REGOLE FERREE:
           {error}
         </div>
       )}
+
+      <AdsPanel brand={brand} />
 
       {/* Empty state */}
       {!posts.length && !loading && (

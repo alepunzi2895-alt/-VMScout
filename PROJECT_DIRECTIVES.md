@@ -156,8 +156,21 @@ Push su `main` triggera il deploy automatico su Vercel.
 | `CANVA_CLIENT_ID` | Server |
 | `CANVA_CLIENT_SECRET` | Server |
 | `CANVA_REDIRECT_URI` | Server |
+| `FB_APP_ID` | Server — app Meta, per OAuth analisi sponsorizzate |
+| `FB_APP_SECRET` | Server |
+| `FB_REDIRECT_URI` | Server (opz., default `https://vmscout.vercel.app/api/instagram`) |
 | `VITE_PEXELS_KEY` | Client (build) |
 | `VITE_PIXABAY_KEY` | Client (build) |
+
+### Analisi sponsorizzate — collegamento Facebook (Meta Marketing API)
+`api/instagram.js` gestisce, oltre al proxy Graph generico:
+- `GET ?action=fb_login` → OAuth dialog Facebook (scope `ads_read`), `state` in cookie.
+- callback (rilevato da `?code`) → scambio code→token breve→token long-lived (~60gg), salvato in tabella `fb_auth` (id=1, single-user). `api/db.js` → `ensureFbAuthTable`.
+- `GET ?action=fb_status` / `fb_logout`.
+- `POST { fb_action: "adaccounts" }` → `me/adaccounts`.
+- `POST { fb_action: "ads", ad_account_id, date_preset }` → `act_<id>/ads` con `adset{targeting}`, `creative{...}`, `insights{...}`.
+Frontend: `<AdsPanel>` in `src/InstagramAnalytics.jsx` — connetti FB, scegli account pubblicitario, carica sponsorizzate 90gg, `summarizeTargeting()` estrae età/genere/geo/interessi, "Analizza con Claude" → JSON con audience migliori / da tagliare / target consigliato.
+Setup app Meta: aggiungere il prodotto **Facebook Login**, redirect URI `https://vmscout.vercel.app/api/instagram`, permesso `ads_read` (Standard Access basta per admin/dev/tester dell'app — nessuna App Review per uso proprio). L'account IG dev'essere collegato a una Pagina FB in un Business Manager che possiede l'account pubblicitario.
 
 ### `vercel.json`
 - Rewrite catch-all verso `index.html` per SPA routing

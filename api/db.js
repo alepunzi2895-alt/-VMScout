@@ -25,3 +25,16 @@ export async function ensureCanvaAuthTable(db) {
     )
   `);
 }
+
+// Token utente Facebook (long-lived, ~60gg) per la Marketing API — analisi
+// delle sponsorizzate. Un'unica riga (id=1): VMScout è single-user.
+export async function ensureFbAuthTable(db) {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS fb_auth (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      access_token TEXT NOT NULL,
+      expires_in INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+}
