@@ -250,6 +250,28 @@ export default function Dashboard({ brand, onSuggestBrief }) {
             ) : <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>Nessun consiglio ancora</div>}
           </div>
 
+          {data.ad_strategy && (
+            <div style={{ ...card, marginBottom: 20, borderColor: "rgba(24,119,242,0.25)" }}>
+              <div style={{ ...label, marginBottom: 12, color: "#4A90E2" }}>💰 Sponsorizzate — Target Consigliato</div>
+              {data.ad_strategy.riepilogo && <div style={{ fontSize: 12.5, color: OFF_WHITE, opacity: 0.92, lineHeight: 1.6, marginBottom: 12 }}>{data.ad_strategy.riepilogo}</div>}
+              <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.7, marginBottom: data.ad_strategy.interessi?.length ? 8 : 0 }}>
+                {data.ad_strategy.eta && <>Età <strong style={{ color: OFF_WHITE }}>{data.ad_strategy.eta}</strong> · </>}
+                {data.ad_strategy.genere && <>Genere <strong style={{ color: OFF_WHITE }}>{data.ad_strategy.genere}</strong> · </>}
+                {data.ad_strategy.aree && <>Aree <strong style={{ color: OFF_WHITE }}>{data.ad_strategy.aree}</strong></>}
+              </div>
+              {!!data.ad_strategy.interessi?.length && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  {data.ad_strategy.interessi.map((x, i) => (
+                    <span key={i} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: "rgba(74,144,226,0.14)", color: "#7FB4EE" }}>{x}</span>
+                  ))}
+                </div>
+              )}
+              {data.ad_strategy.prossimo_test && <div style={{ fontSize: 12, color: OFF_WHITE, marginBottom: 4 }}><strong style={{ color: GOLD }}>Prossimo test:</strong> {data.ad_strategy.prossimo_test}</div>}
+              {data.ad_strategy.budget && <div style={{ fontSize: 12, color: OFF_WHITE }}><strong style={{ color: GOLD }}>Budget:</strong> {data.ad_strategy.budget}</div>}
+              {data.ad_strategy.updated_at && <div style={{ fontSize: 9, color: "#555", marginTop: 10 }}>agg. {fmtDateTime(data.ad_strategy.updated_at)}</div>}
+            </div>
+          )}
+
           <div style={{ ...card }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
               <div style={{ ...label, marginBottom: 0 }}>📅 Calendario Post — Prossime Idee</div>

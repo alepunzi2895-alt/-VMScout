@@ -49,6 +49,13 @@ const getSystemPrompt = (config = { duration: "1 settimana", frequency: 3 }, bra
     ? `\n\nSTRATEGIA VINCENTE DI QUESTO ACCOUNT (dall'ultima analisi Instagram — orienta formati, temi, timing e target sponsorizzata su questi dati reali):${s.winning_formats?.length ? `\n- Formati che performano: ${s.winning_formats.join(", ")}` : ""}${s.patterns_summary ? `\n- Pattern: ${s.patterns_summary}` : ""}${s.best_slot ? `\n- Orario migliore: ${s.best_slot}` : ""}${s.content_pillars?.length ? `\n- Pilastri di contenuto: ${s.content_pillars.join(", ")}` : ""}${s.visual_style ? `\n- Stile visivo riconoscibile: ${s.visual_style}` : ""}`
     : "";
 
+  // Snapshot dell'ultima analisi delle sponsorizzate reali: usalo per il campo
+  // ad_targeting invece di inventare da zero.
+  const ads = insights?.ad_strategy;
+  const adStrategyCtx = ads && (ads.interessi?.length || ads.eta || ads.audience_migliori?.length)
+    ? `\n\nSPONSORIZZATE REALI DI QUESTO ACCOUNT (dall'ultima analisi Meta Ads — usa questi dati per il campo ad_targeting):${ads.audience_migliori?.length ? `\n- Audience che hanno reso meglio: ${ads.audience_migliori.join("; ")}` : ""}${ads.da_tagliare?.length ? `\n- Audience deboli da evitare: ${ads.da_tagliare.join("; ")}` : ""}${ads.eta ? `\n- Età consigliata: ${ads.eta}` : ""}${ads.genere ? `\n- Genere: ${ads.genere}` : ""}${ads.aree ? `\n- Aree: ${ads.aree}` : ""}${ads.interessi?.length ? `\n- Interessi Meta che funzionano: ${ads.interessi.join(", ")}` : ""}`
+    : "";
+
   // IMPORTANTE — trovato testando ripetutamente contro produzione (curl diretto
   // su vmscout.vercel.app/api/chat): questo modello, se non vincolato con limiti
   // di parole ESPLICITI e RIGIDI su ogni campo, scrive risposte molto più lunghe
@@ -84,7 +91,7 @@ FRAMEWORK APPLICATION (apply the toolkit below concretely — do not name framew
 - video_storytelling: scene 1 is a 0-3s hook (visual + text_overlay); each later scene is a distinct narrative beat; the final scene carries the CTA.
 - ad_targeting: propose ONE paid-promotion audience for this content (a boosted post / single ad). Ground it in BRAND CONTEXT, the account's real follower demographics and winning STRATEGIA if given. "interests" = real Meta Ads detailed-targeting interests (broad, findable — e.g. "Luxury goods", "Boutique hotels"), not hashtags. "keywords" = 2-3 plain search terms the ideal buyer would use. "audience_summary" in Italian, concrete (who + why they convert). If the content is not worth boosting (pure community/BTS), set worth_boosting=false and keep the other fields short but still filled.
 
-${MARKETING_TOOLKIT}${directivesBlock(insights?.directives)}${brandCtx}${insightsCtx}${strategyCtx}`;
+${MARKETING_TOOLKIT}${directivesBlock(insights?.directives)}${brandCtx}${insightsCtx}${strategyCtx}${adStrategyCtx}`;
 };
 
 // ─────────────────────────────────────────────────

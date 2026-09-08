@@ -770,15 +770,33 @@ function adResults(ins) {
   (row.cost_per_action_type || []).forEach(a => { cpa[a.action_type] = n(a.value); });
   return {
     spend: n(row.spend), reach: n(row.reach), impressions: n(row.impressions),
-    clicks: n(row.clicks), ctr: n(row.ctr), cpc: n(row.cpc), actions, cpa,
+    clicks: n(row.clicks), ctr: n(row.ctr), cpc: n(row.cpc), freq: n(row.frequency), actions, cpa,
   };
+}
+
+// Da quale contenuto è partita la sponsorizzata (post IG, immagine, ecc.).
+function adCreativeInfo(cr) {
+  if (!cr) return null;
+  const spec = cr.object_story_spec || {};
+  const link = cr.instagram_permalink_url
+    || (spec.link_data?.link)
+    || (cr.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id.replace("_", "/posts/")}` : null);
+  const caption = cr.body || spec.link_data?.message || spec.video_data?.message || spec.photo_data?.caption || cr.title || "";
+  const thumb = cr.thumbnail_url || cr.image_url || spec.link_data?.picture || null;
+  const kind = cr.instagram_permalink_url ? "Post Instagram"
+    : cr.object_type === "VIDEO" ? "Video"
+    : cr.object_type === "SHARE" || spec.link_data ? "Post con link"
+    : cr.object_type === "PHOTO" ? "Foto"
+    : "Contenuto";
+  return { link, caption: caption.slice(0, 160), thumb, kind, name: cr.name };
 }
 
 function AdsPanel({ brand }) {
   const [status, setStatus] = useState(null); // null=checking, {connected,...}
   const [accounts, setAccounts] = useState(null);
   const [acctId, setAcctId] = useState(() => localStorage.getItem("fb_ad_account") || "");
-  const [ads, setAds] = useState(null);
+  const [ads, setAds] = useState(() => readJsonLS("fb_ads_list", null));
+  const [fetchedAt, setFetchedAt] = useState(() => localStorage.getItem("fb_ads_fetched_at") || "");
   const [loading, setLoading] = useState("");
   const [err, setErr] = useState("");
   const [analysis, setAnalysis] = useState(() => readJsonLS("fb_ads_analysis", null));
@@ -829,7 +847,14 @@ function AdsPanel({ brand }) {
       const r = await fetch("/api/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fb_action: "ads", ad_account_id: acctId, date_preset: "last_90d" }) });
       const d = await r.json();
       if (d.error) throw new Error(d.message || d.error);
-      setAds(d.ads || []);
+      const list = d.ads || [];
+      setAds(list);
+      const now = new Date().toISOString();
+      setFetchedAt(now);
+      try {
+        localStorage.setItem("fb_ads_list", JSON.stringify(list));
+        localStorage.setItem("fb_ads_fetched_at", now);
+      } catch {}
     } catch (e) { setErr(e.message); }
     setLoading("");
   }
@@ -842,11 +867,13 @@ function AdsPanel({ brand }) {
     const rows = ads.map(a => {
       const tg = summarizeTargeting(a.adset?.targeting);
       const m = adResults(a.insights);
+      const cr = adCreativeInfo(a.creative);
       const results = Object.entries(m.actions).filter(([k]) => /lead|purchase|link_click|landing_page_view|messaging|onsite_conversion/.test(k));
       return {
         nome: a.name, stato: a.effective_status,
+        contenuto: cr ? `${cr.kind}: ${(cr.caption || cr.name || "").slice(0, 80)}` : null,
         target: tg.line, interessi: tg.interests.slice(0, 10),
-        spesa: m.spend, reach: m.reach, ctr: m.ctr, cpc: m.cpc,
+        spesa: m.spend, reach: m.reach, ctr: m.ctr, cpc: m.cpc, frequenza: m.freq,
         risultati: Object.fromEntries(results),
         costo_per_risultato: Object.fromEntries(Object.entries(m.cpa).filter(([k]) => results.some(([rk]) => rk === k))),
       };
@@ -858,7 +885,27 @@ Struttura ESATTA:
 REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Interessi = interessi reali di targeting Meta (ampi e trovabili).`;
     try {
       const raw = await callClaude(system, `Sponsorizzate reali (ultimi 90 giorni):\n${JSON.stringify(rows)}`, []);
-      setAnalysis(parseJsonResponse(raw));
+      const parsed = parseJsonResponse(raw);
+      setAnalysis(parsed);
+      // Storico + memoria di progetto (Dashboard + Visual Scout).
+      if (brand?.id) {
+        saveToHistory({ project_id: brand.id, type: "ads_analysis", prompt: `Analisi ${ads.length} sponsorizzate`, result_json: parsed });
+        const rt = parsed.target_consigliato || {};
+        fetch("/api/history?action=merge_insights", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "merge_insights", project_id: brand.id,
+            ad_strategy: {
+              riepilogo: parsed.riepilogo || "",
+              eta: rt.eta || "", genere: rt.genere || "", aree: rt.aree || "",
+              interessi: rt.interessi || [], note: rt.note || "",
+              prossimo_test: parsed.prossimo_test || "", budget: parsed.budget || "",
+              audience_migliori: (parsed.audience_migliori || []).map(x => x.chi).filter(Boolean),
+              da_tagliare: (parsed.da_tagliare || []).map(x => x.chi).filter(Boolean),
+            },
+          }),
+        }).catch(() => {});
+      }
     } catch (e) { setErr("Analisi AI: " + e.message); }
     setAnalyzing(false);
   }
@@ -911,13 +958,32 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
         <div style={{ ...label, marginBottom: 0, color: "#4A90E2" }}>💰 Analisi Sponsorizzate</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {status.expires_in_days != null && <span style={{ fontSize: 9, color: "#555" }}>token valido ~{status.expires_in_days}gg</span>}
-          <button onClick={() => fetch("/api/instagram?action=fb_logout").then(() => { setStatus({ connected: false }); setAds(null); setAccounts(null); })}
+          {status.expires_in_days != null && (
+            <span style={{ fontSize: 9, color: status.expires_in_days < 7 ? "#E4A050" : "#555" }}>
+              token ~{status.expires_in_days}gg{status.expires_in_days < 7 ? " · sta per scadere, ricollega" : ""}
+            </span>
+          )}
+          <button onClick={() => setShowPaste(v => !v)}
+            style={{ background: "transparent", border: "1px solid #333", borderRadius: 8, color: WARM_GREY, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>
+            Aggiorna token
+          </button>
+          <button onClick={() => { fetch("/api/instagram?action=fb_logout").then(() => { setStatus({ connected: false }); setAds(null); setAccounts(null); }); try { ["fb_ads_list", "fb_ads_fetched_at"].forEach(k => localStorage.removeItem(k)); } catch {} }}
             style={{ background: "transparent", border: "1px solid #333", borderRadius: 8, color: WARM_GREY, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>
             Disconnetti FB
           </button>
         </div>
       </div>
+
+      {showPaste && (
+        <div style={{ marginBottom: 16, padding: 12, background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10 }}>
+          <div style={{ fontSize: 11, color: WARM_GREY, marginBottom: 8 }}>Incolla un nuovo token <code style={{ color: GOLD }}>ads_read</code> da Graph API Explorer (lo converto in ~60gg).</div>
+          <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={2} placeholder="EAAxxxxxxxxxxxx..."
+            style={{ width: "100%", background: "#141414", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+          <button onClick={connectWithToken} disabled={!tokenPaste.trim() || loading === "token"} style={{ ...goldBtn(!tokenPaste.trim() || loading === "token"), marginTop: 8, fontSize: 10 }}>
+            {loading === "token" ? "Verifico…" : "Salva token"}
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
         <select value={acctId} onChange={e => setAcctId(e.target.value)}
@@ -939,6 +1005,12 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
 
       {err && <div style={{ marginBottom: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
 
+      {fetchedAt && ads?.length > 0 && (
+        <div style={{ fontSize: 10, color: "#555", marginBottom: 10 }}>
+          {ads.length} sponsorizzate · aggiornate il {new Date(fetchedAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+        </div>
+      )}
+
       {ads?.length === 0 && <div style={{ fontSize: 12, color: "#666" }}>Nessuna sponsorizzata negli ultimi 90 giorni su questo account.</div>}
 
       {ads?.length > 0 && (
@@ -946,12 +1018,25 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
           {ads.map((a, i) => {
             const tg = summarizeTargeting(a.adset?.targeting);
             const m = adResults(a.insights);
+            const cr = adCreativeInfo(a.creative);
             return (
               <div key={i} style={{ background: "#141414", border: "1px solid rgba(201,169,110,0.1)", borderRadius: 12, padding: "12px 14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
                   <div style={{ fontSize: 12.5, color: OFF_WHITE, fontWeight: 600 }}>{a.name}</div>
                   <span style={{ fontSize: 9, color: a.effective_status === "ACTIVE" ? "#5ABA5A" : "#888", fontWeight: 700, whiteSpace: "nowrap" }}>{a.effective_status}</span>
                 </div>
+                {cr && (
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8, padding: "8px", background: "#0E0E0E", borderRadius: 10 }}>
+                    {cr.thumb && <img src={cr.thumb} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 9, color: "#8B7355", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+                        Contenuto sponsorizzato · {cr.kind}
+                      </div>
+                      {cr.caption && <div style={{ fontSize: 11, color: "#C9BEA8", lineHeight: 1.45 }}>{cr.caption}{cr.caption.length >= 160 ? "…" : ""}</div>}
+                      {cr.link && <a href={cr.link} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#4A90E2" }}>↗ Apri il post</a>}
+                    </div>
+                  </div>
+                )}
                 <div style={{ fontSize: 11, color: "#B9AE98", marginBottom: 8, lineHeight: 1.5 }}>🎯 {tg.line}</div>
                 {tg.interests.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>

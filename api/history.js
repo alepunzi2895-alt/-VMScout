@@ -55,7 +55,7 @@ async function ensureTables(db) {
   }
 }
 
-const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null, strategy: null };
+const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null, strategy: null, ad_strategy: null };
 
 const MAX_DIRECTIVES_CHARS = 4000;
 
@@ -226,7 +226,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "merge_insights" && req.method === "POST") {
-      const { project_id, tips, strengths, weaknesses, calendar_entries, directives, strategy } = req.body;
+      const { project_id, tips, strengths, weaknesses, calendar_entries, directives, strategy, ad_strategy } = req.body;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
 
       const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
@@ -250,6 +250,12 @@ export default async function handler(req, res) {
           if (typeof strategy[k] === "string" && strategy[k].trim()) s[k] = strategy[k].trim().slice(0, 400);
         }
         if (Object.keys(s).length) { s.updated_at = new Date().toISOString(); current.strategy = s; }
+      }
+
+      // Strategia sponsorizzate — snapshot dell'ultima analisi ads: target
+      // consigliato, audience migliori, cosa tagliare. Dashboard + Visual Scout.
+      if (ad_strategy && typeof ad_strategy === "object") {
+        current.ad_strategy = { ...ad_strategy, updated_at: new Date().toISOString() };
       }
 
       if (typeof directives === "string" && directives.trim()) {
