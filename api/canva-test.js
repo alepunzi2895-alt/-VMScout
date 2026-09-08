@@ -23,6 +23,20 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, step: "token", error: e.code || e.message, log });
   }
 
+  // ?dataset=<brandTemplateId> → restituisce i nomi dei campi di autofill del
+  // Brand Template (per capire come si chiamano i placeholder immagine).
+  if (req.query.dataset) {
+    const id = String(req.query.dataset).split(/[/?#\s]/)[0];
+    const r = await fetch(`${CANVA_API}/brand-templates/${id}/dataset`, { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({}));
+    const ds = j?.dataset || {};
+    return res.status(200).json({
+      ok: r.ok, httpStatus: r.status,
+      fields: Object.entries(ds).map(([name, def]) => ({ name, type: def?.type })),
+      raw: j,
+    });
+  }
+
   // 1. scarica i byte della foto di prova
   let bytes;
   try {
