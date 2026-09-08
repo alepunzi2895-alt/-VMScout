@@ -84,17 +84,17 @@ export default async function handler(req, res) {
     if (resumeJobId) {
       af = await runAutofill({ token, resumeJobId, deadline });
     } else {
+      // Non possiamo leggere il dataset del template (scope brandtemplate:*
+      // non abilitato) → non sappiamo come si chiamano i placeholder. Mandiamo
+      // testo e immagine sotto TUTTI i nomi plausibili: Canva ignora quelli che
+      // non esistono e riempie quello giusto.
+      const TEXT_NAMES  = (n) => [`Testo_${n}`, `Caption_${n}`, `Text_${n}`];
+      const IMAGE_NAMES = (n) => [`Image_${n}`, `Immagine_${n}`, `Sfondo_${n}`, `Foto_${n}`, `Background_${n}`, `Photo_${n}`, `Img_${n}`];
       const autofillData = {};
       usedSlides.forEach((slide, i) => {
         const n = i + 1;
-        if (slide.caption) {
-          autofillData[`Testo_${n}`]   = { type: "text", text: slide.caption };
-          autofillData[`Caption_${n}`] = { type: "text", text: slide.caption };
-        }
-        if (slots[i]?.assetId) {
-          autofillData[`Image_${n}`]    = { type: "image", asset_id: slots[i].assetId };
-          autofillData[`Immagine_${n}`] = { type: "image", asset_id: slots[i].assetId };
-        }
+        if (slide.caption) for (const k of TEXT_NAMES(n)) autofillData[k] = { type: "text", text: slide.caption };
+        if (slots[i]?.assetId) for (const k of IMAGE_NAMES(n)) autofillData[k] = { type: "image", asset_id: slots[i].assetId };
       });
       af = await runAutofill({ token, templateId, data: autofillData, title: `Carosello ${usedSlides.length} slide`, deadline });
     }

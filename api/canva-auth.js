@@ -58,11 +58,11 @@ export default async function handler(req, res) {
     // - asset:read  → polling dei job di upload (GET /v1/asset-uploads/{jobId})
     // - asset:write → creare gli asset
     // - design:content:write / design:meta:read → autofill + merge pagine
-    // - brandtemplate:content:read → leggere il DATASET del Brand Template
-    //   (GET /v1/brand-templates/{id}/dataset): senza, non sappiamo i nomi dei
-    //   campi immagine del carosello e l'autofill li scarta in silenzio → il
-    //   carosello esce con solo il testo.
-    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write brandtemplate:meta:read brandtemplate:content:read");
+    // NB: `brandtemplate:content:read` (leggere il dataset del Brand Template)
+    // NON è abilitato per questa app Canva → aggiungerlo fa fallire l'authorize
+    // con 403. Finché non è abilitato nel Canva Developer Portal, l'autofill
+    // manda l'immagine sotto PIÙ nomi di campo candidati (vedi canva-carousel).
+    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write");
     url.searchParams.set("code_challenge_method", "S256");
     url.searchParams.set("code_challenge",        challenge);
 
