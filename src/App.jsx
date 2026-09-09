@@ -1128,16 +1128,37 @@ function loadFFmpeg() {
   return _ffmpegPromise;
 }
 
+// Scarica un video dal proxy a finestre di 2MB (il proxy limita ogni risposta
+// per non sforare il payload della serverless function) e ricompone i byte.
+async function fetchProxiedFull(url) {
+  const proxy = `/api/canva-upload?src=${encodeURIComponent(url)}`;
+  const parts = [];
+  let offset = 0, total = Infinity;
+  while (offset < total) {
+    const r = await fetch(proxy, { headers: { Range: `bytes=${offset}-` } });
+    if (!r.ok && r.status !== 206 && r.status !== 200) throw new Error(`proxy ${r.status}`);
+    const cr = r.headers.get("content-range");
+    if (cr) { const t = Number(cr.split("/")[1]); if (Number.isFinite(t)) total = t; }
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (!buf.length) break;
+    parts.push(buf);
+    offset += buf.length;
+    if (!cr && r.status === 200) break; // risposta intera
+  }
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let p = 0; for (const b of parts) { out.set(b, p); p += b.length; }
+  return out;
+}
+
 // Ritaglia [start,end] dell'URL video → Blob mp4 (keyframe-snapped, veloce).
 // I byte del video passano dal nostro proxy (`/api/canva-upload?src=`) perché
 // Pexels blocca l'hotlink cross-origin dal browser.
 async function trimVideoToBlob(url, start, end) {
   const { ff, fetchFile } = await loadFFmpeg();
   const dur = Math.max(0.3, end - start);
-  const viaProxy = `/api/canva-upload?src=${encodeURIComponent(url)}`;
   let bytes;
   try {
-    bytes = await fetchFile(viaProxy);
+    bytes = await fetchProxiedFull(url);
   } catch {
     bytes = await fetchFile(url); // fallback: prova diretto (Pixabay ok)
   }

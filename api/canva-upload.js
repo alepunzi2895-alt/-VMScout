@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { getDb } from "./db.js";
 import { getCanvaToken, bustedUrl, startBytesUpload, checkImageUpload } from "./canva-lib.js";
 
@@ -25,33 +24,68 @@ function nameWithExt(name, url) {
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
 export default async function handler(req, res) {
-  // ── GET ?src=<url> → proxy STREAMING di un video (Pexels blocca l'hotlink
-  //    dal browser). Inoltra il Range e fa da passthrough dello stream, così
-  //    <video> può fare seeking senza bufferare tutto. ──
+  // ── GET ?src=<url> → proxy di un video (Pexels blocca l'hotlink dal browser).
+  //    NIENTE streaming: il `pipe` su Vercel non raggiunge mai il tag <video>
+  //    (nessun evento `progress`, solo `stalled`). Invece:
+  //    • richiesta CON Range (è sempre il caso del tag <video>): inoltriamo il
+  //      Range a monte — se è "aperto" (bytes=N-) lo limitiamo a una finestra di
+  //      WINDOW byte così la risposta resta piccola; il browser poi chiede le
+  //      finestre successive.
+  //    • richiesta SENZA Range (es. ffmpeg fetchFile): file intero. ──
   if (req.method === "GET") {
     const src = req.query.src;
     if (!src || !/^https?:\/\//i.test(src)) return res.status(400).json({ error: "src mancante o non valido" });
+    const WINDOW = 2 * 1024 * 1024;
     try {
       const host = new URL(src).hostname;
       const ref = host.includes("pexels") ? "https://www.pexels.com/"
         : host.includes("pixabay") ? "https://pixabay.com/"
         : undefined;
       const h = { "User-Agent": BROWSER_UA, "Accept": "video/mp4,video/*,*/*;q=0.8", ...(ref ? { Referer: ref } : {}) };
-      if (req.headers.range) h.Range = req.headers.range;
+
+      const m = /bytes=(\d+)-(\d*)/.exec(req.headers.range || "");
+      const suffix = /bytes=-(\d+)/.exec(req.headers.range || "");
+      if (m) {
+        const start = parseInt(m[1], 10);
+        const wantEnd = m[2] ? parseInt(m[2], 10) : Infinity;
+        const end = Math.min(wantEnd, start + WINDOW - 1);
+        h.Range = `bytes=${start}-${Number.isFinite(end) ? end : start + WINDOW - 1}`;
+      } else if (suffix) {
+        h.Range = `bytes=-${Math.min(parseInt(suffix[1], 10), WINDOW)}`;
+      }
+
       const up = await fetch(src, { headers: h });
       if (!up.ok && up.status !== 206) return res.status(502).json({ error: `sorgente ${up.status}` });
-      res.status(up.status);
-      for (const k of ["content-type", "content-length", "content-range", "last-modified", "etag"]) {
-        const v = up.headers.get(k);
-        if (v) res.setHeader(k, v);
-      }
-      // il browser abilita il seeking del <video> solo se vede Accept-Ranges;
-      // Pexels non sempre lo manda ma onora comunque il Range (risponde 206).
-      res.setHeader("Accept-Ranges", up.headers.get("accept-ranges") || "bytes");
+      const body = Buffer.from(await up.arrayBuffer());
+
+      res.setHeader("Content-Type", up.headers.get("content-type") || "video/mp4");
+      res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Cache-Control", "public, max-age=3600");
-      if (!up.body) return res.end(Buffer.from(await up.arrayBuffer()));
-      Readable.fromWeb(up.body).pipe(res);
-      return;
+      res.setHeader("Content-Length", String(body.length));
+
+      const cr = up.headers.get("content-range");
+      if ((m || suffix) && up.status === 206 && cr) {
+        res.setHeader("Content-Range", cr);
+        res.status(206);
+        return res.end(body);
+      }
+      if ((m || suffix) && body.length) {
+        // la sorgente ha ignorato il Range: affettiamo noi il buffer
+        const total = body.length;
+        const start = m ? parseInt(m[1], 10) : Math.max(0, total - parseInt(suffix[1], 10));
+        let end = m && m[2] ? parseInt(m[2], 10) : total - 1;
+        end = Math.min(end, start + WINDOW - 1, total - 1);
+        if (start >= total) {
+          res.setHeader("Content-Range", `bytes */${total}`);
+          return res.status(416).end();
+        }
+        const chunk = body.subarray(start, end + 1);
+        res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+        res.setHeader("Content-Length", String(chunk.length));
+        res.status(206);
+        return res.end(chunk);
+      }
+      return res.status(200).end(body);
     } catch (e) {
       return res.status(502).json({ error: e.message });
     }
