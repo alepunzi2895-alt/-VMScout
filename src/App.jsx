@@ -1181,7 +1181,9 @@ async function recordVideoSegment(url, start, end, blobUrl) {
   const src = blobUrl || (await getVideoBlob(url)).blobUrl;
   const v = document.createElement("video");
   v.src = src; v.muted = true; v.playsInline = true; v.preload = "auto";
-  v.style.cssText = "position:fixed;left:-9999px;width:320px;height:auto";
+  // on-screen ma invisibile: alcuni browser congelano il rendering (e quindi
+  // captureStream) dei <video> fuori viewport / display:none.
+  v.style.cssText = "position:fixed;top:0;left:0;width:8px;height:8px;opacity:0.01;pointer-events:none;z-index:-1";
   document.body.appendChild(v);
   const clean = () => { try { v.pause(); } catch { /* */ } v.remove(); };
   try {
@@ -1198,7 +1200,7 @@ async function recordVideoSegment(url, start, end, blobUrl) {
       v.currentTime = from;
     });
     const stream = (v.captureStream || v.mozCaptureStream).call(v);
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4_000_000 });
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((res) => { rec.onstop = res; });
