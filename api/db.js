@@ -89,9 +89,54 @@ export async function ensureAuthTables(db) {
       expires_in   INTEGER,
       created_at   TEXT DEFAULT (datetime('now'))
     )`,
+    // Credenziali OAuth delle app di terze parti dell'utente (Canva, Meta),
+    // impostabili dall'app in Impostazioni. Vuoto = usa il fallback da env.
+    `CREATE TABLE IF NOT EXISTS app_config_u (
+      user_id             TEXT PRIMARY KEY,
+      canva_client_id     TEXT DEFAULT '',
+      canva_client_secret TEXT DEFAULT '',
+      fb_app_id           TEXT DEFAULT '',
+      fb_app_secret       TEXT DEFAULT '',
+      updated_at          TEXT DEFAULT (datetime('now'))
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_user ON vms_sessions(user_id)`,
   ], "write");
   ensureAuthTables._ready = true;
+}
+
+// Credenziali OAuth di Canva e Meta per un utente. Ordine: valore impostato
+// dall'utente in Impostazioni → variabile d'ambiente (fallback legacy/condiviso).
+// `source.canva` / `source.fb`: "user" | "env" | "none".
+const ENV_APP_CONFIG = () => ({
+  canvaClientId:     process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "",
+  canvaClientSecret: process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "",
+  fbAppId:           process.env.FB_APP_ID           || process.env.VITE_FB_APP_ID           || "",
+  fbAppSecret:       process.env.FB_APP_SECRET       || process.env.VITE_FB_APP_SECRET       || "",
+});
+
+export async function getAppConfig(db, userId) {
+  await ensureAuthTables(db);
+  const env = ENV_APP_CONFIG();
+  let row = {};
+  if (userId) {
+    try {
+      const r = await db.execute({
+        sql: "SELECT canva_client_id, canva_client_secret, fb_app_id, fb_app_secret FROM app_config_u WHERE user_id=?",
+        args: [userId],
+      });
+      row = r.rows[0] || {};
+    } catch { /* tabella non ancora creata: usa env */ }
+  }
+  return {
+    canvaClientId:     row.canva_client_id     || env.canvaClientId,
+    canvaClientSecret: row.canva_client_secret || env.canvaClientSecret,
+    fbAppId:           row.fb_app_id           || env.fbAppId,
+    fbAppSecret:       row.fb_app_secret       || env.fbAppSecret,
+    source: {
+      canva: row.canva_client_id ? "user" : (env.canvaClientId ? "env" : "none"),
+      fb:    row.fb_app_id       ? "user" : (env.fbAppId       ? "env" : "none"),
+    },
+  };
 }
 
 // ─── Password: scrypt (node crypto, nessuna dipendenza npm) ─────────

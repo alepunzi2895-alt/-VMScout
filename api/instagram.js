@@ -16,11 +16,11 @@ function graphHostFor(token) {
   return /^IGAA/i.test(token) ? "https://graph.instagram.com/v20.0" : "https://graph.facebook.com/v20.0";
 }
 
-import { getDb, ensureAuthTables, getSessionUser, signValue, verifySignedValue, parseCookies } from "./db.js";
+import { getDb, ensureAuthTables, getSessionUser, getAppConfig, signValue, verifySignedValue, parseCookies } from "./db.js";
 
 const FB_GRAPH   = "https://graph.facebook.com/v20.0";
-const fbAppId    = process.env.FB_APP_ID     || process.env.VITE_FB_APP_ID     || "";
-const fbSecret   = process.env.FB_APP_SECRET || process.env.VITE_FB_APP_SECRET || "";
+// App ID / Secret sono PER-UTENTE (Impostazioni → Facebook), risolti da
+// getAppConfig() con fallback alle variabili d'ambiente. redirect unico.
 const fbRedirect = process.env.FB_REDIRECT_URI || "https://vmscout.vercel.app/api/instagram";
 // Scope minimo per leggere account pubblicitari, campagne, adset (targeting) e
 // insights. ads_read è sufficiente in sola lettura.
@@ -100,9 +100,10 @@ export default async function handler(req, res) {
     }
 
     if (action === "fb_login") {
-      if (!fbAppId) return res.status(500).json({ error: "FB_APP_ID non configurato su Vercel" });
       const me = await getSessionUser(getDb(), req);
       if (!me) return res.status(401).send(page("Accedi a VMScout", "Effettua il login prima di collegare Facebook.", "#E88"));
+      const { fbAppId } = await getAppConfig(getDb(), me.id);
+      if (!fbAppId) return res.status(500).send(page("App ID mancante", "Vai in Impostazioni → Facebook e incolla App ID e App Secret della tua app Meta.", "#E88"));
       const state = signValue(`${me.id}:${Math.random().toString(36).slice(2)}`);
       res.setHeader("Set-Cookie", `fb_oauth_state=${state}; HttpOnly; Secure; SameSite=Lax; Max-Age=600; Path=/`);
       const url = new URL("https://www.facebook.com/v20.0/dialog/oauth");
@@ -125,6 +126,7 @@ export default async function handler(req, res) {
       if (v) userId = v.split(":")[0];
       if (!userId) { const me = await getSessionUser(getDb(), req); userId = me?.id || null; }
       if (!userId) return res.status(400).send(page("Sessione VMScout scaduta", "Riprova dall'app.", "#E88"));
+      const { fbAppId, fbAppSecret: fbSecret } = await getAppConfig(getDb(), userId);
       try {
         // 1. code → token breve
         const short = await fbGraph("", "oauth/access_token", {
@@ -173,6 +175,7 @@ export default async function handler(req, res) {
       const pasted = (body.token || "").replace(INVISIBLE, "").replace(/^Bearer\s+/i, "");
       if (!pasted) return res.status(400).json({ error: "Token mancante" });
       try {
+        const { fbAppId, fbAppSecret: fbSecret } = await getAppConfig(getDb(), me.id);
         let finalToken = pasted, expires = null;
         if (fbAppId && fbSecret) {
           const ex = await fbGraph(null, "oauth/access_token", {

@@ -1,5 +1,7 @@
 import { useT, useLang, weekdaysShort } from "./i18n/index.jsx";
 import { useState, useMemo, useEffect } from "react";
+import { useAuth } from "./AuthContext.jsx";
+import { userLS } from "./userStorage.js";
 import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
 import { MARKETING_TOOLKIT_BRIEF } from "./marketingFrameworks";
 import { directivesBlock, refineProjectDirectives } from "./projectDirectives";
@@ -244,30 +246,31 @@ function isDirectIgToken(t) {
 }
 
 function ConnectPanel({ onConnect }) {
+  const t = useT();
   const [tokenInput, setTokenInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pages, setPages] = useState(null);
   const [selectedPageId, setSelectedPageId] = useState("");
 
-  async function connectDirect(t) {
-    const res = await igCall(t, "me", { fields: "id,username,account_type,profile_picture_url" });
+  async function connectDirect(tok) {
+    const res = await igCall(tok, "me", { fields: "id,username,account_type,profile_picture_url" });
     if (res.error) throw new Error(res.error.message);
     if (!res.id) throw new Error("Impossibile leggere l'account Instagram da questo token.");
-    onConnect({ token: t, accountId: res.id, username: res.username, profilePic: res.profile_picture_url || "" });
+    onConnect({ token: tok, accountId: res.id, username: res.username, profilePic: res.profile_picture_url || "" });
   }
 
-  async function loadPages(t) {
-    const res = await igCall(t, "me/accounts");
+  async function loadPages(tok) {
+    const res = await igCall(tok, "me/accounts");
     if (res.error) throw new Error(res.error.message);
     if (!res.data?.length) throw new Error("Nessuna Facebook Page trovata. Controlla il permesso 'pages_show_list'.");
     setPages(res.data);
     setSelectedPageId(res.data[0].id);
   }
 
-  async function connectWithPage(t) {
+  async function connectWithPage(tok) {
     const page = pages.find(p => p.id === selectedPageId);
-    const pageToken = page.access_token || t;
+    const pageToken = page.access_token || tok;
     const igData = await igCall(pageToken, page.id, { fields: "instagram_business_account{id,username,profile_picture_url}" });
     if (igData.error) throw new Error(igData.error.message);
 
@@ -284,19 +287,19 @@ function ConnectPanel({ onConnect }) {
   }
 
   async function handleSubmit() {
-    const t = sanitizeToken(tokenInput);
-    if (!t) return;
+    const tok = sanitizeToken(tokenInput);
+    if (!tok) return;
     setLoading(true);
     setError("");
     try {
       if (pages && selectedPageId) {
-        await connectWithPage(t);
-      } else if (isDirectIgToken(t)) {
-        await connectDirect(t);
+        await connectWithPage(tok);
+      } else if (isDirectIgToken(tok)) {
+        await connectDirect(tok);
       } else {
         setPages(null);
         setSelectedPageId("");
-        await loadPages(t);
+        await loadPages(tok);
       }
     } catch (err) {
       setError(friendlyIgError(err.message));
@@ -305,53 +308,52 @@ function ConnectPanel({ onConnect }) {
   }
 
   const buttonLabel = loading
-    ? "Verifica in corso…"
-    : pages ? "Connetti Account Instagram" : "Verifica e Connetti →";
+    ? t("an.ig.verifying")
+    : pages ? t("an.ig.connectAccount") : t("an.ig.verifyConnect");
 
   return (
     <div style={{ maxWidth: 640, margin: "60px auto", padding: "0 16px" }}>
       <div style={{ textAlign: "center", marginBottom: 40 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📱</div>
         <div style={{ fontSize: 22, color: OFF_WHITE, fontFamily: "'Playfair Display', serif", marginBottom: 8 }}>
-          Connetti il tuo Account Instagram
+          {t("an.ig.title")}
         </div>
         <div style={{ fontSize: 13, color: WARM_GREY, lineHeight: 1.7 }}>
-          Analisi intelligente dei post per costruire la strategia perfetta.
+          {t("an.ig.subtitle")}
         </div>
       </div>
 
       {/* Steps */}
       <div style={{ ...card, marginBottom: 24 }}>
-        <div style={{ ...label, marginBottom: 16 }}>Come ottenere il token (Instagram API with Instagram Login)</div>
+        <div style={{ ...label, marginBottom: 16 }}>{t("an.ig.stepsTitle")}</div>
         {[
-          ["1", "Vai su", "developers.facebook.com → la tua app → aggiungi il prodotto \"Instagram\""],
-          ["2", 'Nella sezione "Instagram API setup with Instagram login" collega il tuo account IG Business/Creator'],
-          ["3", "Genera un token con i permessi:", "instagram_business_basic  instagram_business_manage_insights"],
-          ["4", "Copia il token — inizia con \"IGAA…\" — e incollalo qui sotto (nessuno step aggiuntivo: niente Facebook Page da collegare)"],
-        ].map(([n, text, code], i) => (
+          [t("an.ig.s1"), "developers.facebook.com → la tua app → + Instagram"],
+          [t("an.ig.s2"), null],
+          [t("an.ig.s3"), "instagram_business_basic  instagram_business_manage_insights"],
+          [t("an.ig.s4"), null],
+        ].map(([text, code], i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
             <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${GOLD}20`, border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", flexShrink: 0, marginTop: 1 }}>
-              {n}
+              {i + 1}
             </span>
             <div style={{ fontSize: 13, color: WARM_GREY, lineHeight: 1.6 }}>
-              {text}
+              {i === 0 ? <>{text} <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" style={{ color: IG_PINK }}>developers.facebook.com ↗</a></> : text}
               {code && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 11, color: GOLD, background: "#0a0a0a", padding: "4px 8px", borderRadius: 6, display: "inline-block" }}>{code}</div>}
             </div>
           </div>
         ))}
         <div style={{ marginTop: 4, fontSize: 11, color: WARM_GREY, opacity: 0.6 }}>
-          Il token "IGAA…" dura 60 giorni (long-lived) se generato con l'endpoint <code>ig_exchange_token</code>, altrimenti scade dopo 1 ora.
-          Hai ancora un vecchio token "EAA…" da Graph API Explorer? Funziona lo stesso — verrà chiesto di selezionare la Facebook Page collegata.
+          {t("an.ig.note")}
         </div>
       </div>
 
       {/* Token input */}
       <div style={{ ...card }}>
-        <div style={{ ...label, marginBottom: 10 }}>Access Token</div>
+        <div style={{ ...label, marginBottom: 10 }}>{t("an.ads.tokenLabel")}</div>
         <textarea
           value={tokenInput}
           onChange={e => { setTokenInput(e.target.value); setPages(null); setSelectedPageId(""); setError(""); }}
-          placeholder="IGAAxxxxxxxxxxxxx... (o EAAxxxxxxxxxxxxx per il vecchio flusso)"
+          placeholder="IGAAxxxxxxxxxxxxx..."
           rows={3}
           style={{
             width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)",
@@ -360,13 +362,13 @@ function ConnectPanel({ onConnect }) {
           }}
         />
         <div style={{ marginTop: 6, fontSize: 10, color: WARM_GREY, opacity: 0.7 }}>
-          Incolla solo il token (nessuno spazio, a-capo, "Bearer" o virgolette) — viene ripulito automaticamente, ma se il campo contiene altro testo la richiesta a Facebook fallirà.
+          {t("an.ig.tokenHint")}
         </div>
 
         {/* Page selector — shown after loading pages */}
         {pages && pages.length > 0 && (
           <div style={{ marginTop: 14 }}>
-            <div style={{ ...label, marginBottom: 8 }}>Seleziona Facebook Page</div>
+            <div style={{ ...label, marginBottom: 8 }}>{t("an.ig.selectPage")}</div>
             <select
               value={selectedPageId}
               onChange={e => setSelectedPageId(e.target.value)}
@@ -419,6 +421,7 @@ function StatCard({ label: lbl, value, sub }) {
 // ── Post Row ─────────────────────────────────────────────────────────────────
 
 function PostRow({ post, rank }) {
+  const t = useT();
   const eng = engRate(post).toFixed(2);
   const thumb = post.thumbnail_url || post.media_url;
   return (
@@ -479,6 +482,7 @@ const POST_METRIC_COLS = [
 ];
 
 function AllPostsRow({ post }) {
+  const t = useT();
   const isVideo = post.media_type === "VIDEO";
   const thumb = post.thumbnail_url || post.media_url;
   const cols = POST_METRIC_COLS.filter(c => !c.videoOnly || isVideo);
@@ -801,19 +805,22 @@ function adCreativeInfo(cr) {
 }
 
 function AdsPanel({ brand, igAccountId, igUsername }) {
+  const t = useT();
+  const { user } = useAuth();
+  const uls = useMemo(() => userLS(user?.id), [user?.id]);
   const [status, setStatus] = useState(null); // null=checking, {connected,...}
   const [accounts, setAccounts] = useState(null);
-  const [acctId, setAcctId] = useState(() => localStorage.getItem("fb_ad_account") || "");
-  const [ads, setAds] = useState(() => readJsonLS("fb_ads_list", null));
-  const [fetchedAt, setFetchedAt] = useState(() => localStorage.getItem("fb_ads_fetched_at") || "");
+  const [acctId, setAcctId] = useState(() => uls.get("fb_ad_account"));
+  const [ads, setAds] = useState(() => uls.getJSON("fb_ads_list", null));
+  const [fetchedAt, setFetchedAt] = useState(() => uls.get("fb_ads_fetched_at"));
   const [loading, setLoading] = useState("");
   const [err, setErr] = useState("");
-  const [analysis, setAnalysis] = useState(() => readJsonLS("fb_ads_analysis", null));
+  const [analysis, setAnalysis] = useState(() => uls.getJSON("fb_ads_analysis", null));
   const [analyzing, setAnalyzing] = useState(false);
   const [tokenPaste, setTokenPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
-  const [datePreset, setDatePreset] = useState(() => localStorage.getItem("fb_ads_date") || "last_90d");
-  useEffect(() => { try { localStorage.setItem("fb_ads_date", datePreset); } catch {} }, [datePreset]);
+  const [datePreset, setDatePreset] = useState(() => uls.get("fb_ads_date") || "last_90d");
+  useEffect(() => { uls.set("fb_ads_date", datePreset); }, [datePreset]);
   // Account IG rilevati tra le sponsorizzate caricate (server risolve a._ig).
   const igOptions = (() => {
     const map = new Map();
@@ -855,7 +862,7 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, []);
-  useEffect(() => { try { analysis ? localStorage.setItem("fb_ads_analysis", JSON.stringify(analysis)) : localStorage.removeItem("fb_ads_analysis"); } catch {} }, [analysis]);
+  useEffect(() => { uls.setJSON("fb_ads_analysis", analysis); }, [analysis]);
 
   async function loadAccounts() {
     setErr(""); setLoading("accounts");
@@ -864,7 +871,7 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
       const d = await r.json();
       if (d.error) throw new Error(d.message || d.error);
       setAccounts(d.accounts || []);
-      if (!acctId && d.accounts?.[0]) { setAcctId(d.accounts[0].id); localStorage.setItem("fb_ad_account", d.accounts[0].id); }
+      if (!acctId && d.accounts?.[0]) { setAcctId(d.accounts[0].id); uls.set("fb_ad_account", d.accounts[0].id); }
     } catch (e) { setErr(e.message); }
     setLoading("");
   }
@@ -872,7 +879,7 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
   async function loadAds() {
     if (!acctId) return;
     setErr(""); setLoading("ads"); setAds(null);
-    localStorage.setItem("fb_ad_account", acctId);
+    uls.set("fb_ad_account", acctId);
     try {
       const targets = acctId === "__all__" ? (accounts || []).map(a => a.id) : [acctId];
       const results = await Promise.all(targets.map(async id => {
@@ -885,10 +892,8 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
       setAds(list);
       const now = new Date().toISOString();
       setFetchedAt(now);
-      try {
-        localStorage.setItem("fb_ads_list", JSON.stringify(list));
-        localStorage.setItem("fb_ads_fetched_at", now);
-      } catch {}
+      uls.setJSON("fb_ads_list", list);
+      uls.set("fb_ads_fetched_at", now);
     } catch (e) { setErr(e.message); }
     setLoading("");
   }
@@ -950,37 +955,40 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
   if (!status.connected) {
     return (
       <div style={{ ...card, marginBottom: 24, borderColor: "rgba(24,119,242,0.25)" }}>
-        <div style={{ ...label, marginBottom: 8, color: "#4A90E2" }}>💰 Analisi Sponsorizzate (Meta Ads)</div>
-        <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.6, marginBottom: 14 }}>
-          Collega Facebook per vedere il <strong>target e gli interessi usati</strong> nelle tue promozioni Instagram/Facebook, spesa, reach e costo per risultato — e farti consigliare il targeting migliore.
-          <br /><span style={{ fontSize: 11, opacity: 0.7 }}>Serve un account IG collegato a una Pagina FB dentro un Business Manager con un account pubblicitario.</span>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            onClick={() => window.open("/api/instagram?action=fb_login", "_blank", "width=680,height=760")}
-            style={{ ...goldBtn(false), background: "linear-gradient(135deg, #1877F2, #0C5AC7)", color: "#fff" }}
-          >
-            Connetti Facebook (Ads)
-          </button>
-          <button onClick={() => setShowPaste(v => !v)}
-            style={{ background: "transparent", border: "1px solid #333", borderRadius: 9, color: WARM_GREY, padding: "10px 14px", fontSize: 10, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-            {showPaste ? "Chiudi" : "oppure incolla un token"}
-          </button>
+        <div style={{ ...label, marginBottom: 8, color: "#4A90E2" }}>💰 {t("an.ads.title")}</div>
+        <div style={{ fontSize: 12, color: WARM_GREY, lineHeight: 1.6, marginBottom: 16 }}>
+          {t("an.ads.intro")}
+          <br /><span style={{ fontSize: 11, opacity: 0.7 }}>{t("an.ads.req")}</span>
         </div>
 
-        {showPaste && (
-          <div style={{ marginTop: 14, padding: 14, background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10 }}>
-            <div style={{ fontSize: 11, color: WARM_GREY, lineHeight: 1.6, marginBottom: 10 }}>
-              Da <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ color: "#4A90E2" }}>Graph API Explorer</a>: seleziona la tua app, <strong>User Token</strong> (non Page), aggiungi i permessi <code style={{ color: GOLD }}>ads_read</code> <code style={{ color: GOLD }}>instagram_basic</code> <code style={{ color: GOLD }}>pages_read_engagement</code> <code style={{ color: GOLD }}>business_management</code> → <strong>Generate Access Token</strong> → copia e incolla qui. (<code>business_management</code> serve a trovare le promozioni fatte dall'app Instagram.)
+        <div style={{ ...label, marginBottom: 12, fontSize: 10 }}>{t("an.ads.stepsTitle")}</div>
+        {[
+          ["1", t("an.ads.step1"), null],
+          ["2", t("an.ads.step2"), "ads_read  instagram_basic  pages_read_engagement  business_management"],
+          ["3", t("an.ads.step3"), null],
+          ["4", t("an.ads.step4"), null],
+        ].map(([n, text, code]) => (
+          <div key={n} style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start" }}>
+            <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: "rgba(74,144,226,0.15)", border: "1px solid rgba(74,144,226,0.35)", color: "#7FB4EE", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", flexShrink: 0, marginTop: 1 }}>{n}</span>
+            <div style={{ fontSize: 12.5, color: WARM_GREY, lineHeight: 1.6 }}>
+              {n === "1" ? (
+                <>{text} <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ color: "#4A90E2" }}>Graph API Explorer ↗</a></>
+              ) : text}
+              {code && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 10.5, color: GOLD, background: "#0a0a0a", padding: "4px 8px", borderRadius: 6, display: "inline-block" }}>{code}</div>}
             </div>
-            <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={3} placeholder="EAAxxxxxxxxxxxx..."
-              style={{ width: "100%", background: "#141414", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "9px 11px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
-            <button onClick={connectWithToken} disabled={!tokenPaste.trim() || loading === "token"}
-              style={{ ...goldBtn(!tokenPaste.trim() || loading === "token"), marginTop: 8, fontSize: 10 }}>
-              {loading === "token" ? "Verifico…" : "Collega con questo token"}
-            </button>
           </div>
-        )}
+        ))}
+
+        <div style={{ marginTop: 8 }}>
+          <div style={{ ...label, marginBottom: 6 }}>{t("an.ads.tokenLabel")}</div>
+          <div style={{ fontSize: 10.5, color: WARM_GREY, opacity: 0.75, marginBottom: 8, lineHeight: 1.5 }}>{t("an.ads.cfgHint")}</div>
+          <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={3} placeholder="EAAxxxxxxxxxxxx..."
+            style={{ width: "100%", background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "9px 11px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+          <button onClick={connectWithToken} disabled={!tokenPaste.trim() || loading === "token"}
+            style={{ ...goldBtn(!tokenPaste.trim() || loading === "token"), marginTop: 10 }}>
+            {loading === "token" ? t("an.checking") : t("an.connectTokenBtn")}
+          </button>
+        </div>
 
         {err && <div style={{ marginTop: 12, fontSize: 12, color: "#ff7070" }}>{err}</div>}
       </div>
@@ -994,27 +1002,27 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {status.expires_in_days != null && (
             <span style={{ fontSize: 9, color: status.expires_in_days < 7 ? "#E4A050" : "#555" }}>
-              token ~{status.expires_in_days}gg{status.expires_in_days < 7 ? " · sta per scadere, ricollega" : ""}
+              {t("an.ads.tokenDays", { n: status.expires_in_days })}{status.expires_in_days < 7 ? " · " + t("an.ads.tokenExpiring") : ""}
             </span>
           )}
           <button onClick={() => setShowPaste(v => !v)}
             style={{ background: "transparent", border: "1px solid #333", borderRadius: 8, color: WARM_GREY, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>
-            Aggiorna token
+            {t("an.updateToken")}
           </button>
-          <button onClick={() => { fetch("/api/instagram?action=fb_logout").then(() => { setStatus({ connected: false }); setAds(null); setAccounts(null); }); try { ["fb_ads_list", "fb_ads_fetched_at"].forEach(k => localStorage.removeItem(k)); } catch {} }}
+          <button onClick={() => { fetch("/api/instagram?action=fb_logout").then(() => { setStatus({ connected: false }); setAds(null); setAccounts(null); }); ["fb_ads_list", "fb_ads_fetched_at", "fb_ads_analysis"].forEach(k => uls.remove(k)); }}
             style={{ background: "transparent", border: "1px solid #333", borderRadius: 8, color: WARM_GREY, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>
-            Disconnetti FB
+            {t("an.ads.disconnect")}
           </button>
         </div>
       </div>
 
       {showPaste && (
         <div style={{ marginBottom: 16, padding: 12, background: "#0a0a0a", border: "1px solid rgba(201,169,110,0.15)", borderRadius: 10 }}>
-          <div style={{ fontSize: 11, color: WARM_GREY, marginBottom: 8 }}>Incolla un nuovo token <code style={{ color: GOLD }}>ads_read</code> da Graph API Explorer (lo converto in ~60gg).</div>
+          <div style={{ fontSize: 11, color: WARM_GREY, marginBottom: 8 }}>{t("an.ads.newTokenHint")}</div>
           <textarea value={tokenPaste} onChange={e => setTokenPaste(e.target.value)} rows={2} placeholder="EAAxxxxxxxxxxxx..."
             style={{ width: "100%", background: "#141414", border: "1px solid rgba(201,169,110,0.2)", borderRadius: 8, color: OFF_WHITE, padding: "8px 10px", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
           <button onClick={connectWithToken} disabled={!tokenPaste.trim() || loading === "token"} style={{ ...goldBtn(!tokenPaste.trim() || loading === "token"), marginTop: 8, fontSize: 10 }}>
-            {loading === "token" ? "Verifico…" : "Salva token"}
+            {loading === "token" ? t("an.checking") : t("an.saveToken")}
           </button>
         </div>
       )}
@@ -1036,12 +1044,12 @@ REGOLE: max 3 elementi per lista. Nessun markdown. Numeri concreti dai dati. Int
           <option value="maximum">Sempre</option>
         </select>
         <button onClick={loadAds} disabled={!acctId || loading === "ads"} style={{ ...goldBtn(!acctId || loading === "ads"), fontSize: 10 }}>
-          {loading === "ads" ? "Carico…" : "Carica sponsorizzate"}
+          {loading === "ads" ? t("an.loading") : t("an.loadAds")}
         </button>
         {shownAds?.length > 0 && (
           <button onClick={analyzeAds} disabled={analyzing}
             style={{ ...goldBtn(analyzing), background: analyzing ? "#2a2a2a" : "linear-gradient(135deg, #E1306C, #c0254e)", color: analyzing ? WARM_GREY : "#fff", fontSize: 10 }}>
-            {analyzing ? "Analisi…" : "🎯 Analizza con Claude"}
+            {analyzing ? t("an.adsAnalyzing") : t("an.analyzeAds")}
           </button>
         )}
       </div>
@@ -1328,58 +1336,39 @@ function PastAnalyses({ brand, refreshKey, onSuggestBrief }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-function readJsonLS(key, fallback) {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : fallback;
-  } catch { return fallback; }
-}
-
 export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   const t = useT();
   const { lang } = useLang();
+  const { user } = useAuth();
+  const uls = useMemo(() => userLS(user?.id), [user?.id]);
   const defaultHandle = brand?.instagramHandle || "";
-  const [token,      setToken]      = useState(() => localStorage.getItem("ig_token") || "");
-  const [accountId,  setAccountId]  = useState(() => localStorage.getItem("ig_account_id") || "");
-  const [username,   setUsername]   = useState(() => localStorage.getItem("ig_username") || defaultHandle);
-  const [profilePic, setProfilePic] = useState(() => localStorage.getItem("ig_profile_pic") || "");
+  const [token,      setToken]      = useState(() => uls.get("ig_token"));
+  const [accountId,  setAccountId]  = useState(() => uls.get("ig_account_id"));
+  const [username,   setUsername]   = useState(() => uls.get("ig_username") || defaultHandle);
+  const [profilePic, setProfilePic] = useState(() => uls.get("ig_profile_pic"));
   // La sessione (post caricati + ultima analisi) resta in localStorage così
   // riaprendo il tab Analytics non serve ricaricare/rianalizzare da capo.
-  const [posts,     setPosts]     = useState(() => readJsonLS("ig_posts", []));
-  const [account,   setAccount]   = useState(() => readJsonLS("ig_account", null));
+  const [posts,     setPosts]     = useState(() => uls.getJSON("ig_posts", []));
+  const [account,   setAccount]   = useState(() => uls.getJSON("ig_account", null));
   const [loading,   setLoading]   = useState(false);
   const [step,      setStep]      = useState("");
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis,  setAnalysis]  = useState(() => readJsonLS("ig_analysis_json", null));
+  const [analysis,  setAnalysis]  = useState(() => uls.getJSON("ig_analysis_json", null));
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [error,     setError]     = useState("");
 
   const isConnected = !!(token && accountId);
 
-  useEffect(() => {
-    try { localStorage.setItem("ig_posts", JSON.stringify(posts)); } catch {}
-  }, [posts]);
+  useEffect(() => { uls.setJSON("ig_posts", posts); }, [posts]);
+  useEffect(() => { uls.setJSON("ig_account", account); }, [account]);
+  useEffect(() => { uls.setJSON("ig_analysis_json", analysis); }, [analysis]);
 
-  useEffect(() => {
-    try {
-      if (account) localStorage.setItem("ig_account", JSON.stringify(account));
-      else localStorage.removeItem("ig_account");
-    } catch {}
-  }, [account]);
-
-  useEffect(() => {
-    try {
-      if (analysis) localStorage.setItem("ig_analysis_json", JSON.stringify(analysis));
-      else localStorage.removeItem("ig_analysis_json");
-    } catch {}
-  }, [analysis]);
-
-  function handleConnect({ token: t, accountId: id, username: u, profilePic: p }) {
-    localStorage.setItem("ig_token", t);
-    localStorage.setItem("ig_account_id", id);
-    localStorage.setItem("ig_username", u || "");
-    localStorage.setItem("ig_profile_pic", p || "");
-    setToken(t);
+  function handleConnect({ token: tok, accountId: id, username: u, profilePic: p }) {
+    uls.set("ig_token", tok);
+    uls.set("ig_account_id", id);
+    uls.set("ig_username", u || "");
+    uls.set("ig_profile_pic", p || "");
+    setToken(tok);
     setAccountId(id);
     setUsername(u || "");
     setProfilePic(p || "");
@@ -1394,7 +1383,7 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   }, [isConnected]);
 
   function disconnect() {
-    ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts", "ig_account"].forEach(k => localStorage.removeItem(k));
+    ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts", "ig_account"].forEach(k => uls.remove(k));
     setToken(""); setAccountId(""); setUsername(defaultHandle); setProfilePic("");
     setPosts([]); setAccount(null); setAnalysis(null); setError("");
   }

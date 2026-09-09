@@ -7,7 +7,7 @@
 //   GET  /v1/autofills/{jobId}    → polling finché status = "success"
 // e richiede un ID di **Brand Template** (non l'ID di un design).
 
-import { ensureAuthTables } from "./db.js";
+import { ensureAuthTables, getAppConfig } from "./db.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
 
@@ -68,8 +68,8 @@ export async function getCanvaToken(db, userId) {
   if (ageS <= expiry - 120 || !row.refresh_token) return row.access_token;
 
   // Vicino alla scadenza → refresh + rotazione refresh_token.
-  const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
-  const clientSecret = process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "";
+  // Credenziali per-utente (Impostazioni → Canva), fallback a env.
+  const { canvaClientId: clientId, canvaClientSecret: clientSecret } = await getAppConfig(db, userId);
   const creds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
   let td = {};

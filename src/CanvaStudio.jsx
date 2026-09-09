@@ -156,6 +156,29 @@ export default function CanvaStudio() {
           </div>
         </SectionCard>
 
+        {/* Guida configurazione — mostrata finché non connesso */}
+        {canvaStatus !== "connected" && (
+          <SectionCard style={{ marginBottom: 20, borderColor: `${CANVA_TEAL}33` }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: CANVA_TEAL, marginBottom: 12 }}>{t("canva.setup.title")}</div>
+            {[
+              <>{t("set.canva.s1")} <a href="https://www.canva.com/developers/apps" target="_blank" rel="noreferrer" style={{ color: CANVA_TEAL }}>canva.com/developers ↗</a></>,
+              t("set.canva.s2"),
+              t("set.canva.s3"),
+              t("set.canva.s4"),
+            ].map((it, i) => (
+              <div key={i} style={{ display: "flex", gap: 12, marginBottom: 11, alignItems: "flex-start" }}>
+                <span style={{ minWidth: 22, height: 22, borderRadius: "50%", background: `${CANVA_TEAL}22`, border: `1px solid ${CANVA_TEAL}44`, color: CANVA_TEAL, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
+                <div style={{ fontSize: 12, color: "#8A8070", lineHeight: 1.6 }}>{it}</div>
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: "#666", marginTop: 6 }}>
+              {t("canva.setup.redirectHint")}
+              <code style={{ display: "block", marginTop: 4, background: "#0a0a0a", border: "1px solid #1E1E1E", borderRadius: 7, color: "#B9AE98", padding: "6px 9px", fontSize: 10.5, fontFamily: "'JetBrains Mono', monospace", overflowX: "auto", whiteSpace: "nowrap" }}>https://vmscout.vercel.app/api/canva-auth</code>
+            </div>
+            <div style={{ fontSize: 11, color: CANVA_TEAL, marginTop: 10 }}>→ {t("canva.setup.goSettings")}</div>
+          </SectionCard>
+        )}
+
         {/* Template IDs */}
         <SectionCard style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>

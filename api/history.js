@@ -8,7 +8,7 @@
 import {
   getDb, ensureAuthTables, hashPassword, verifyPassword, DUMMY_HASH,
   createSession, sessionSetCookie, sessionClearCookie, destroySession,
-  getSessionUser, assertOwnsProject, normLang, badOrigin,
+  getSessionUser, assertOwnsProject, normLang, badOrigin, getAppConfig,
 } from "./db.js";
 import crypto from "crypto";
 
@@ -183,6 +183,54 @@ export default async function handler(req, res) {
       const lang = normLang(req.body?.lang);
       await db.execute({ sql: "UPDATE vms_users SET lang=? WHERE id=?", args: [lang, me.id] });
       return res.status(200).json({ ok: true, lang });
+    }
+
+    // ─── Credenziali app di terze parti (Canva / Meta) ─────────
+    // Vista non-segreta: i secret non escono mai dal server, solo il flag "set".
+    if (action === "get_app_config" && req.method === "GET") {
+      const cfg = await getAppConfig(db, me.id);
+      const ownCfg = await db.execute({
+        sql: "SELECT canva_client_id, canva_client_secret, fb_app_id, fb_app_secret FROM app_config_u WHERE user_id=?",
+        args: [me.id],
+      }).catch(() => ({ rows: [] }));
+      const row = ownCfg.rows[0] || {};
+      return res.status(200).json({
+        ok: true,
+        canvaClientId: row.canva_client_id || "",
+        fbAppId:       row.fb_app_id || "",
+        canvaSecretSet: !!row.canva_client_secret,
+        fbSecretSet:    !!row.fb_app_secret,
+        // se l'utente non ha impostato nulla ma c'è un fallback da env, l'app
+        // funziona lo stesso: lo segnaliamo per non allarmare.
+        source: cfg.source,
+      });
+    }
+
+    if (action === "save_app_config" && req.method === "POST") {
+      if (badOrigin(req)) return res.status(403).json({ error: "BAD_ORIGIN" });
+      const b = req.body || {};
+      const clean = (v) => (v == null ? null : String(v).trim().replace(/^["']|["']$/g, ""));
+      const fields = {
+        canva_client_id:     clean(b.canvaClientId),
+        canva_client_secret: clean(b.canvaClientSecret),
+        fb_app_id:           clean(b.fbAppId),
+        fb_app_secret:       clean(b.fbAppSecret),
+      };
+      // solo le chiavi effettivamente presenti nel body vengono toccate
+      const keyMap = { canvaClientId: "canva_client_id", canvaClientSecret: "canva_client_secret", fbAppId: "fb_app_id", fbAppSecret: "fb_app_secret" };
+      const sets = [];
+      const args = [];
+      for (const [bodyKey, col] of Object.entries(keyMap)) {
+        if (bodyKey in b) { sets.push(`${col}=?`); args.push(fields[col] || ""); }
+      }
+      if (!sets.length) return res.status(400).json({ error: "Nessun campo da salvare" });
+      await db.execute({
+        sql: `INSERT INTO app_config_u (user_id, ${Object.values(keyMap).join(", ")}, updated_at)
+              VALUES (?, ${Object.values(keyMap).map(() => "?").join(", ")}, datetime('now'))
+              ON CONFLICT(user_id) DO UPDATE SET ${sets.join(", ")}, updated_at=datetime('now')`,
+        args: [me.id, fields.canva_client_id || "", fields.canva_client_secret || "", fields.fb_app_id || "", fields.fb_app_secret || "", ...args],
+      });
+      return res.status(200).json({ ok: true });
     }
 
     const own = async (projectId, opts) => {

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { userLS } from "./userStorage.js";
 
 const AuthContext = createContext(null);
 
@@ -80,6 +81,8 @@ export function AuthProvider({ children }) {
       // chiavi legacy non namespacizzate
       localStorage.removeItem("vmscout_brands");
       localStorage.removeItem("vmscout_active_brand");
+      // connessioni Analytics / Meta Ads (token IG, cache post, sponsorizzate…)
+      userLS.clearFor(user?.id);
     } catch { /* ignore */ }
     setUser(null);
   }, [user]);

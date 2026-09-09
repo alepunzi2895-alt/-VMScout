@@ -1,8 +1,8 @@
-import { getDb, ensureAuthTables, getSessionUser, signValue, verifySignedValue, parseCookies, serializeCookie } from "./db.js";
+import { getDb, ensureAuthTables, getSessionUser, getAppConfig, signValue, verifySignedValue, parseCookies, serializeCookie } from "./db.js";
 import crypto from "crypto";
 
-const clientId     = process.env.CANVA_CLIENT_ID     || process.env.VITE_CANVA_CLIENT_ID     || "";
-const clientSecret = process.env.CANVA_CLIENT_SECRET || process.env.VITE_CANVA_CLIENT_SECRET || "";
+// clientId / clientSecret sono PER-UTENTE (Impostazioni → Canva), con fallback
+// alle variabili d'ambiente via getAppConfig(). redirectUri resta unico.
 const redirectUri  = process.env.CANVA_REDIRECT_URI  || process.env.VITE_CANVA_REDIRECT_URI  ||
   "https://vmscout.vercel.app/api/canva-auth";
 
@@ -42,9 +42,10 @@ export default async function handler(req, res) {
 
   // ── Step 1: redirect to Canva consent ───────────
   if (action === "login") {
-    if (!clientId) return res.status(500).json({ error: "CANVA_CLIENT_ID non configurato" });
     const me = await getSessionUser(db, req);
     if (!me) return res.status(401).send(errorPage("Accedi a VMScout prima di collegare Canva."));
+    const { canvaClientId: clientId } = await getAppConfig(db, me.id);
+    if (!clientId) return res.status(500).send(errorPage("Client ID Canva non configurato. Vai in Impostazioni → Canva e incolla Client ID e Client Secret della tua app Canva."));
 
     const verifier  = genVerifier();
     const challenge = genChallenge(verifier);
@@ -90,6 +91,10 @@ export default async function handler(req, res) {
       return res.status(400).send(errorPage("Sessione VMScout scaduta durante il collegamento. Riprova dall'app."));
     }
 
+    const { canvaClientId: clientId, canvaClientSecret: clientSecret } = await getAppConfig(db, userId);
+    if (!clientId || !clientSecret) {
+      return res.status(500).send(errorPage("Credenziali Canva mancanti. Vai in Impostazioni → Canva."));
+    }
     const creds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
     try {
       const tokenRes = await fetch("https://api.canva.com/rest/v1/oauth/token", {

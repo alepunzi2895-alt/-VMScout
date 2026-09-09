@@ -8,6 +8,7 @@ import VisualMarketingScout from "./App.jsx";
 import InstagramAnalytics from "./InstagramAnalytics.jsx";
 import CanvaStudio from "./CanvaStudio.jsx";
 import Dashboard from "./Dashboard.jsx";
+import Settings from "./Settings.jsx";
 import CanvaMark from "./CanvaMark.jsx";
 import BrandAvatar from "./BrandAvatar.jsx";
 import Flag from "./Flag.jsx";
@@ -20,6 +21,7 @@ const TABS = [
   { id: "instagram", key: "nav.analytics", icon: "📊" },
   { id: "canva", key: "nav.canva", icon: <CanvaMark size={14} /> },
   { id: "dashboard", key: "nav.dashboard", icon: "🧭" },
+  { id: "settings", key: "nav.settings", icon: "⚙" },
 ];
 
 function Nav({ activeApp, setActiveApp }) {
@@ -196,6 +198,7 @@ function AppContent() {
         {activeApp === "instagram" && <InstagramAnalytics brand={activeBrand} onSuggestBrief={goToScoutWithBrief} />}
         {activeApp === "canva" && <CanvaStudio />}
         {activeApp === "dashboard" && <Dashboard brand={activeBrand} onSuggestBrief={goToScoutWithBrief} />}
+        {activeApp === "settings" && <Settings />}
       </div>
     </div>
   );
