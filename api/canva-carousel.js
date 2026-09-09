@@ -1,13 +1,17 @@
 // /api/canva-carousel.js — compone in UN SOLO design Canva un intero carosello
-// (di FOTO o di VIDEO) a partire da Visual Scout.
+// (di FOTO o di VIDEO, anche misti) a partire da Visual Scout. Serve sia il
+// carosello 1:1 (tab Post / Video Storytelling) sia le STORY 9:16 (tab Story):
+// il chiamante passa `carouselTemplateId` (6 pagine `Immagine_N`/`Testo_N`) e
+// `format` ("post" | "story"). Le story usano il template Story a 6 pagine.
 //
 // COME funziona (dal 2026-09-09):
-// Il Brand Template carosello `EAHUiOe8TUA` ha 6 pagine con, per pagina, una
-// cornice full-bleed `Immagine_N` + il testo `Testo_N`. La cornice accetta sia
-// immagini sia video (autofill `{ type:"image"|"video", asset_id }`). Quindi:
-// carichiamo gli N media delle slide come asset, UN solo job autofill riempie
-// `Testo_1..N` / `Immagine_1..N` e infine `trimTrailingPages` elimina le pagine
-// oltre N. Risultato = un unico design a N pagine con lo sfondo su ogni pagina.
+// Il Brand Template ha 6 pagine con, per pagina, una cornice full-bleed
+// `Immagine_N` + il testo `Testo_N`. La cornice accetta sia immagini sia video
+// (autofill `{ type:"image"|"video", asset_id }`). Quindi: carichiamo gli N
+// media delle slide come asset, UN solo job autofill riempie `Testo_1..N` /
+// `Immagine_1..N` e infine `trimTrailingPages` elimina le pagine oltre N.
+// Ogni slide sceglie il proprio tipo: `media_kind` "video"|"image", oppure
+// dedotto da `video_url`/`video_source`, con `media` come default globale.
 //
 // Lavora a CICLI (maxDuration:60 di Vercel). Fasi (`resume.stage`):
 //   upload   → carica gli N media (foto: binario; video: url-asset-uploads)
@@ -116,7 +120,7 @@ export default async function handler(req, res) {
   if (!tplId) {
     return res.status(400).json({
       error: "TEMPLATE_NOT_SET",
-      message: 'Template Carosello non configurato in Canva Studio (Brand Template a 6 pagine con campi "Immagine_1"/"Testo_1" … "Immagine_6"/"Testo_6").',
+      message: `Template ${format === "story" ? "Story" : "Carosello"} non configurato in Canva Studio (Brand Template a 6 pagine con campi "Immagine_1"/"Testo_1" … "Immagine_6"/"Testo_6").`,
     });
   }
 
@@ -132,6 +136,15 @@ export default async function handler(req, res) {
   const captions   = usedSlides.map(s => (s.caption || "").trim());
   const deadline   = Date.now() + 48_000;
   const wantVideoCarousel = media === "video";
+
+  // Tipo media di UNA slide: esplicito (`media_kind`), dedotto da campi video,
+  // altrimenti default globale (`media`).
+  const slideKind = (s) =>
+    (s.media_kind === "video" || s.video_url || s.video_source) ? "video"
+    : s.media_kind === "image" ? "image"
+    : wantVideoCarousel ? "video" : "image";
+  const kinds = usedSlides.map(slideKind);
+  const anyVideo = kinds.some(k => k === "video");
 
   // ── FASE autofill ──────────────────────────────────────────────────
   async function runAutofillPhase({ slots, mediaUrls, resumeJobId }) {
@@ -155,7 +168,7 @@ export default async function handler(req, res) {
       });
       af = await runAutofill({
         token, templateId: tplId, data,
-        title: `Carosello ${usedSlides.length} ${wantVideoCarousel ? "video" : "slide"}`, deadline,
+        title: `${format === "story" ? "Story" : "Carosello"} ${usedSlides.length} ${anyVideo ? "video" : "slide"}`, deadline,
       });
     }
 
@@ -186,7 +199,7 @@ export default async function handler(req, res) {
     const missing = usedSlides.length - filled;
     const slotErrors = slots.map((s, i) => s?.error ? `Slide ${i + 1}: ${s.error}` : null).filter(Boolean);
     const templateHint = af.imageFieldsMissing && typeof af.imageFieldsMissing === "string" ? af.imageFieldsMissing : null;
-    const what = wantVideoCarousel ? "I video sono stati caricati" : "Le foto sono state caricate";
+    const what = anyVideo ? "I media sono stati caricati" : "Le foto sono state caricate";
 
     return res.status(200).json({
       ok: true,
@@ -224,20 +237,20 @@ export default async function handler(req, res) {
     }
 
     // ── Fresh ──────────────────────────────────────────────────────
-    const vertical = wantVideoCarousel || format === "story" || format === "reel";
+    const vertical = anyVideo || format === "story" || format === "reel";
 
-    const mediaUrls = await Promise.all(usedSlides.map(async s => {
+    const mediaUrls = await Promise.all(usedSlides.map(async (s, i) => {
       if (s.asset_id) return null; // già caricato dal client
-      if (wantVideoCarousel) return resolveVideoUrl(s, vertical);
+      if (kinds[i] === "video") return resolveVideoUrl(s, vertical);
       return s.image_url || (s.search_query ? await fetchPexelsUrl(s.search_query, vertical) : null);
     }));
 
     let slots = await Promise.all(mediaUrls.map(async (url, i) => {
-      const kind = wantVideoCarousel ? "video" : "image";
+      const kind = kinds[i];
       // asset già caricato dal client (es. clip video ritagliata) → usalo diretto
       if (usedSlides[i]?.asset_id) return { assetId: usedSlides[i].asset_id, kind };
       if (!url) return { error: null, kind };
-      if (wantVideoCarousel) {
+      if (kind === "video") {
         const r = await uploadVideoUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.mp4`, deadline: Math.min(deadline, Date.now() + 12_000) });
         const sl = toSlot(r, "video");
         if (sl.error) { try { sl.error += ` [${new URL(url).host}]`; } catch { /* */ } }

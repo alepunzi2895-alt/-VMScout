@@ -1594,6 +1594,249 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
   );
 }
 
+// ─── STORY (9:16) — un solo design multi-pagina col template Story ───
+const STORY_MAX = 6;
+const STORY_CLIP_SEC = 5; // durata di default per una clip video in una story
+const PHOTO_SOURCE_KEYS_API = Object.keys(PHOTO_SOURCES).filter(k => PHOTO_SOURCES[k].apiUrl);
+
+// Griglia di foto suggerite per una query (portrait), con selettore fonte.
+function StoryPhotoPicker({ query, imgUrl, source, onPick, onSourceChange }) {
+  const [imgs, setImgs] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const canFetch = PHOTO_SOURCES[source]?.apiUrl && API_KEYS[source];
+
+  useEffect(() => {
+    const q = (query || "").trim();
+    if (!q || !canFetch) { setImgs(null); return; }
+    let alive = true;
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetchImages(q, "portrait", source).then(o => { if (alive) { setImgs(o?.results || []); setLoading(false); } });
+    }, 350);
+    return () => { alive = false; clearTimeout(t); };
+  }, [query, source, canFetch]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 9, color: "#666" }}>Fonte:</span>
+        {PHOTO_SOURCE_KEYS_API.map(k => (
+          <button key={k} type="button" onClick={() => onSourceChange(k)}
+            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 9, fontWeight: 600, cursor: "pointer", border: `1px solid ${source === k ? PHOTO_SOURCES[k].color : "#262626"}`, background: source === k ? PHOTO_SOURCES[k].color + "22" : "transparent", color: source === k ? "#EEE" : "#777" }}>
+            {PHOTO_SOURCES[k].name}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
+        <button type="button" onClick={() => onPick(null)}
+          style={{ aspectRatio: "9/16", borderRadius: 8, border: `2px solid ${!imgUrl ? "#00C4CC" : "#262626"}`, background: "#141414", color: !imgUrl ? "#00C4CC" : "#666", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>
+          🔀 Auto
+        </button>
+        {loading && !imgs?.length
+          ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ aspectRatio: "9/16", borderRadius: 8, background: "#141414" }} />)
+          : (imgs || []).slice(0, 3).map((im, i) => {
+              const on = imgUrl === im.full;
+              return (
+                <button key={im.id || i} type="button" onClick={() => onPick(im.full)}
+                  style={{ aspectRatio: "9/16", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${on ? "#00C4CC" : "#262626"}`, cursor: "pointer", background: "#000" }}>
+                  <img src={im.thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.78 }} />
+                </button>
+              );
+            })}
+      </div>
+      <input value={imgUrl && /^https?:\/\//i.test(imgUrl) ? imgUrl : ""} onChange={e => onPick(e.target.value.trim() || null)}
+        placeholder="…oppure incolla un URL immagine"
+        style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 8, padding: "6px 9px", color: "#F0EBE3", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif", marginTop: 6 }} />
+    </div>
+  );
+}
+
+// Modale: da post_composer / storyboard → UN design Story a N pagine 9:16.
+// Ogni frame è foto O video (suggerimenti per entrambi), sul template Story.
+function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }) {
+  const templateId = canvaTemplates?.story || "";
+  const [rows, setRows] = useState([]);
+  const [state, setState] = useState("idle");
+  const [url, setUrl] = useState(null);
+  const [errMsg, setErrMsg] = useState("");
+  const [progress, setProgress] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setState("idle"); setUrl(null); setErrMsg(""); setProgress("");
+    setRows((frames || []).slice(0, STORY_MAX).map(f => ({
+      caption: f.caption || "",
+      search_query: f.search_query || "",
+      media_kind: "image",
+      img_url: null, img_source: defaultPhotoSource() || "pexels",
+      video_url: null, vid_source: "pexels_video",
+      trimStart: 0, trimEnd: STORY_CLIP_SEC,
+    })));
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const patch = (i, k, v) => setRows(p => p.map((r, idx) => {
+    if (idx !== i) return r;
+    const nr = { ...r, [k]: v };
+    if (k === "video_url") { nr.trimStart = 0; nr.trimEnd = STORY_CLIP_SEC; }
+    return nr;
+  }));
+  const setTrim = (i, a, b) => setRows(p => p.map((r, idx) => idx === i ? { ...r, trimStart: a, trimEnd: b } : r));
+  const setVidSource = (i, s) => setRows(p => p.map((r, idx) => idx === i ? { ...r, vid_source: s, video_url: null, trimStart: 0, trimEnd: STORY_CLIP_SEC } : r));
+
+  async function handleCreate() {
+    setState("loading"); setErrMsg(""); setProgress("Preparazione…");
+    const warnings = [];
+    const prepared = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const base = { caption: r.caption, search_query: r.search_query, media_kind: r.media_kind };
+      if (r.media_kind === "image") {
+        prepared.push({ ...base, image_url: r.img_url || undefined });
+        continue;
+      }
+      // video: se scelto, ritaglia [trimStart,trimEnd] nel browser e carica
+      if (!r.video_url) { prepared.push({ ...base, video_source: r.vid_source }); continue; }
+      const a = r.trimStart || 0;
+      const b = Math.max(a + 0.3, r.trimEnd || STORY_CLIP_SEC);
+      try {
+        setProgress(`Registro la clip del frame ${i + 1}/${rows.length}… (${(b - a).toFixed(1)}s)`);
+        const { blob, ext } = await recordVideoSegment(r.video_url, a, b);
+        if (blob.size > 3.8 * 1024 * 1024) {
+          warnings.push(`Frame ${i + 1}: clip troppo grande (${(blob.size / 1048576).toFixed(1)}MB), uso il video intero.`);
+          prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
+          continue;
+        }
+        setProgress(`Carico su Canva il frame ${i + 1}/${rows.length}…`);
+        const up = await fetch("/api/canva-upload", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-story-${i + 1}.${ext}` }),
+        }).then(x => x.json());
+        if (up.assetId) prepared.push({ ...base, asset_id: up.assetId });
+        else {
+          warnings.push(`Frame ${i + 1}: ${up.message || "upload fallito"} — uso il video intero.`);
+          prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
+        }
+      } catch (e) {
+        warnings.push(`Frame ${i + 1}: ritaglio non applicato (${e.message || "errore"}) — uso il video intero.`);
+        prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
+      }
+    }
+
+    const baseBody = { slides: prepared, carouselTemplateId: templateId, format: "story" };
+    const giveUpAt = Date.now() + 6 * 60_000;
+    let resume;
+    try {
+      while (true) {
+        const res = await fetch("/api/canva-carousel", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(resume ? { ...baseBody, resume } : baseBody),
+        });
+        const data = await res.json();
+        if (data.pending) {
+          setProgress(data.phase === "autofill" ? "Composizione delle story in Canva…" : "Caricamento media su Canva…");
+          if (Date.now() > giveUpAt) { setErrMsg("Canva ci sta mettendo troppo. Riprova tra qualche minuto."); setState("idle"); break; }
+          resume = data.resume;
+          await new Promise(x => setTimeout(x, 3500));
+          continue;
+        }
+        if (data.ok) {
+          setUrl(data.url); setState("done");
+          const w = [...warnings, data.imageWarning].filter(Boolean);
+          if (w.length) setErrMsg("⚠ " + w.join(" · "));
+          saveCanvaDesign({
+            project_id: projectId || null, kind: "story", format: "story",
+            title: `Story ${rows.length} frame`, design_url: data.url, slides: rows.length,
+          });
+        } else if (data.error === "CANVA_NOT_CONNECTED") {
+          window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700"); setState("idle");
+        } else if (data.error === "TEMPLATE_NOT_SET") {
+          setErrMsg(data.message); setState("idle");
+        } else {
+          setErrMsg(data.message || "Errore durante la creazione delle story."); setState("idle");
+        }
+        break;
+      }
+    } catch (e) {
+      setErrMsg(e.message || "Errore di rete."); setState("idle");
+    } finally { setProgress(""); }
+  }
+
+  if (!open) return null;
+
+  return createPortal(
+    <div onClick={() => onOpenChange(false)}
+      style={{ position: "fixed", inset: 0, zIndex: 4000, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 560, background: "#0C0C0C", border: "1px solid #1E1E1E", borderRadius: 20, padding: 22, fontFamily: "'Space Grotesk', sans-serif", color: "#F0EBE3" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#E1306C", fontWeight: 600 }}>◫ Story su Canva</div>
+          <button onClick={() => onOpenChange(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 12 }}>
+          Un frame per pagina, 9:16, sul template Story. Per ogni frame scegli <b style={{ color: "#777" }}>foto o video</b>: i suggerimenti arrivano per entrambi. I video vengono ritagliati nel browser a {STORY_CLIP_SEC}s.
+        </div>
+
+        {!templateId && (
+          <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,140,60,0.1)", border: "1px solid rgba(180,140,60,0.25)", color: "#D9A441", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+            Template <b>Story</b> non impostato in Canva Studio. Impostalo per creare le story.
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{ border: "1px solid #1E1E1E", borderRadius: 12, padding: 12, background: "#0E0E0E" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#8B7355", letterSpacing: "0.08em" }}>FRAME {i + 1}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[{ id: "image", l: "🖼 Foto" }, { id: "video", l: "🎬 Video" }].map(m => (
+                    <button key={m.id} type="button" onClick={() => patch(i, "media_kind", m.id)}
+                      style={{ padding: "3px 9px", borderRadius: 8, fontSize: 9.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${row.media_kind === m.id ? "#00C4CC" : "#262626"}`, background: row.media_kind === m.id ? "rgba(0,196,204,0.14)" : "transparent", color: row.media_kind === m.id ? "#00C4CC" : "#777" }}>
+                      {m.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea value={row.caption} onChange={e => patch(i, "caption", e.target.value)} rows={2} placeholder="Testo della story…"
+                style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
+              <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query (EN, max 3 parole)"
+                style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+
+              {row.media_kind === "image" ? (
+                <StoryPhotoPicker query={row.search_query} imgUrl={row.img_url} source={row.img_source}
+                  onPick={u => patch(i, "img_url", u)} onSourceChange={s => patch(i, "img_source", s)} />
+              ) : (
+                <>
+                  <RowVideoPicker query={row.search_query} videoUrl={row.video_url} source={row.vid_source}
+                    onPick={u => patch(i, "video_url", u)} onSourceChange={s => setVidSource(i, s)} />
+                  {row.video_url && (
+                    <VideoTrimmer url={row.video_url} start={row.trimStart} end={row.trimEnd} targetDur={STORY_CLIP_SEC}
+                      onChange={(a, b) => setTrim(i, a, b)} />
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {errMsg && <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{errMsg}</div>}
+
+        {state === "done" && url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            style={{ display: "block", padding: "12px", borderRadius: 12, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700 }}>
+            ✓ Apri le story in Canva →
+          </a>
+        ) : (
+          <button onClick={handleCreate} disabled={state === "loading" || !rows.length || !templateId}
+            style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !rows.length || !templateId ? "not-allowed" : "pointer", border: "1px solid #E1306C45", background: "rgba(225,48,108,0.12)", color: "#E1306C", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !rows.length || !templateId ? 0.5 : 1 }}>
+            {state === "loading" ? `⏳ ${progress || "Compongo le story…"}` : `◫ Crea Story su Canva (${rows.length} frame)`}
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function QueryCard({ query, orientation, sourceKey, onImagesFetched, images }) {
   const src = PHOTO_SOURCES[sourceKey];
   const url = src.webUrl(query, orientation);
@@ -2281,6 +2524,93 @@ function VideoTab({ data, brand }) {
 }
 
 // ─────────────────────────────────────────────────
+// TAB: STORY (9:16)
+// ─────────────────────────────────────────────────
+function StoryTab({ data, brand }) {
+  const [lang, setLang] = useState("it");
+  const [scOpen, setScOpen] = useState(false);
+  const [photoSource, setPhotoSource] = useState(() => defaultPhotoSource() || "unsplash");
+  const [videoSource, setVideoSource] = useState("pexels_video");
+
+  const LANGS = [
+    { id: "it", label: "Italiano", flag: "🇮🇹" },
+    { id: "en", label: "English", flag: "🇬🇧" },
+    { id: "es", label: "Español", flag: "🇪🇸" },
+  ];
+  const ml = (f) => (f && typeof f === "object" ? (f[lang] || f.it || f.en || "") : (f || ""));
+  const short = (s, n = 9) => (s || "").split(/\s+/).slice(0, n).join(" ");
+
+  // Frame = da post_composer (preferito) o dallo storyboard video.
+  const frames = (data.post_composer?.length
+    ? data.post_composer.map(p => ({
+        caption: ml(p.visual_description) || short(ml(p.captions) || p.caption || ""),
+        search_query: p.search_query || "",
+      }))
+    : (data.video_storytelling?.scenes || []).map(s => ({
+        caption: ml(s.text_overlay) || short(ml(s.description)),
+        search_query: s.search_query || "",
+      }))
+  ).filter(f => f.search_query).slice(0, STORY_MAX);
+
+  const hasTemplate = !!brand?.canvaTemplates?.story;
+
+  if (!frames.length) return <p style={{ color: "#8B7355", fontSize: 13 }}>Nessun contenuto da cui derivare le story. Genera prima post o storyboard.</p>;
+
+  return (
+    <div style={{ animation: "fadeSlideUp 0.3s ease-out" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 12, background: "linear-gradient(135deg, #E1306C, #F77737)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>◫</span>
+        <SectionLabel color="#E1306C">Story 9:16</SectionLabel>
+      </div>
+
+      <button onClick={() => setScOpen(true)} disabled={!hasTemplate}
+        style={{ width: "100%", padding: "11px 16px", marginBottom: 8, borderRadius: 14, border: "1px solid rgba(225,48,108,0.35)", background: "linear-gradient(135deg, rgba(225,48,108,0.14), rgba(225,48,108,0.06))", color: "#E1306C", fontSize: 12.5, fontWeight: 700, cursor: hasTemplate ? "pointer" : "not-allowed", opacity: hasTemplate ? 1 : 0.5, fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        ◫ Componi Story su Canva ({frames.length} frame · foto o video)
+      </button>
+      {!hasTemplate && <div style={{ fontSize: 10.5, color: "#8B7355", marginBottom: 14 }}>Imposta il template <b>Story</b> in Canva Studio per attivarlo.</div>}
+      <StoryComposer frames={frames} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} open={scOpen} onOpenChange={setScOpen} />
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", marginTop: 6 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
+          {LANGS.map(l => (
+            <button key={l.id} onClick={() => setLang(l.id)}
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: lang === l.id ? "#FBF8F3" : "transparent", boxShadow: lang === l.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: lang === l.id ? "#2C2418" : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+              {l.flag} {l.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
+          {PHOTO_SOURCE_KEYS_API.map(k => (
+            <button key={k} onClick={() => setPhotoSource(k)}
+              style={{ padding: "5px 12px", borderRadius: 10, border: "none", background: photoSource === k ? "#FBF8F3" : "transparent", boxShadow: photoSource === k ? "0 1px 3px rgba(0,0,0,0.08)" : "none", color: photoSource === k ? PHOTO_SOURCES[k].color : "#8B7355", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+              {PHOTO_SOURCES[k].name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {frames.map((f, i) => (
+          <div key={i} style={{ background: "#FBF8F3", border: "1px solid rgba(26,26,46,0.08)", borderRadius: 16, padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#E1306C", fontFamily: "'JetBrains Mono', monospace" }}>FRAME {i + 1}</span>
+              <span style={{ fontSize: 9, color: "#999", fontFamily: "'JetBrains Mono', monospace" }}>"{f.search_query}"</span>
+            </div>
+            {f.caption && (
+              <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 9, background: "#1A1A2E", color: "#F0E8D8", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{f.caption}</div>
+            )}
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#8B7355", marginBottom: 5 }}>Foto suggerite</div>
+            <SlidePreviewImages query={f.search_query} orientation="portrait" sourceKey={photoSource} />
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#8B7355", margin: "10px 0 3px" }}>Video suggeriti</div>
+            <SceneVideoPlayer query={f.search_query} sourceKey={videoSource} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
 // TAB: PIANO EDITORIALE
 // ─────────────────────────────────────────────────
 function EditorialTab({ data }) {
@@ -2445,6 +2775,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
     { id: "strategy", label: "Strategia", icon: "◈" },
     { id: "piano", label: "Piano", icon: "📅", show: !!data.editorial_plan },
     { id: "posts", label: "Post", icon: "◻", show: data.post_composer?.length > 0 },
+    { id: "story", label: "Story", icon: "◫", show: data.post_composer?.length > 0 || !!data.video_storytelling?.scenes },
     { id: "video", label: "Video", icon: "▶", show: !!data.video_storytelling?.scenes },
     { id: "sponsor", label: "Sponsor", icon: "🎯", show: !!data.ad_targeting },
   ].filter(t => t.show !== false);
@@ -2463,6 +2794,7 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
       { activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
       { activeTab === "piano" && <EditorialTab data={data} />}
       { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} brand={brand} />}
+      { activeTab === "story" && <StoryTab data={data} brand={brand} />}
       { activeTab === "video" && <VideoTab data={data} brand={brand} />}
       { activeTab === "sponsor" && <SponsorTab data={data} />}
 
