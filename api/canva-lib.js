@@ -214,17 +214,11 @@ async function pollBinaryJob({ token, jobId, job, stopAt }) {
   return { assetId: null, pending: true, jobId };
 }
 
-// Scarica i byte dell'immagine e AVVIA l'upload BINARIO (`POST /v1/asset-uploads`).
-// Solo create, niente polling. `{ jobId }` | `{ assetId }` (raro, se già pronto) |
-// `{ error, stop? }`. A differenza di `url-asset-uploads`, Canva non deve fare un
-// fetch esterno lento da Unsplash/Pexels: il job si chiude in pochi secondi.
-export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
-  const dl = await downloadImage(sizedImageUrl(url));
-  if (dl.error) return { error: dl.error };
-  const bytes = dl.bytes;
-  if (!bytes?.length) return { error: "Immagine vuota." };
-  if (bytes.length > 45 * 1024 * 1024) return { error: "Immagine troppo grande (>45MB)." };
-
+// AVVIA l'upload BINARIO di byte già in memoria (`POST /v1/asset-uploads`).
+// Solo create, niente polling. `{ jobId }` | `{ assetId }` | `{ error, stop? }`.
+export async function startBytesUpload({ token, bytes, name = "vmscout" }) {
+  if (!bytes?.length) return { error: "File vuoto." };
+  if (bytes.length > 45 * 1024 * 1024) return { error: "File troppo grande (>45MB)." };
   const safeName = (String(name).replace(/[^\w.\- ]/g, "").trim() || "vmscout").slice(0, 50);
   try {
     const r = await fetch(`${CANVA_API}/asset-uploads`, {
@@ -238,7 +232,7 @@ export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
     });
     const d = await r.json().catch(() => ({}));
     if (r.status === 401 || r.status === 403) {
-      return { stop: true, error: "Permesso Canva insufficiente per caricare immagini (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
+      return { stop: true, error: "Permesso Canva insufficiente per caricare media (scope asset:write). Disconnetti e riconnetti Canva dentro VMScout." };
     }
     if (!r.ok || !d?.job?.id) {
       return { error: `Canva ha rifiutato l'upload binario (HTTP ${r.status})${d?.message ? `: ${d.message}` : ""}.` };
@@ -248,6 +242,13 @@ export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
   } catch (e) {
     return { error: `Errore di rete verso Canva: ${e.message}` };
   }
+}
+
+// Byte da URL → upload binario. `checkImageUpload` fa il polling di `{jobId}`.
+export async function startImageUpload({ token, url, name = "vmscout.jpg" }) {
+  const dl = await downloadImage(sizedImageUrl(url));
+  if (dl.error) return { error: dl.error };
+  return startBytesUpload({ token, bytes: dl.bytes, name });
 }
 
 // Scarica i byte e carica su Canva (binario), aspettando l'asset_id fino a stopAt.

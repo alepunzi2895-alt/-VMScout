@@ -1070,10 +1070,138 @@ function parseDurSec(d) {
   const n = s.match(/(\d+(?:\.\d+)?)/);
   return n ? Number(n[1]) : 0;
 }
-const fmtT = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+const fmtT = (sec) => {
+  const s = Math.max(0, sec || 0);
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}${(s % 1).toFixed(1).slice(1)}`;
+};
 
 const VIDEO_SOURCE_KEYS = Object.keys(VIDEO_SOURCES);
 const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split("_")[0]]);
+
+// ─── ffmpeg.wasm (caricato da CDN solo quando serve il ritaglio) ───
+let _ffmpegPromise = null;
+function loadFFmpeg() {
+  if (_ffmpegPromise) return _ffmpegPromise;
+  _ffmpegPromise = new Promise((resolve, reject) => {
+    if (window.FFmpeg?.createFFmpeg) return finish();
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
+    sc.onload = finish;
+    sc.onerror = () => { _ffmpegPromise = null; reject(new Error("Impossibile caricare ffmpeg")); };
+    document.head.appendChild(sc);
+    async function finish() {
+      try {
+        const { createFFmpeg, fetchFile } = window.FFmpeg;
+        const ff = createFFmpeg({ log: false, corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js" });
+        if (!ff.isLoaded()) await ff.load();
+        resolve({ ff, fetchFile });
+      } catch (e) { _ffmpegPromise = null; reject(e); }
+    }
+  });
+  return _ffmpegPromise;
+}
+
+// Ritaglia [start,end] dell'URL video → Blob mp4 (keyframe-snapped, veloce).
+async function trimVideoToBlob(url, start, end) {
+  const { ff, fetchFile } = await loadFFmpeg();
+  const dur = Math.max(0.3, end - start);
+  ff.FS("writeFile", "in.mp4", await fetchFile(url));
+  try {
+    await ff.run("-ss", String(start.toFixed(2)), "-i", "in.mp4", "-t", String(dur.toFixed(2)),
+      "-c:v", "copy", "-an", "-movflags", "+faststart", "out.mp4");
+    const data = ff.FS("readFile", "out.mp4");
+    return new Blob([data.buffer], { type: "video/mp4" });
+  } finally {
+    try { ff.FS("unlink", "in.mp4"); } catch { /* */ }
+    try { ff.FS("unlink", "out.mp4"); } catch { /* */ }
+  }
+}
+
+const blobToB64 = (blob) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(",")[1]);
+  r.onerror = rej;
+  r.readAsDataURL(blob);
+});
+
+// Scrubber di ritaglio: play del segmento in loop + maniglie inizio/fine.
+function VideoTrimmer({ url, start, end, targetDur, onChange }) {
+  const vidRef = useRef(null);
+  const trackRef = useRef(null);
+  const [dur, setDur] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [cur, setCur] = useState(start);
+  const dragRef = useRef(null);
+
+  const onMeta = () => {
+    const d = vidRef.current?.duration || 0;
+    setDur(d);
+    if (!end || end > d) onChange(Math.min(start, Math.max(0, d - 0.3)), Math.min(d, (start || 0) + (targetDur || 3)));
+  };
+
+  useEffect(() => {
+    const v = vidRef.current; if (!v) return;
+    const onT = () => {
+      setCur(v.currentTime);
+      if (v.currentTime >= end - 0.05) { v.currentTime = start; }
+    };
+    v.addEventListener("timeupdate", onT);
+    return () => v.removeEventListener("timeupdate", onT);
+  }, [start, end]);
+
+  const toggle = () => {
+    const v = vidRef.current; if (!v) return;
+    if (playing) { v.pause(); setPlaying(false); }
+    else { v.currentTime = start; v.play(); setPlaying(true); }
+  };
+
+  const fracFromEvent = (e) => {
+    const r = trackRef.current.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  };
+  const onDown = (which) => (e) => { e.preventDefault(); dragRef.current = which; };
+  useEffect(() => {
+    const move = (e) => {
+      if (!dragRef.current || !dur) return;
+      const t = fracFromEvent(e) * dur;
+      if (dragRef.current === "start") onChange(Math.min(t, end - 0.3), end);
+      else onChange(start, Math.max(t, start + 0.3));
+    };
+    const up = () => { dragRef.current = null; };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  }, [dur, start, end]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pct = (t) => dur ? `${(t / dur) * 100}%` : "0%";
+  const selDur = Math.max(0, end - start);
+
+  return (
+    <div style={{ marginTop: 8, background: "#0A0A0A", border: "1px solid #1E1E1E", borderRadius: 10, padding: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <button type="button" onClick={toggle} style={{ width: 26, height: 26, borderRadius: 8, border: "1px solid #333", background: "#161616", color: "#00C4CC", fontSize: 12, cursor: "pointer" }}>{playing ? "⏸" : "▶"}</button>
+        <span style={{ fontSize: 10.5, color: "#00C4CC", fontFamily: "'JetBrains Mono', monospace" }}>
+          {fmtT(start)} → {fmtT(end)} · {selDur.toFixed(1)}s
+        </span>
+        <span style={{ fontSize: 9, color: selDur.toFixed(1) === (targetDur || 0).toFixed(1) ? "#5ABA5A" : "#8B7355", marginLeft: "auto" }}>
+          target scena: {targetDur}s
+        </span>
+      </div>
+      <video ref={vidRef} src={url} muted playsInline onLoadedMetadata={onMeta}
+        style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, background: "#000", display: "block", marginBottom: 8 }} />
+      <div ref={trackRef} style={{ position: "relative", height: 26, background: "#1A1A1A", borderRadius: 6, touchAction: "none" }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(start), width: `calc(${pct(end)} - ${pct(start)})`, background: "rgba(0,196,204,0.22)", borderLeft: "2px solid #00C4CC", borderRight: "2px solid #00C4CC" }} />
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(cur), width: 2, background: "#fff" }} />
+        <div onPointerDown={onDown("start")} style={{ position: "absolute", top: -3, bottom: -3, left: pct(start), width: 14, transform: "translateX(-50%)", cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 10, height: 22, borderRadius: 4, background: "#00C4CC" }} />
+        </div>
+        <div onPointerDown={onDown("end")} style={{ position: "absolute", top: -3, bottom: -3, left: pct(end), width: 14, transform: "translateX(-50%)", cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 10, height: 22, borderRadius: 4, background: "#00C4CC" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Picker video per riga: selettore fonte + 3 anteprime VIDEO in loop + "auto" +
 // campo URL. Le fonti senza API (Pinterest, Coverr, IG) danno solo il link.
@@ -1168,7 +1296,8 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
         caption: ml(s.text_overlay) || ml(s.description) || "",
         search_query: s.search_query || "",
         video_url: null, source: "pexels_video",
-        start: acc, end: acc + dur, dur,
+        sceneStart: acc, sceneEnd: acc + dur, sceneDur: dur,
+        trimStart: 0, trimEnd: dur, // secondi DENTRO il video sorgente
       };
       acc += dur;
       return row;
@@ -1188,10 +1317,16 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
     });
   }
 
-  const patch = (i, k, v) => setRows(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  const patch = (i, k, v) => setRows(p => p.map((r, idx) => {
+    if (idx !== i) return r;
+    const nr = { ...r, [k]: v };
+    if (k === "video_url") { nr.trimStart = 0; nr.trimEnd = r.sceneDur; } // reset trim al cambio video
+    return nr;
+  }));
+  const setTrim = (i, a, b) => setRows(p => p.map((r, idx) => idx === i ? { ...r, trimStart: a, trimEnd: b } : r));
 
   function setRowSource(i, s) {
-    setRows(p => p.map((r, idx) => idx === i ? { ...r, source: s, video_url: null } : r));
+    setRows(p => p.map((r, idx) => idx === i ? { ...r, source: s, video_url: null, trimStart: 0, trimEnd: r.sceneDur } : r));
     const row = rows[i];
     if (row && videoSourceHasApi(s) && (row.search_query || "").trim()) {
       fetchVideos(row.search_query.trim(), s).then(v => {
@@ -1209,12 +1344,39 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
 
   async function handleCreate() {
     setState("loading"); setErrMsg(""); setProgress("Preparazione…");
-    const baseBody = {
-      slides: rows.map(r => ({ caption: r.caption, search_query: r.search_query, video_url: r.video_url || undefined, video_source: r.source })),
-      carouselTemplateId: templateId,
-      media: "video",
-      format: "post",
-    };
+    const warnings = [];
+
+    // 1) ritaglia ogni clip nel browser (ffmpeg.wasm) e caricala su Canva
+    const prepared = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const base = { caption: r.caption, search_query: r.search_query, video_source: r.source };
+      if (!r.video_url) { prepared.push(base); continue; }
+      try {
+        setProgress(`Ritaglio video scena ${i + 1}/${rows.length}…`);
+        const blob = await trimVideoToBlob(r.video_url, r.trimStart || 0, r.trimEnd || r.sceneDur);
+        if (blob.size > 4.2 * 1024 * 1024) {
+          warnings.push(`Scena ${i + 1}: clip ritagliata troppo grande, uso il video intero.`);
+          prepared.push({ ...base, video_url: r.video_url });
+          continue;
+        }
+        setProgress(`Carico su Canva la scena ${i + 1}/${rows.length}…`);
+        const up = await fetch("/api/canva-upload", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-scena-${i + 1}` }),
+        }).then(x => x.json());
+        if (up.assetId) prepared.push({ ...base, asset_id: up.assetId });
+        else {
+          warnings.push(`Scena ${i + 1}: ${up.message || "upload fallito"} — uso il video intero.`);
+          prepared.push({ ...base, video_url: r.video_url });
+        }
+      } catch (e) {
+        warnings.push(`Scena ${i + 1}: ritaglio non applicato (${e.message || "errore"}) — uso il video intero.`);
+        prepared.push({ ...base, video_url: r.video_url });
+      }
+    }
+
+    const baseBody = { slides: prepared, carouselTemplateId: templateId, media: "video", format: "post" };
     const giveUpAt = Date.now() + 6 * 60_000; // i video sono lenti
     let resume;
     try {
@@ -1233,7 +1395,8 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
         }
         if (data.ok) {
           setUrl(data.url); setState("done");
-          if (data.imageWarning) setErrMsg("⚠ " + data.imageWarning);
+          const w = [...warnings, data.imageWarning].filter(Boolean);
+          if (w.length) setErrMsg("⚠ " + w.join(" · "));
           saveCanvaDesign({
             project_id: projectId || null, kind: "carousel", format: "carousel",
             title: `Carosello video ${rows.length} scene`, design_url: data.url, slides: rows.length,
@@ -1262,7 +1425,7 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
           <button onClick={() => onOpenChange(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
         <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 12 }}>
-          Una pagina per scena. Scegli il video, controlla i secondi da ritagliare per matchare lo storytelling.
+          Una pagina per scena. Scegli il video, poi trascina le maniglie sulla timeline per ritagliare il segmento (viene tagliato nel browser e caricato su Canva già così).
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -1284,8 +1447,8 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
             <div key={i} style={{ border: "1px solid #1E1E1E", borderRadius: 12, padding: 12, background: "#0E0E0E" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#8B7355", letterSpacing: "0.08em" }}>SCENA {i + 1}</span>
-                <span style={{ fontSize: 10, color: "#00C4CC", fontFamily: "'JetBrains Mono', monospace" }}>
-                  ✂ ritaglia a {row.dur}s · {fmtT(row.start)}–{fmtT(row.end)}
+                <span style={{ fontSize: 10, color: "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>
+                  storyboard {fmtT(row.sceneStart)}–{fmtT(row.sceneEnd)} · {row.sceneDur}s
                 </span>
               </div>
               <textarea value={row.caption} onChange={e => patch(i, "caption", e.target.value)} rows={2} placeholder="Testo overlay della scena…"
@@ -1294,6 +1457,10 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
               <RowVideoPicker query={row.search_query} videoUrl={row.video_url} source={row.source}
                 onPick={u => patch(i, "video_url", u)} onSourceChange={s => setRowSource(i, s)} />
+              {row.video_url && (
+                <VideoTrimmer url={row.video_url} start={row.trimStart} end={row.trimEnd} targetDur={row.sceneDur}
+                  onChange={(a, b) => setTrim(i, a, b)} />
+              )}
             </div>
           ))}
         </div>

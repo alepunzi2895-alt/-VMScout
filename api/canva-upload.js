@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import { getCanvaToken, bustedUrl } from "./canva-lib.js";
+import { getCanvaToken, bustedUrl, startBytesUpload, checkImageUpload } from "./canva-lib.js";
 
 const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 
@@ -24,8 +24,8 @@ function nameWithExt(name, url) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { url, name = "vmscout-media" } = req.body;
-  if (!url) return res.status(400).json({ error: "Manca url" });
+  const { url, b64, name = "vmscout-media" } = req.body || {};
+  if (!url && !b64) return res.status(400).json({ error: "Manca url o b64" });
 
   const db = getDb();
   let token;
@@ -36,54 +36,53 @@ export default async function handler(req, res) {
   }
 
   try {
-    const assetName = nameWithExt(name, url);
-    console.log("[canva-upload] url-import", { assetName, url: url.slice(0, 80) });
+    // ── A) Byte in base64 (es. clip video ritagliata nel browser) ──
+    if (b64) {
+      let bytes;
+      try {
+        bytes = Buffer.from(String(b64).replace(/^data:[^,]+,/, ""), "base64");
+      } catch { return res.status(400).json({ error: true, message: "b64 non valido" }); }
+      const start = await startBytesUpload({ token, bytes, name: String(name).endsWith(".mp4") ? name : name + ".mp4" });
+      if (start.assetId) return res.status(200).json({ ok: true, assetId: start.assetId });
+      if (start.error) return res.status(start.stop ? 401 : 500).json({ error: true, message: start.error });
+      // poll del job binario
+      const deadline = Date.now() + 45_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2500));
+        const c = await checkImageUpload({ token, jobId: start.jobId });
+        if (c.assetId) return res.status(200).json({ ok: true, assetId: c.assetId });
+        if (c.error) return res.status(500).json({ error: true, message: c.error });
+      }
+      return res.status(202).json({ pending: true, jobId: start.jobId });
+    }
 
-    // ── 1. Create upload job ───────────────────────────────────────
+    // ── B) Import da URL (comportamento storico) ──────────────────
+    const assetName = nameWithExt(name, url);
     let { r, d } = await createUploadJob(token, assetName, url);
 
-    // Canva deduplica per URL: se la foto era già stata importata risponde
-    // 400 "already exists" senza darci l'asset_id → riprova con URL univoco.
     if (!r.ok && /already exist|duplicate/.test(`${d?.code || ""} ${d?.message || ""}`.toLowerCase())) {
       const busted = bustedUrl(url);
       if (busted) ({ r, d } = await createUploadJob(token, assetName, busted));
     }
-
     if (!r.ok) {
-      console.error("[canva-upload] create error", r.status, JSON.stringify(d).slice(0, 300));
-      return res.status(r.status).json({
-        error:   true,
-        message: d.message || d.code || JSON.stringify(d).slice(0, 300),
-      });
+      return res.status(r.status).json({ error: true, message: d.message || d.code || JSON.stringify(d).slice(0, 300) });
     }
 
     const jobId = d.job?.id;
-    if (!jobId) {
-      return res.status(500).json({ error: true, message: "No jobId returned by Canva" });
-    }
+    if (!jobId) return res.status(500).json({ error: true, message: "No jobId returned by Canva" });
 
-    // ── 2. Poll until success / failed (max ~20s) ─────────────────
     const deadline = Date.now() + 20_000;
     let job = d.job;
     while (job.status === "in_progress" && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 1500));
-      const poll = await fetch(`${CANVA_API_BASE}/url-asset-uploads/${jobId}`, {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
+      const poll = await fetch(`${CANVA_API_BASE}/url-asset-uploads/${jobId}`, { headers: { "Authorization": `Bearer ${token}` } });
       const pd = await poll.json();
       job = pd.job ?? job;
-      console.log("[canva-upload] poll", job.status);
     }
-
     if (job.status === "failed") {
-      const msg = job.error?.message || job.error?.code || "Import failed";
-      console.error("[canva-upload] job failed", msg);
-      return res.status(500).json({ error: true, message: msg });
+      return res.status(500).json({ error: true, message: job.error?.message || job.error?.code || "Import failed" });
     }
-
     const assetId = job.asset?.id;
-
-    // ── 3. Move to Uploads folder so it appears in Canva's Upload tab ─
     if (assetId) {
       try {
         await fetch(`${CANVA_API_BASE}/folders/move`, {
@@ -91,12 +90,8 @@ export default async function handler(req, res) {
           headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ to_folder_id: "uploads", item_id: assetId }),
         });
-        console.log("[canva-upload] moved to uploads folder", assetId);
-      } catch (moveErr) {
-        console.warn("[canva-upload] move failed (non-fatal)", moveErr.message);
-      }
+      } catch { /* non-fatal */ }
     }
-
     return res.status(200).json({ ok: true, jobId, status: job.status, assetId });
 
   } catch (err) {

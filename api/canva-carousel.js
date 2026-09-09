@@ -227,12 +227,16 @@ export default async function handler(req, res) {
     const vertical = wantVideoCarousel || format === "story" || format === "reel";
 
     const mediaUrls = await Promise.all(usedSlides.map(async s => {
+      if (s.asset_id) return null; // già caricato dal client
       if (wantVideoCarousel) return resolveVideoUrl(s, vertical);
       return s.image_url || (s.search_query ? await fetchPexelsUrl(s.search_query, vertical) : null);
     }));
 
     let slots = await Promise.all(mediaUrls.map(async (url, i) => {
-      if (!url) return { error: null, kind: wantVideoCarousel ? "video" : "image" };
+      const kind = wantVideoCarousel ? "video" : "image";
+      // asset già caricato dal client (es. clip video ritagliata) → usalo diretto
+      if (usedSlides[i]?.asset_id) return { assetId: usedSlides[i].asset_id, kind };
+      if (!url) return { error: null, kind };
       if (wantVideoCarousel) {
         const r = await uploadVideoUrlAsset({ token, url, name: `vmscout-slide-${i + 1}.mp4`, deadline: Math.min(deadline, Date.now() + 12_000) });
         const sl = toSlot(r, "video");
