@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { getDb } from "./db.js";
 import { getCanvaToken, bustedUrl, startBytesUpload, checkImageUpload } from "./canva-lib.js";
 
@@ -24,8 +25,9 @@ function nameWithExt(name, url) {
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
 export default async function handler(req, res) {
-  // ── GET ?src=<url> → proxy dei byte di un video (Pexels blocca l'hotlink
-  //    dal browser; qui aggiungiamo header "da browser" e li restituiamo). ──
+  // ── GET ?src=<url> → proxy STREAMING di un video (Pexels blocca l'hotlink
+  //    dal browser). Inoltra il Range e fa da passthrough dello stream, così
+  //    <video> può fare seeking senza bufferare tutto. ──
   if (req.method === "GET") {
     const src = req.query.src;
     if (!src || !/^https?:\/\//i.test(src)) return res.status(400).json({ error: "src mancante o non valido" });
@@ -34,12 +36,19 @@ export default async function handler(req, res) {
       const ref = host.includes("pexels") ? "https://www.pexels.com/"
         : host.includes("pixabay") ? "https://pixabay.com/"
         : undefined;
-      const up = await fetch(src, { headers: { "User-Agent": BROWSER_UA, "Accept": "video/mp4,video/*,*/*", ...(ref ? { Referer: ref } : {}) } });
-      if (!up.ok) return res.status(502).json({ error: `sorgente ${up.status}` });
-      const buf = Buffer.from(await up.arrayBuffer());
-      res.setHeader("Content-Type", up.headers.get("content-type") || "video/mp4");
+      const h = { "User-Agent": BROWSER_UA, "Accept": "video/mp4,video/*,*/*;q=0.8", ...(ref ? { Referer: ref } : {}) };
+      if (req.headers.range) h.Range = req.headers.range;
+      const up = await fetch(src, { headers: h });
+      if (!up.ok && up.status !== 206) return res.status(502).json({ error: `sorgente ${up.status}` });
+      res.status(up.status);
+      for (const k of ["content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
+        const v = up.headers.get(k);
+        if (v) res.setHeader(k, v);
+      }
       res.setHeader("Cache-Control", "public, max-age=3600");
-      return res.status(200).send(buf);
+      if (!up.body) return res.end(Buffer.from(await up.arrayBuffer()));
+      Readable.fromWeb(up.body).pipe(res);
+      return;
     } catch (e) {
       return res.status(502).json({ error: e.message });
     }

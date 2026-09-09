@@ -139,9 +139,11 @@ const VIDEO_SOURCES = {
     apiUrl: (q) => `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=3&size=large`,
     headers: () => ({ Authorization: API_KEYS.pexels }),
     parse: (d) => (d.videos || []).map(v => {
-      const files = (v.video_files || []).filter(f => f.file_type === "video/mp4");
-      const hd = files.find(f => f.quality === "hd") || files.find(f => (f.width || 0) >= 1280) || files[0];
-      return { id: v.id, videoUrl: hd?.link, image: v.image, author: v.user?.name, link: v.url };
+      const files = (v.video_files || []).filter(f => f.file_type === "video/mp4").sort((a, b) => (a.width || 0) - (b.width || 0));
+      // rendition ~540-960px: nitida a sufficienza per uno sfondo carosello ma
+      // leggera per anteprima + ritaglio nel browser (ffmpeg.wasm / upload b64).
+      const pick = files.find(f => (f.width || 0) >= 540 && (f.width || 0) <= 1000) || files.find(f => (f.width || 0) >= 540) || files[0];
+      return { id: v.id, videoUrl: pick?.link, image: v.image, author: v.user?.name, link: v.url };
     }),
   },
   coverr: {
@@ -1078,6 +1080,9 @@ const fmtT = (sec) => {
 const VIDEO_SOURCE_KEYS = Object.keys(VIDEO_SOURCES);
 const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split("_")[0]]);
 
+// I video di Pexels ecc. non si possono hotlinkare dal browser → passa dal proxy.
+const proxiedVideo = (url) => url && /^https?:\/\//i.test(url) ? `/api/canva-upload?src=${encodeURIComponent(url)}` : url;
+
 // ─── ffmpeg.wasm (caricato da CDN solo quando serve il ritaglio) ───
 let _ffmpegPromise = null;
 function loadFFmpeg() {
@@ -1196,7 +1201,7 @@ function VideoTrimmer({ url, start, end, targetDur, onChange }) {
           target scena: {targetDur}s
         </span>
       </div>
-      <video ref={vidRef} src={url} muted playsInline onLoadedMetadata={onMeta}
+      <video ref={vidRef} src={proxiedVideo(url)} muted playsInline preload="auto" onLoadedMetadata={onMeta}
         style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, background: "#000", display: "block", marginBottom: 8 }} />
       <div ref={trackRef} style={{ position: "relative", height: 26, background: "#1A1A1A", borderRadius: 6, touchAction: "none" }}>
         <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(start), width: `calc(${pct(end)} - ${pct(start)})`, background: "rgba(0,196,204,0.22)", borderLeft: "2px solid #00C4CC", borderRight: "2px solid #00C4CC" }} />
@@ -1243,11 +1248,6 @@ function RowVideoPicker({ query, videoUrl, source, onPick, onSourceChange }) {
         ))}
       </div>
 
-      {videoUrl && (
-        <video src={videoUrl} autoPlay loop muted playsInline
-          style={{ width: "100%", maxHeight: 150, objectFit: "cover", borderRadius: 10, marginBottom: 6, background: "#000" }} />
-      )}
-
       {hasApi ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
           <button type="button" onClick={() => onPick(null)}
@@ -1261,8 +1261,8 @@ function RowVideoPicker({ query, videoUrl, source, onPick, onSourceChange }) {
                 return (
                   <button key={v.id || i} type="button" onClick={() => onPick(v.videoUrl)}
                     style={{ aspectRatio: "1", borderRadius: 8, overflow: "hidden", padding: 0, border: `2px solid ${on ? "#00C4CC" : "#262626"}`, cursor: "pointer", background: "#000", position: "relative" }}>
-                    <video src={v.videoUrl} autoPlay loop muted playsInline poster={v.image}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.8 }} />
+                    <img src={v.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: on ? 1 : 0.75 }} loading="lazy" />
+                    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff", textShadow: "0 1px 3px #000" }}>▶</span>
                     <a href={v.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                       style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, background: "rgba(0,0,0,0.55)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 9 }}>↗</a>
                   </button>
@@ -1364,8 +1364,8 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
       try {
         setProgress(`Ritaglio video scena ${i + 1}/${rows.length}…`);
         const blob = await trimVideoToBlob(r.video_url, r.trimStart || 0, r.trimEnd || r.sceneDur);
-        if (blob.size > 4.2 * 1024 * 1024) {
-          warnings.push(`Scena ${i + 1}: clip ritagliata troppo grande, uso il video intero.`);
+        if (blob.size > 3 * 1024 * 1024) {
+          warnings.push(`Scena ${i + 1}: clip ritagliata troppo grande (${(blob.size / 1048576).toFixed(1)}MB), uso il video intero.`);
           prepared.push({ ...base, video_url: r.video_url });
           continue;
         }
@@ -1588,7 +1588,7 @@ function VideoQueryCard({ query, sourceKey }) {
           <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 8, paddingBottom: 2 }}>
             {videos.slice(0, 3).map(v => (
               <div key={v.id} style={{ width: 110, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
-                <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+                <video src={proxiedVideo(v.videoUrl)} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
                 <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 10 }}>↗</a>
               </div>
             ))}
@@ -2049,7 +2049,7 @@ function SceneVideoPlayer({ query, sourceKey }) {
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {videos.slice(0,3).map(v => (
             <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
-              <video src={v.videoUrl} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
+              <video src={proxiedVideo(v.videoUrl)} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace" }}>{v.author || "Creator"}</div>
               <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 12 }}>↗</a>
             </div>
