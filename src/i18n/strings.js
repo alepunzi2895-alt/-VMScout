@@ -82,6 +82,33 @@ const it = {
   "home.logo.replace": "Sostituisci",
   "home.logo.remove": "Rimuovi",
   "home.logo.hint": "PNG/JPG · ridimensionata a 320px",
+
+  // ── Dashboard ───────────────────────────────────────────
+  "dash.title": "Dashboard",
+  "dash.memory": "Memoria di progetto",
+  "dash.memoryOf": "Memoria di progetto — {name}",
+  "dash.sub": "Si arricchisce da sola a ogni studio in Visual Scout e a ogni analisi in Analytics: direttive di progetto, punti di forza, cose da migliorare, consigli e idee per i prossimi post.",
+  "dash.pickProject": "Seleziona o crea un progetto in Home per vedere la sua dashboard.",
+  "dash.loadError": "Errore caricamento dashboard",
+  "dash.noData": "Ancora nessun dato accumulato",
+  "dash.noDataSub": "Fai il primo studio in Visual Scout o la prima analisi in Analytics: memoria e direttive di questo progetto si popolano da sole.",
+  "dash.directives": "Direttive di progetto",
+  "dash.directivesSub": "Il brief operativo di questo progetto. VMScout lo legge prima di ogni studio e analisi, e lo riscrive da solo alla fine di ognuno tenendo ciò che funziona.",
+  "dash.directivesEmpty": "Ancora vuote. Si creano da sole dopo il primo studio in Visual Scout o la prima analisi in Analytics — oppure scrivile a mano con \"{edit}\".",
+  "dash.updated": "agg. {date}",
+  "dash.strengths": "Punti di Forza",
+  "dash.improve": "Da Migliorare",
+  "dash.pillars": "Pilastri di Contenuto",
+  "dash.tips": "Consigli Accumulati",
+  "dash.noTips": "Nessun consiglio ancora",
+  "dash.adTarget": "Sponsorizzate — Target Consigliato",
+  "dash.age": "Età", "dash.gender": "Genere", "dash.areas": "Aree",
+  "dash.nextTest": "Prossimo test:", "dash.budget": "Budget:",
+  "dash.calendar": "Calendario Post — Prossime Idee",
+  "dash.filter.todo": "Da usare", "dash.filter.sent": "Già inviate", "dash.filter.all": "Tutte",
+  "dash.noIdeas": "Nessuna idea in questa categoria.",
+  "dash.genWithScout": "🎯 Genera con Visual Scout",
+  "dash.status.suggested": "Suggerito", "dash.status.sent": "Inviato a Visual Scout",
 };
 
 // ── traduzioni ────────────────────────────────────────────
@@ -127,6 +154,23 @@ const en = {
   "home.logo.replace": "Replace",
   "home.logo.remove": "Remove",
   "home.logo.hint": "PNG/JPG · resized to 320px",
+
+  "dash.title": "Dashboard", "dash.memory": "Project memory", "dash.memoryOf": "Project memory — {name}",
+  "dash.sub": "Grows on its own with every Visual Scout study and every Analytics review: project directives, strengths, things to improve, tips and ideas for upcoming posts.",
+  "dash.pickProject": "Pick or create a project in Home to see its dashboard.",
+  "dash.loadError": "Dashboard load error", "dash.noData": "No data accumulated yet",
+  "dash.noDataSub": "Run your first Visual Scout study or your first Analytics review: this project's memory and directives fill in automatically.",
+  "dash.directives": "Project directives",
+  "dash.directivesSub": "This project's operating brief. VMScout reads it before every study and review, and rewrites it itself at the end of each, keeping what works.",
+  "dash.directivesEmpty": "Still empty. They build themselves after the first Visual Scout study or the first Analytics review — or write them by hand with \"{edit}\".",
+  "dash.updated": "upd. {date}", "dash.strengths": "Strengths", "dash.improve": "To improve",
+  "dash.pillars": "Content pillars", "dash.tips": "Accumulated tips", "dash.noTips": "No tips yet",
+  "dash.adTarget": "Boosted posts — recommended target",
+  "dash.age": "Age", "dash.gender": "Gender", "dash.areas": "Areas", "dash.nextTest": "Next test:", "dash.budget": "Budget:",
+  "dash.calendar": "Post calendar — upcoming ideas",
+  "dash.filter.todo": "To use", "dash.filter.sent": "Already sent", "dash.filter.all": "All",
+  "dash.noIdeas": "No ideas in this category.", "dash.genWithScout": "🎯 Generate with Visual Scout",
+  "dash.status.suggested": "Suggested", "dash.status.sent": "Sent to Visual Scout",
 };
 
 const es = {
@@ -171,6 +215,23 @@ const es = {
   "home.logo.replace": "Reemplazar",
   "home.logo.remove": "Quitar",
   "home.logo.hint": "PNG/JPG · redimensionada a 320px",
+
+  "dash.title": "Panel", "dash.memory": "Memoria del proyecto", "dash.memoryOf": "Memoria del proyecto — {name}",
+  "dash.sub": "Crece sola con cada estudio en Visual Scout y cada análisis en Analytics: directrices del proyecto, puntos fuertes, cosas a mejorar, consejos e ideas para próximas publicaciones.",
+  "dash.pickProject": "Elige o crea un proyecto en Inicio para ver su panel.",
+  "dash.loadError": "Error al cargar el panel", "dash.noData": "Aún no hay datos acumulados",
+  "dash.noDataSub": "Haz tu primer estudio en Visual Scout o tu primer análisis en Analytics: la memoria y las directrices de este proyecto se rellenan solas.",
+  "dash.directives": "Directrices del proyecto",
+  "dash.directivesSub": "El brief operativo de este proyecto. VMScout lo lee antes de cada estudio y análisis, y lo reescribe al final de cada uno conservando lo que funciona.",
+  "dash.directivesEmpty": "Aún vacías. Se crean solas tras el primer estudio en Visual Scout o el primer análisis en Analytics — o escríbelas a mano con \"{edit}\".",
+  "dash.updated": "act. {date}", "dash.strengths": "Puntos fuertes", "dash.improve": "A mejorar",
+  "dash.pillars": "Pilares de contenido", "dash.tips": "Consejos acumulados", "dash.noTips": "Aún no hay consejos",
+  "dash.adTarget": "Publicaciones promocionadas — público recomendado",
+  "dash.age": "Edad", "dash.gender": "Género", "dash.areas": "Zonas", "dash.nextTest": "Próxima prueba:", "dash.budget": "Presupuesto:",
+  "dash.calendar": "Calendario de publicaciones — próximas ideas",
+  "dash.filter.todo": "Por usar", "dash.filter.sent": "Ya enviadas", "dash.filter.all": "Todas",
+  "dash.noIdeas": "No hay ideas en esta categoría.", "dash.genWithScout": "🎯 Generar con Visual Scout",
+  "dash.status.suggested": "Sugerido", "dash.status.sent": "Enviado a Visual Scout",
 };
 
 const fr = {
@@ -215,6 +276,23 @@ const fr = {
   "home.logo.replace": "Remplacer",
   "home.logo.remove": "Retirer",
   "home.logo.hint": "PNG/JPG · redimensionnée à 320px",
+
+  "dash.title": "Tableau de bord", "dash.memory": "Mémoire du projet", "dash.memoryOf": "Mémoire du projet — {name}",
+  "dash.sub": "Se nourrit d'elle-même à chaque étude Visual Scout et chaque analyse Analytics : directives du projet, points forts, points à améliorer, conseils et idées pour les prochains posts.",
+  "dash.pickProject": "Choisissez ou créez un projet dans Accueil pour voir son tableau de bord.",
+  "dash.loadError": "Erreur de chargement du tableau de bord", "dash.noData": "Aucune donnée accumulée pour l'instant",
+  "dash.noDataSub": "Lancez votre première étude Visual Scout ou votre première analyse Analytics : la mémoire et les directives de ce projet se remplissent toutes seules.",
+  "dash.directives": "Directives du projet",
+  "dash.directivesSub": "Le brief opérationnel de ce projet. VMScout le lit avant chaque étude et analyse, et le réécrit lui-même à la fin de chacune en gardant ce qui marche.",
+  "dash.directivesEmpty": "Encore vides. Elles se créent seules après la première étude Visual Scout ou la première analyse Analytics — ou écrivez-les à la main avec « {edit} ».",
+  "dash.updated": "màj {date}", "dash.strengths": "Points forts", "dash.improve": "À améliorer",
+  "dash.pillars": "Piliers de contenu", "dash.tips": "Conseils accumulés", "dash.noTips": "Aucun conseil pour l'instant",
+  "dash.adTarget": "Posts sponsorisés — cible recommandée",
+  "dash.age": "Âge", "dash.gender": "Genre", "dash.areas": "Zones", "dash.nextTest": "Prochain test :", "dash.budget": "Budget :",
+  "dash.calendar": "Calendrier de posts — prochaines idées",
+  "dash.filter.todo": "À utiliser", "dash.filter.sent": "Déjà envoyées", "dash.filter.all": "Toutes",
+  "dash.noIdeas": "Aucune idée dans cette catégorie.", "dash.genWithScout": "🎯 Générer avec Visual Scout",
+  "dash.status.suggested": "Suggéré", "dash.status.sent": "Envoyé à Visual Scout",
 };
 
 const de = {
@@ -259,6 +337,23 @@ const de = {
   "home.logo.replace": "Ersetzen",
   "home.logo.remove": "Entfernen",
   "home.logo.hint": "PNG/JPG · auf 320px verkleinert",
+
+  "dash.title": "Dashboard", "dash.memory": "Projektgedächtnis", "dash.memoryOf": "Projektgedächtnis — {name}",
+  "dash.sub": "Wächst von selbst mit jeder Visual-Scout-Analyse und jeder Analytics-Auswertung: Projektvorgaben, Stärken, Verbesserungspunkte, Tipps und Ideen für kommende Posts.",
+  "dash.pickProject": "Wähle oder erstelle ein Projekt auf Start, um sein Dashboard zu sehen.",
+  "dash.loadError": "Fehler beim Laden des Dashboards", "dash.noData": "Noch keine Daten gesammelt",
+  "dash.noDataSub": "Führe deine erste Visual-Scout-Analyse oder deine erste Analytics-Auswertung durch: Gedächtnis und Vorgaben dieses Projekts füllen sich automatisch.",
+  "dash.directives": "Projektvorgaben",
+  "dash.directivesSub": "Das operative Briefing dieses Projekts. VMScout liest es vor jeder Analyse und Auswertung und schreibt es am Ende jeweils selbst um — und behält, was funktioniert.",
+  "dash.directivesEmpty": "Noch leer. Sie entstehen von selbst nach der ersten Visual-Scout-Analyse oder der ersten Analytics-Auswertung — oder schreibe sie von Hand mit \"{edit}\".",
+  "dash.updated": "akt. {date}", "dash.strengths": "Stärken", "dash.improve": "Zu verbessern",
+  "dash.pillars": "Content-Säulen", "dash.tips": "Gesammelte Tipps", "dash.noTips": "Noch keine Tipps",
+  "dash.adTarget": "Beworbene Posts — empfohlene Zielgruppe",
+  "dash.age": "Alter", "dash.gender": "Geschlecht", "dash.areas": "Regionen", "dash.nextTest": "Nächster Test:", "dash.budget": "Budget:",
+  "dash.calendar": "Post-Kalender — nächste Ideen",
+  "dash.filter.todo": "Zu verwenden", "dash.filter.sent": "Bereits gesendet", "dash.filter.all": "Alle",
+  "dash.noIdeas": "Keine Ideen in dieser Kategorie.", "dash.genWithScout": "🎯 Mit Visual Scout generieren",
+  "dash.status.suggested": "Vorgeschlagen", "dash.status.sent": "An Visual Scout gesendet",
 };
 
 export const STRINGS = { it, en, es, fr, de };
