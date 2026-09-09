@@ -327,7 +327,7 @@ function ConnectPanel({ onConnect }) {
       <div style={{ ...card, marginBottom: 24 }}>
         <div style={{ ...label, marginBottom: 16 }}>{t("an.ig.stepsTitle")}</div>
         {[
-          [t("an.ig.s1"), "developers.facebook.com → la tua app → + Instagram"],
+          [t("an.ig.s1"), "developers.facebook.com → App → + Instagram"],
           [t("an.ig.s2"), null],
           [t("an.ig.s3"), "instagram_business_basic  instagram_business_manage_insights"],
           [t("an.ig.s4"), null],
