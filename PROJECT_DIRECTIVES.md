@@ -157,6 +157,10 @@ Meta espone **due famiglie di access token non intercambiabili tra host**:
 
 **Panoramica account**: `fetchAccountOverview()` legge `followers_count,media_count,follows_count` + (best-effort, non blocca il flusso post) `reach`/`profile_views` a 28gg (`period=days_28&metric_type=total_value`) e `follower_demographics` con `breakdown=country|age|gender` (richiede >100 follower + `instagram_business_manage_insights`). Reso da `AccountOverviewPanel`. Salvato in `localStorage` (`ig_account`).
 
+**Reach demografico (2026-09-09)**: Instagram **NON** espone reach per età/genere/paese sul singolo post — l'unico `breakdown` per media è `follow_type` (follower / non-follower). Perciò:
+- **Per-post**: `fetchPostInsights()` fa una call extra `reach&breakdown=follow_type` → `m.reach_follower` / `m.reach_non_follower`. `AllPostsRow` è espandibile (chevron) → `ReachSplitBar` mostra la barra follower/non-follower + "% scoperta".
+- **Livello account**: `ReachedAudiencePanel` (nuovo, sotto `AccountOverviewPanel`) fa 6 call `reached_audience_demographics` + `engaged_audience_demographics` con `breakdown=age|gender|country` e `timeframe=last_14/30/90_days` (selettore periodo). Degrada silenziosamente a "empty" se il token non ha lo scope o non c'è abbastanza reach. i18n `an.aud.*`.
+
 **Lista post**: `AllPostsList` mostra **tutti** i post con ordinamento (data ↓ default, data ↑, engagement, reach, interazioni) e le metriche estese per post. La Top 5 per engagement resta separata.
 
 **Analisi visiva**: `analyze()` allega come immagini (via `images` in `api/chat.js`) le foto (`thumbnail_url`/`media_url`) dei post con più engagement, così Claude analizza davvero stile visivo/storytelling, non solo i numeri. `postsSummary` include ora anche `condivisioni`, `interazioni_tot`, `visite_profilo`, `nuovi_follow`; il system prompt riceve `accountCtx` (follower, reach 28gg, top paesi/età). L'output è JSON strutturato con `patterns`, `timing`, `content_pillars`, `visual_storytelling`, `corrections`, `next_posts[]` (ognuna con `hook_type`, `hook`, `visual_scout_brief` pronto per l'handoff). Vedi `AnalysisPanel` in `InstagramAnalytics.jsx` per il renderer.
