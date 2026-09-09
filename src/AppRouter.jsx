@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { BrandProvider, useBrand } from "./BrandContext.jsx";
 import { AuthProvider, useAuth, LANGS } from "./AuthContext.jsx";
+import { LangProvider, useT } from "./i18n/index.jsx";
 import LoginScreen from "./LoginScreen.jsx";
 import Home from "./Home.jsx";
 import VisualMarketingScout from "./App.jsx";
@@ -14,15 +15,16 @@ import Flag from "./Flag.jsx";
 const GOLD = "#C9A96E";
 
 const TABS = [
-  { id: "home", label: "Home", icon: "◈" },
-  { id: "vmscout", label: "Visual Scout", icon: "🎯" },
-  { id: "instagram", label: "Analytics", icon: "📊" },
-  { id: "canva", label: "Canva Studio", icon: <CanvaMark size={14} /> },
-  { id: "dashboard", label: "Dashboard", icon: "🧭" },
+  { id: "home", key: "nav.home", icon: "◈" },
+  { id: "vmscout", key: "nav.scout", icon: "🎯" },
+  { id: "instagram", key: "nav.analytics", icon: "📊" },
+  { id: "canva", key: "nav.canva", icon: <CanvaMark size={14} /> },
+  { id: "dashboard", key: "nav.dashboard", icon: "🧭" },
 ];
 
 function Nav({ activeApp, setActiveApp }) {
   const { brands, activeBrand, activeBrandId, setActiveBrandId } = useBrand();
+  const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -73,7 +75,7 @@ function Nav({ activeApp, setActiveApp }) {
               whiteSpace: "nowrap", flexShrink: 0,
             }}>
             <span>{tab.icon}</span>
-            <span>{tab.label}</span>
+            <span>{t(tab.key)}</span>
           </button>
         ))}
       </div>
@@ -133,6 +135,7 @@ function Nav({ activeApp, setActiveApp }) {
 
 function UserMenu() {
   const { user, lang, setLang, logout } = useAuth();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -162,7 +165,7 @@ function UserMenu() {
           </div>
           <button onClick={() => { setOpen(false); logout(); }}
             style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "none", background: "transparent", color: "#C4704F", cursor: "pointer", textAlign: "left", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif" }}>
-            ↩ Esci
+            ↩ {t("nav.logout")}
           </button>
         </div>
       )}
@@ -218,7 +221,9 @@ function Gate() {
 export default function AppRouter() {
   return (
     <AuthProvider>
-      <Gate />
+      <LangProvider>
+        <Gate />
+      </LangProvider>
     </AuthProvider>
   );
 }

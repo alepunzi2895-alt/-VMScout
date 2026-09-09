@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useBrand } from "./BrandContext.jsx";
+import { useT } from "./i18n/index.jsx";
 import CanvaMark from "./CanvaMark.jsx";
 import BrandAvatar, { fileToResizedDataURL } from "./BrandAvatar.jsx";
 
@@ -19,6 +20,7 @@ const TONES = [
 
 export default function Home({ onNavigate }) {
   const { brands, activeBrand, activeBrandId, setActiveBrandId, createBrand, updateBrand, deleteBrand } = useBrand();
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [newName, setNewName] = useState("");
@@ -34,7 +36,7 @@ export default function Home({ onNavigate }) {
   function removeBrand(brand) {
     const target = brand && typeof brand.id === "string" ? brand : activeBrand;
     if (brands.length <= 1) return;
-    if (window.confirm(`Eliminare il progetto "${target.name}"? L'operazione non è reversibile.`)) {
+    if (window.confirm(t("home.deleteConfirm", { name: target.name }))) {
       deleteBrand(target.id);
       if (editing && target.id === activeBrandId) cancelEdit();
     }
@@ -59,18 +61,9 @@ export default function Home({ onNavigate }) {
   }
 
   const tools = [
-    {
-      id: "vmscout", icon: "🎯", title: "Visual Scout",
-      desc: "Strategia visiva AI, caption multilingua, storyboard video e photo scouting.",
-    },
-    {
-      id: "instagram", icon: "📊", title: "Analytics",
-      desc: "Analisi engagement reale, timing ottimale e suggerimenti strategici via AI.",
-    },
-    {
-      id: "canva", icon: <CanvaMark size={24} />, title: "Canva Studio",
-      desc: "Configura template Canva e crea design dal tuo brief in un click.",
-    },
+    { id: "vmscout", icon: "🎯", title: t("nav.scout"), desc: t("home.tool.scout.desc") },
+    { id: "instagram", icon: "📊", title: t("nav.analytics"), desc: t("home.tool.analytics.desc") },
+    { id: "canva", icon: <CanvaMark size={24} />, title: t("nav.canva"), desc: t("home.tool.canva.desc") },
   ];
 
   return (
@@ -88,11 +81,11 @@ export default function Home({ onNavigate }) {
           ◈ VMScout
         </div>
         <h1 style={{ fontSize: 44, fontWeight: 300, margin: "0 0 14px", fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "-0.01em", lineHeight: 1.1 }}>
-          Strategia visiva.<br />
-          <em style={{ fontStyle: "italic", color: GOLD }}>Zero compromessi.</em>
+          {t("home.hero.title1")}<br />
+          <em style={{ fontStyle: "italic", color: GOLD }}>{t("home.hero.title2")}</em>
         </h1>
         <p style={{ fontSize: 15, color: "#6A6258", maxWidth: 440, margin: "0 auto", lineHeight: 1.75 }}>
-          AI-powered marketing per qualsiasi brand. Scegli o crea un progetto e inizia.
+          {t("home.hero.sub")}
         </p>
       </div>
 
@@ -102,11 +95,11 @@ export default function Home({ onNavigate }) {
         <div style={{ marginBottom: 36 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <span style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
-              Progetti
+              {t("home.projects")}
             </span>
             <button onClick={() => setShowNew(v => !v)}
               style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `1px solid ${GOLD}35`, background: "transparent", color: GOLD, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, transition: "all 0.2s" }}>
-              + Nuovo
+              {t("home.newProject")}
             </button>
           </div>
 
@@ -118,12 +111,12 @@ export default function Home({ onNavigate }) {
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") { setShowNew(false); setNewName(""); } }}
-                placeholder="Nome brand o progetto..."
+                placeholder={t("home.newProjectName")}
                 style={{ flex: 1, background: "#1A1A1A", border: "1px solid #2A2A2A", borderRadius: 12, padding: "8px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif" }}
               />
               <button onClick={handleCreate}
                 style={{ padding: "8px 16px", borderRadius: 12, border: "none", background: GOLD, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-                Crea
+                {t("common.create")}
               </button>
               <button onClick={() => { setShowNew(false); setNewName(""); }}
                 style={{ padding: "8px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 12, cursor: "pointer" }}>
@@ -161,14 +154,14 @@ export default function Home({ onNavigate }) {
 
                   <div className="home-brand-actions" style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
                     <button
-                      title="Modifica progetto"
+                      title={t("common.edit")}
                       onClick={e => { e.stopPropagation(); startEdit(brand); }}
                       style={{ width: 22, height: 22, borderRadius: 9, border: "1px solid #262626", background: "#0C0C0C", color: "#888", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
                       ✎
                     </button>
                     {brands.length > 1 && (
                       <button
-                        title="Elimina progetto"
+                        title={t("common.delete")}
                         onClick={e => { e.stopPropagation(); removeBrand(brand); }}
                         style={{ width: 22, height: 22, borderRadius: 9, border: "1px solid #3A2020", background: "#0C0C0C", color: "#B06060", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>
                         🗑
@@ -187,7 +180,7 @@ export default function Home({ onNavigate }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: editing ? 20 : 16 }}>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#444", marginBottom: 5, fontFamily: "'Space Grotesk', sans-serif" }}>
-                  Progetto attivo
+                  {t("home.activeProject")}
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 600, color: "#E8E0D8" }}>{activeBrand.name}</div>
               </div>
@@ -195,12 +188,12 @@ export default function Home({ onNavigate }) {
                 {editing && (
                   <button onClick={cancelEdit}
                     style={{ padding: "6px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#555", fontSize: 11, cursor: "pointer" }}>
-                    Annulla
+                    {t("common.cancel")}
                   </button>
                 )}
                 <button onClick={editing ? saveEdit : startEdit}
                   style={{ padding: "6px 14px", borderRadius: 12, border: `1px solid ${editing ? GOLD + "80" : "#2A2A2A"}`, background: editing ? GOLD : "transparent", color: editing ? "#000" : "#777", fontSize: 11, cursor: "pointer", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif", transition: "all 0.2s" }}>
-                  {editing ? "✓ Salva" : "Modifica"}
+                  {editing ? "✓ " + t("common.save") : t("common.edit")}
                 </button>
               </div>
             </div>
@@ -215,7 +208,7 @@ export default function Home({ onNavigate }) {
               <button
                 onClick={() => removeBrand()}
                 style={{ marginTop: 18, fontSize: 10, color: "#7A4A4A", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 3 }}>
-                Elimina progetto
+                {t("home.deleteProject")}
               </button>
             )}
           </div>
@@ -224,7 +217,7 @@ export default function Home({ onNavigate }) {
         {/* ── Quick access tools ── */}
         <div>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#444", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, marginBottom: 14 }}>
-            Strumenti
+            {t("home.tools")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {tools.map(t => (
@@ -248,19 +241,20 @@ export default function Home({ onNavigate }) {
 }
 
 function BrandSummary({ brand }) {
+  const t = useT();
   if (!brand) return null;
   const fields = [
-    { label: "Settore", value: brand.sector },
-    { label: "Tono", value: brand.tone },
+    { label: t("home.form.sector"), value: brand.sector },
+    { label: t("home.form.tone"), value: brand.tone },
     { label: "Instagram", value: brand.instagramHandle },
-    { label: "Descrizione", value: brand.description },
-    { label: "Hashtag", value: brand.hashtags },
+    { label: t("home.form.description"), value: brand.description },
+    { label: t("home.form.hashtags"), value: brand.hashtags },
   ].filter(f => f.value);
 
   if (!fields.length) {
     return (
       <p style={{ fontSize: 12, color: "#333", fontStyle: "italic", margin: 0, lineHeight: 1.65 }}>
-        Nessun profilo configurato. Clicca <strong style={{ color: "#555" }}>Modifica</strong> per aggiungere info sul brand — l'AI le userà in ogni generazione per output più precisi.
+        {t("home.noProfile", { edit: t("common.edit") })}
       </p>
     );
   }
@@ -280,6 +274,7 @@ function BrandSummary({ brand }) {
 }
 
 function LogoField({ draft, onChange }) {
+  const t = useT();
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -293,7 +288,7 @@ function LogoField({ draft, onChange }) {
       const dataUrl = await fileToResizedDataURL(file, 320);
       onChange({ ...draft, logo: dataUrl });
     } catch (er) {
-      setErr(er.message || "Caricamento fallito");
+      setErr(er.message || t("common.retry"));
     } finally {
       setBusy(false);
     }
@@ -304,20 +299,20 @@ function LogoField({ draft, onChange }) {
       <BrandAvatar brand={draft} size={48} radius={12} />
       <div style={{ flex: 1 }}>
         <label style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'Space Grotesk', sans-serif", display: "block", marginBottom: 6 }}>
-          Logo / foto progetto
+          {t("home.form.logo")}
         </label>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label style={{ padding: "7px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "#141414", color: "#A0988E", fontSize: 11, cursor: busy ? "wait" : "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-            {busy ? "Carico…" : draft.logo ? "Sostituisci" : "Carica immagine"}
+            {busy ? t("common.loading") : draft.logo ? t("home.logo.replace") : t("home.logo.upload")}
             <input type="file" accept="image/*" onChange={handleFile} disabled={busy} style={{ display: "none" }} />
           </label>
           {draft.logo && (
             <button type="button" onClick={() => onChange({ ...draft, logo: "" })}
               style={{ padding: "7px 12px", borderRadius: 12, border: "1px solid #2A2A2A", background: "transparent", color: "#666", fontSize: 11, cursor: "pointer" }}>
-              Rimuovi
+              {t("home.logo.remove")}
             </button>
           )}
-          <span style={{ fontSize: 10, color: "#3A3A3A" }}>PNG/JPG · ridimensionata a 320px</span>
+          <span style={{ fontSize: 10, color: "#3A3A3A" }}>{t("home.logo.hint")}</span>
         </div>
         {err && <div style={{ fontSize: 11, color: "#E47070", marginTop: 6 }}>{err}</div>}
       </div>
@@ -326,6 +321,7 @@ function LogoField({ draft, onChange }) {
 }
 
 function BrandForm({ draft, onChange }) {
+  const t = useT();
   const inputStyle = {
     width: "100%", background: "#141414", border: "1px solid #2A2A2A", borderRadius: 12,
     padding: "9px 12px", color: "#F0EBE3", fontSize: 13, fontFamily: "'Space Grotesk', sans-serif",
@@ -362,43 +358,43 @@ function BrandForm({ draft, onChange }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
       <div style={{ gridColumn: "1 / -1" }}>
-        {field("name", "Nome Brand / Progetto", "Es: Mio Brand, Progetto Estate 2026...")}
+        {field("name", t("home.form.name"), t("home.form.namePlaceholder"))}
       </div>
 
       <LogoField draft={draft} onChange={onChange} />
 
       <div>
-        <label style={labelStyle}>Settore</label>
+        <label style={labelStyle}>{t("home.form.sector")}</label>
         <select
           className="home-input"
           value={draft.sector || ""}
           onChange={e => onChange({ ...draft, sector: e.target.value })}
           style={{ ...inputStyle, color: draft.sector ? "#F0EBE3" : "#555" }}
         >
-          <option value="">Seleziona settore...</option>
+          <option value="">{t("home.form.pickSector")}</option>
           {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
       <div>
-        <label style={labelStyle}>Tono di voce</label>
+        <label style={labelStyle}>{t("home.form.tone")}</label>
         <select
           className="home-input"
           value={draft.tone || ""}
           onChange={e => onChange({ ...draft, tone: e.target.value })}
           style={{ ...inputStyle, color: draft.tone ? "#F0EBE3" : "#555" }}
         >
-          <option value="">Seleziona tono...</option>
+          <option value="">{t("home.form.pickTone")}</option>
           {TONES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
 
       <div style={{ gridColumn: "1 / -1" }}>
-        {field("description", "Descrizione Brand", "Descrivi il brand in 1-2 frasi. L'AI la userà per personalizzare ogni output.", "textarea")}
+        {field("description", t("home.form.description"), t("home.form.descPlaceholder"), "textarea")}
       </div>
 
-      {field("instagramHandle", "Handle Instagram", "@nomebrand")}
-      {field("hashtags", "Hashtag principali", "#brand #settore #target (separati da spazio)")}
+      {field("instagramHandle", t("home.form.igHandle"), "@nomebrand")}
+      {field("hashtags", t("home.form.hashtags"), t("home.form.hashtagsPlaceholder"))}
     </div>
   );
 }
