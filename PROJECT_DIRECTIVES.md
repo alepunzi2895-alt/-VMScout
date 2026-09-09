@@ -48,7 +48,7 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
 | `api/history.js` | `GET/POST/DELETE /api/history?action=...` | CRUD progetti, storico richieste AI, memoria + direttive di progetto, storico design Canva (`projects`, `save_project`, `delete_project`, `save_request`, `history`, `delete_request`, `get_insights`, `merge_insights`, `save_directives`, `update_calendar_status`, `stats`, `save_design`, `designs`, `delete_design`) |
 | `api/instagram.js` | `POST /api/instagram` | Proxy Instagram/Facebook Graph API — vedi §6 per il routing token |
 | `api/canva-auth.js` | `GET /api/canva-auth?action=login\|callback\|status\|logout` | OAuth2 PKCE per Canva Connect |
-| `api/canva-upload.js` | `POST /api/canva-upload` | Upload media su Canva (body: `{url, name}`) |
+| `api/canva-upload.js` | `POST /api/canva-upload` (`{url}` o `{b64}` = clip ritagliata) · `GET ?src=<url>` = proxy video a finestre di 2MB, `no-store` | Upload media su Canva + proxy anteprime video. Vedi §7 |
 | `api/canva-create.js` | `POST /api/canva-create` | Crea design da template Canva per **una** slide. Body: `caption`, `search_query`, `format`, `templateId`, `cta`, + `imageUrl`/`videoUrl`/`mediaType` opzionali. **Reel = sempre video** (autofill `type:"video"`); **Story = foto o video** (toggle nel modale); post = foto. Se `videoUrl` non c'è: `fetchPexelsVideo(search_query)`, fallback su foto |
 | `api/canva-carousel.js` | `POST /api/canva-carousel` | **Carosello intero in un solo design** (FOTO o VIDEO): upload media + **un solo autofill** (`Testo_1..N`/`Immagine_1..N`) sul Brand Template a 6 pagine + `trimTrailingPages` se N<6. Body: `slides[]` (`caption`/`search_query`/`image_url`/`video_url`), `carouselTemplateId`, `media` (`"video"` per il carosello video), `format`. Vedi §7 |
 | `api/canva-export.js` | `POST /api/canva-export` | Autofill template Canva con caption/immagine/CTA (legacy, non più chiamato dal frontend) |
@@ -93,9 +93,16 @@ Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ 
 ### Carosello = un solo design (dal 2026-09-09)
 `canva-carousel.js`: carica gli N media → **un solo `runAutofill`** su `carouselTemplateId` (`EAHUiOe8TUA`) con `Testo_1..N` + `Immagine_1..N` (+ alias `Image_N`/`Sfondo_N`/`Caption_N`) → `trimTrailingPages()` se N<6 → un unico design a N pagine. Fasi cicliche `resume.stage`: `upload` → `autofill`. Gli slot hanno `kind` "image"|"video" per pollare l'endpoint giusto.
 - **Foto**: frontend `CarouselComposer` (tab Post) → `carouselTemplateId`, `CAROUSEL_MAX_PAGES = 6`.
-- **Video**: frontend `VideoCarouselComposer` (tab Video Storytelling) → `media: "video"`, `slides[].video_url`. Una pagina per scena, con anteprima Pexels e i secondi da ritagliare (cumulativi da `scene.duration`). Cap client 6 min (i video sono lenti).
+- **Video**: frontend `VideoCarouselComposer` (tab Video Storytelling) → `media: "video"`. Una pagina per scena. Editor di ritaglio per scena (`VideoTrimmer`): anteprima + due maniglie per scegliere `[trimStart,trimEnd]` (default `0 → scene.duration`). Cap client 6 min.
 
-> Tentativo intermedio scartato: **Design Merge API** (`POST /v1/merges` `insert_pages`) per unire N design da 1 pagina — è preview, per l'account risponde `success` ma NON aggiunge pagine. Helper rimossi; `startAutofillJob`/`checkAutofillJob` restano in canva-lib.js inutilizzati.
+### Anteprima e ritaglio video nel browser (dal 2026-09-09)
+- **Proxy** `GET /api/canva-upload?src=<url>` (Pexels/Pixabay bloccano l'hotlink cross-origin col header `Origin`). Serve il `Range` a **finestre di 2MB**, `Cache-Control: no-store` (la CDN di Vercel non varia per `Range` → serviva 200+Content-Range e bloccava il tag `<video>`). NIENTE streaming/`pipe` (su Vercel non arriva mai al `<video>`).
+- **`getVideoBlob(url)`** (App.jsx): scarica l'intera rendition una volta (`fetchProxiedFull`, loop di finestre da 2MB) → `Blob` → `blob:` URL, in cache. Il `<video>` fa seeking/play in locale, zero rete. Usato da `VideoTrimmer`, `HoverVideoThumb` (poster `<img>` + play-on-click) e dal ritaglio.
+- **Ritaglio = `recordVideoSegment`** via **MediaRecorder** (NON ffmpeg.wasm): riproduce il `blob:` dal secondo X al secondo Y, `video.captureStream()` → `MediaRecorder` (`video/mp4;codecs=avc1`, WebM di ripiego) → blob. In tempo reale, ri-codificato. `handleCreate` registra ogni scena → `POST /api/canva-upload {b64}` → `startBytesUpload` (binario, ≤45MB) → `asset_id` → `slides[].asset_id`. Se fallisce → fallback `video_url` (Canva scarica l'URL) con warning. Cap clip 3.8MB.
+- La rendition Pexels scelta da `parse` è ~540-1000px (leggera per anteprima + record + upload b64 sotto il limite ~4.5MB di Vercel).
+
+> Scartato: **ffmpeg.wasm** — ogni core ≤0.11 richiede `SharedArrayBuffer` (→ header COOP/COEP su tutta l'app, romperebbe img Pexels/Unsplash + popup OAuth Canva); la 0.12 (single-thread, no SAB) fallisce sul Worker cross-origin / `importScripts` del blob.
+> Scartato: **Design Merge API** (`POST /v1/merges` `insert_pages`) per unire N design da 1 pagina — è preview, per l'account risponde `success` ma NON aggiunge pagine. Helper rimossi; `startAutofillJob`/`checkAutofillJob` restano in canva-lib.js inutilizzati.
 
 ---
 
