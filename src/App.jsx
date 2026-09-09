@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { MARKETING_TOOLKIT } from "./marketingFrameworks";
 import { saveCanvaDesign, listCanvaDesigns } from "./canvaDesigns";
@@ -753,7 +753,7 @@ function RowImagePicker({ query, imageUrl, onPick, source: sourceProp, onSourceC
 // aggiungere/rimuovere/riordinare pagine, cambiare foto per pagina e inserire
 // una pagina da un design Canva già creato (ne riusa foto + titolo). Un solo
 // autofill del template carosello.
-function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: openProp, onOpenChange, photoSource }) {
+function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: openProp, onOpenChange, photoSource, originalBrief }) {
   // Un solo design: il Brand Template carosello ha 6 pagine con campi
   // Immagine_1..6 (sfondo foto) + Testo_1..6, compilati in un unico autofill.
   const templateId = canvaTemplates?.carousel || canvaTemplates?.post || "";
@@ -769,6 +769,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
   const [pickerOpen, setPickerOpen] = useState(false);
   const [progress, setProgress] = useState("");
   const [photosLoading, setPhotosLoading] = useState(false);
+  const [regenIdx, setRegenIdx] = useState(null);
   // Fonte foto PREDEFINITA (usata per le pagine nuove e dal pulsante "applica a
   // tutte"). Ogni pagina ha però la sua `source` sovrascrivibile.
   const [source, setSource] = useState(() => photoSource || defaultPhotoSource() || "pexels");
@@ -849,6 +850,15 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
   function patch(i, key, val) {
     setPages(p => p.map((row, idx) => idx === i ? { ...row, [key]: val } : row));
   }
+  const regenRow = async (i, notes) => {
+    setRegenIdx(i);
+    try {
+      const obj = await callRegen(REGEN_ROW_PROMPT(pages[i], originalBrief || "", notes, "photo carousel slide"));
+      lockedRef.current.delete(i);
+      setPages(p => p.map((row, idx) => idx === i ? { ...row, caption: obj.caption || row.caption, search_query: obj.search_query || row.search_query, image_url: null } : row));
+    } catch (e) { console.error("regen carousel row:", e); }
+    finally { setRegenIdx(null); }
+  };
   function move(i, dir) {
     setPages(p => {
       const j = i + dir;
@@ -997,6 +1007,9 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
                   <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query foto (EN, max 3 parole)"
                     style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+                  <div style={{ marginBottom: 8, display: "flex" }}>
+                    <RegenBoxDark loading={regenIdx === i} onRegen={(notes) => regenRow(i, notes)} />
+                  </div>
                   <RowImagePicker query={row.search_query} imageUrl={row.image_url} source={row.source || source}
                     onPick={u => pickImage(i, u)} onSourceChange={src => setRowSource(i, src, row.search_query)} />
                 </div>
@@ -1383,7 +1396,7 @@ function RowVideoPicker({ query, videoUrl, source, onPick, onSourceChange }) {
 }
 
 // Carosello di VIDEO su Canva a partire dallo storyboard (tab Video Storytelling).
-function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, onOpenChange }) {
+function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, originalBrief, open, onOpenChange }) {
   const templateId = canvaTemplates?.carousel || canvaTemplates?.post || "";
   const [rows, setRows] = useState([]);
   const [state, setState] = useState("idle");
@@ -1391,6 +1404,7 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
   const [errMsg, setErrMsg] = useState("");
   const [progress, setProgress] = useState("");
   const [defSource, setDefSource] = useState("pexels_video");
+  const [regenIdx, setRegenIdx] = useState(null);
 
   const ml = (f) => (typeof f === "object" && f ? (f[lang] || f.it || f.en || "") : (f || ""));
 
@@ -1432,6 +1446,15 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
     return nr;
   }));
   const setTrim = (i, a, b) => setRows(p => p.map((r, idx) => idx === i ? { ...r, trimStart: a, trimEnd: b } : r));
+
+  const regenRow = async (i, notes) => {
+    setRegenIdx(i);
+    try {
+      const obj = await callRegen(REGEN_ROW_PROMPT(rows[i], originalBrief || "", notes, "video carousel slide"));
+      setRows(p => p.map((r, idx) => idx === i ? { ...r, caption: obj.caption || r.caption, search_query: obj.search_query || r.search_query, video_url: null, trimStart: 0, trimEnd: r.sceneDur } : r));
+    } catch (e) { console.error("regen carousel row:", e); }
+    finally { setRegenIdx(null); }
+  };
 
   function setRowSource(i, s) {
     setRows(p => p.map((r, idx) => idx === i ? { ...r, source: s, video_url: null, trimStart: 0, trimEnd: r.sceneDur } : r));
@@ -1565,6 +1588,9 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
               <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query footage (EN, max 3 parole)"
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+              <div style={{ marginBottom: 8, display: "flex" }}>
+                <RegenBoxDark loading={regenIdx === i} onRegen={(notes) => regenRow(i, notes)} />
+              </div>
               <RowVideoPicker query={row.search_query} videoUrl={row.video_url} source={row.source}
                 onPick={u => patch(i, "video_url", u)} onSourceChange={s => setRowSource(i, s)} />
               {row.video_url && (
@@ -1655,13 +1681,14 @@ function StoryPhotoPicker({ query, imgUrl, source, onPick, onSourceChange }) {
 // Le Story su Instagram sono frame separati → una story (un design) per frame.
 // Ogni frame è foto O video (suggerimenti per entrambi); i video ritagliati a
 // STORY_CLIP_SEC nel browser (MediaRecorder).
-function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }) {
+function StoryComposer({ frames, canvaTemplates, projectId, originalBrief, open, onOpenChange }) {
   const templateId = canvaTemplates?.story || "";
   const [rows, setRows] = useState([]);
   const [state, setState] = useState("idle");
   const [results, setResults] = useState([]);
   const [errMsg, setErrMsg] = useState("");
   const [progress, setProgress] = useState("");
+  const [regenIdx, setRegenIdx] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -1684,6 +1711,15 @@ function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }
   }));
   const setTrim = (i, a, b) => setRows(p => p.map((r, idx) => idx === i ? { ...r, trimStart: a, trimEnd: b } : r));
   const setVidSource = (i, s) => setRows(p => p.map((r, idx) => idx === i ? { ...r, vid_source: s, video_url: null, trimStart: 0, trimEnd: STORY_CLIP_SEC } : r));
+
+  const regenRow = async (i, notes) => {
+    setRegenIdx(i);
+    try {
+      const obj = await callRegen(REGEN_ROW_PROMPT(rows[i], originalBrief || "", notes, "Instagram Story"));
+      setRows(p => p.map((r, idx) => idx === i ? { ...r, caption: obj.caption || r.caption, search_query: obj.search_query || r.search_query, img_url: null, video_url: null } : r));
+    } catch (e) { console.error("regen story row:", e); }
+    finally { setRegenIdx(null); }
+  };
 
   // Una clip video ritagliata [a,b] → asset Canva (o null se non applicabile).
   async function trimUpload(r, i, warnings) {
@@ -1808,6 +1844,9 @@ function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "7px 10px", color: "#F0EBE3", fontSize: 12.5, fontFamily: "'Space Grotesk', sans-serif", resize: "none", marginBottom: 6 }} />
               <input value={row.search_query} onChange={e => patch(i, "search_query", e.target.value)} placeholder="Query (EN, max 3 parole)"
                 style={{ width: "100%", background: "#141414", border: "1px solid #222", borderRadius: 10, padding: "6px 10px", color: "#F0EBE3", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 8 }} />
+              <div style={{ marginBottom: 8, display: "flex" }}>
+                <RegenBoxDark loading={regenIdx === i} onRegen={(notes) => regenRow(i, notes)} />
+              </div>
 
               {row.media_kind === "image" ? (
                 <StoryPhotoPicker query={row.search_query} imgUrl={row.img_url} source={row.img_source}
@@ -2076,10 +2115,16 @@ function StrategyTab({ data, selectedSource, setSelectedSource, imageCache, onIm
 // ─────────────────────────────────────────────────
 // TAB: POST COMPOSER
 // ─────────────────────────────────────────────────
-const REGEN_SLIDE_PROMPT = (slide, originalBrief) => `You previously generated a post_composer slide for a marketing campaign. The user wants a NEW version of this specific slide. Keep the same slide_number but generate completely different content.
+// Se `notes` è vuoto → versione completamente nuova. Se `notes` c'è → riformula
+// mirata: cambia SOLO ciò che l'utente chiede, tieni il resto coerente.
+const regenMode = (notes) => notes && notes.trim()
+  ? `The user asked for a TARGETED rewrite. Apply exactly this instruction: "${notes.trim()}". Change only what the instruction implies; keep everything else consistent with the current version.`
+  : `The user wants a COMPLETELY DIFFERENT version — new angle, new wording. Do not reuse phrases from the current version.`;
+
+const REGEN_SLIDE_PROMPT = (slide, originalBrief, notes) => `You previously generated a post_composer slide for a marketing campaign. ${regenMode(notes)} Keep the same slide_number.
 
 Generate the slide with:
-- hook_type: one of Curiosity|Story|Value|Contrarian — pick a DIFFERENT one than the current slide
+- hook_type: one of Curiosity|Story|Value|Contrarian${notes ? "" : " — pick a DIFFERENT one than the current slide"}
 - captions: object with "it", "en", "es" keys (each a native-feeling caption, not translations). Open with a hook of hook_type; follow PAS, AIDA or BAB — lead with tension or benefit, never a flat description
 - hashtags_instagram: array of exactly 10 hashtags (3 broad, 4 mid-range niche, 3 micro-niche)
 - hashtags_facebook: array of exactly 3 broad hashtags
@@ -2088,10 +2133,106 @@ Generate the slide with:
 
 Original campaign brief: "${originalBrief}"
 
-Current slide to regenerate:
+Current slide:
 ${JSON.stringify(slide, null, 2)}
 
 Respond ONLY with a single JSON object (the new slide). No markdown fences, no preamble.`;
+
+const REGEN_SCENE_PROMPT = (scene, originalBrief, notes) => `You previously generated one scene of a 9:16 video storyboard for a marketing campaign. ${regenMode(notes)} Keep the same scene_number and roughly the same duration.
+
+Generate the scene with these keys: scene_number, duration (e.g. "3s"), footage_type, description {it,en,es} (max 6 words each), search_query (max 3 English words, [adjective]+[subject]+[location], broadly-tagged stock subject), text_overlay {it,en,es} (max 3 words each), transition.
+
+Original campaign brief: "${originalBrief}"
+
+Current scene:
+${JSON.stringify(scene, null, 2)}
+
+Respond ONLY with a single JSON object (the new scene). No markdown fences, no preamble.`;
+
+// Riformula il testo di UN frame (story) o UNA slide (carosello) in composizione:
+// solo `caption` (overlay) + `search_query`.
+const REGEN_ROW_PROMPT = (row, originalBrief, notes, kind) => `You are refining one ${kind} frame for a marketing campaign. ${regenMode(notes)}
+
+Current frame — overlay text: "${row.caption || ""}" · stock search query: "${row.search_query || ""}"
+Campaign brief: "${originalBrief || ""}"
+
+Return the new overlay text (short, punchy, in the same language as the current one) and a new stock search_query (max 3 English words, [adjective]+[subject]+[location], broadly-tagged).
+Respond ONLY with JSON: {"caption":"…","search_query":"…"}. No markdown fences, no preamble.`;
+
+// Pulsante "⟳ Riformula" che si espande in un campo per dare indicazioni
+// specifiche ("più diretto", "togli l'emoji", "parla del prezzo"…). `onRegen`
+// riceve la stringa di indicazioni (vuota = versione nuova a caso).
+function RegenBox({ loading, onRegen, color = "#B46432", label = "Riformula" }) {
+  const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const go = () => { onRegen(notes.trim()); setOpen(false); setNotes(""); };
+  if (loading) {
+    return <span style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap", padding: "7px 4px" }}>⟳ Rigenero…</span>;
+  }
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        style={{ padding: "7px 14px", borderRadius: 12, border: `1px solid ${color}33`, background: "transparent", color, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap" }}>
+        ⟳ {label}
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 200 }}>
+      <input value={notes} onChange={e => setNotes(e.target.value)} autoFocus
+        onKeyDown={e => { if (e.key === "Enter") go(); if (e.key === "Escape") { setOpen(false); setNotes(""); } }}
+        placeholder="Cosa cambiare? (opzionale — es. più diretto, cita il prezzo)"
+        style={{ flex: 1, minWidth: 160, background: "rgba(139,115,85,0.06)", border: `1px solid ${color}33`, borderRadius: 10, padding: "6px 10px", color: "#3D3225", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif" }} />
+      <button type="button" onClick={go}
+        style={{ padding: "6px 12px", borderRadius: 10, border: "none", background: color, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+        ⟳ Vai
+      </button>
+      <button type="button" onClick={() => { setOpen(false); setNotes(""); }}
+        style={{ background: "none", border: "none", color: "#999", fontSize: 15, cursor: "pointer", lineHeight: 1 }}>×</button>
+    </div>
+  );
+}
+
+// Variante scura per i modali compositore (carosello / story).
+function RegenBoxDark({ loading, onRegen, color = "#00C4CC" }) {
+  const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const go = () => { onRegen(notes.trim()); setOpen(false); setNotes(""); };
+  if (loading) return <span style={{ fontSize: 10, color, fontFamily: "'Space Grotesk', sans-serif" }}>⟳ Rigenero…</span>;
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        style={{ padding: "3px 9px", borderRadius: 8, border: `1px solid ${color}44`, background: "transparent", color, fontSize: 9.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+        ⟳ Riformula
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1, minWidth: 180, marginTop: 4 }}>
+      <input value={notes} onChange={e => setNotes(e.target.value)} autoFocus
+        onKeyDown={e => { if (e.key === "Enter") go(); if (e.key === "Escape") { setOpen(false); setNotes(""); } }}
+        placeholder="Cosa cambiare? (opzionale)"
+        style={{ flex: 1, minWidth: 120, background: "#141414", border: "1px solid #262626", borderRadius: 8, padding: "5px 8px", color: "#F0EBE3", fontSize: 10.5, fontFamily: "'Space Grotesk', sans-serif" }} />
+      <button type="button" onClick={go} style={{ padding: "5px 9px", borderRadius: 8, border: "none", background: color, color: "#001", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Vai</button>
+      <button type="button" onClick={() => { setOpen(false); setNotes(""); }} style={{ background: "none", border: "none", color: "#666", fontSize: 13, cursor: "pointer" }}>×</button>
+    </div>
+  );
+}
+
+// Chiamata generica di riformulazione: prompt → /api/chat → JSON.
+async function callRegen(promptText) {
+  const res = await fetch("/api/chat", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system: "You are a senior marketing copywriter and visual director. Respond ONLY with a single JSON object, no markdown fences, no preamble.",
+      messages: [{ role: "user", content: promptText }],
+    }),
+  });
+  const result = await res.json();
+  const raw = result.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
+  if (!raw) throw new Error("nessuna risposta dal modello");
+  return parseJsonResponse(raw);
+}
 
 function SlideSearchLinks({ query, orientation, instagramHashtag }) {
   if (!query) return null;
@@ -2173,7 +2314,7 @@ function SlidePreviewImages({ query, orientation, sourceKey }) {
   );
 }
 
-function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
+function PostsTab({ data, onRegen, regenKey, brand, originalBrief }) {
   const { post_composer, orientation } = data;
   const [lang, setLang] = useState("it");
   const [platform, setPlatform] = useState("instagram");
@@ -2338,10 +2479,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
                   <CopyButton text={getCopyText(post)} label={`Copia ${platform === "instagram" ? "IG" : "FB"} Caption + Hashtag`} />
                 </div>
                 <CanvaDesignButton caption={getCaption(post)} cta={cta} query={post.search_query || ""} orientation={orientation} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} />
-                <button onClick={() => onRegenSlide(i, post)} disabled={regenLoading === i}
-                  style={{ padding: "7px 14px", borderRadius: 12, border: "1px solid rgba(180,100,50,0.2)", background: regenLoading === i ? "rgba(180,100,50,0.1)" : "transparent", color: "#B46432", fontSize: 11, fontWeight: 600, cursor: regenLoading === i ? "not-allowed" : "pointer", fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap" }}>
-                  {regenLoading === i ? "⟳ Rigenero..." : "⟳ Riformula"}
-                </button>
+                <RegenBox loading={regenKey === `slide:${i}`} onRegen={(notes) => onRegen(i, post, notes)} />
               </div>
             </div>
           );
@@ -2373,6 +2511,7 @@ function PostsTab({ data, onRegenSlide, regenLoading, brand }) {
         initialSlides={post_composer.map(p => ({ caption: getCaption(p), search_query: p.search_query || "" }))}
         canvaTemplates={brand?.canvaTemplates}
         projectId={brand?.id}
+        originalBrief={originalBrief}
       />
     </div>
   );
@@ -2429,7 +2568,7 @@ function SceneVideoPlayer({ query, sourceKey }) {
   );
 }
 
-function VideoTab({ data, brand }) {
+function VideoTab({ data, brand, onRegen, regenKey, originalBrief }) {
   const vs = data.video_storytelling;
   const [lang, setLang] = useState("it");
   const [videoSource, setVideoSource] = useState("pexels_video");
@@ -2466,7 +2605,7 @@ function VideoTab({ data, brand }) {
           🎬 Componi carosello video su Canva ({vs.scenes.length} scene · video già caricati)
         </button>
       )}
-      <VideoCarouselComposer scenes={vs.scenes} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} lang={lang} open={vcOpen} onOpenChange={setVcOpen} />
+      <VideoCarouselComposer scenes={vs.scenes} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} lang={lang} originalBrief={originalBrief} open={vcOpen} onOpenChange={setVcOpen} />
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
@@ -2527,6 +2666,12 @@ function VideoTab({ data, brand }) {
                   <SceneVideoPlayer query={s.search_query} sourceKey={videoSource} />
                 </div>
               )}
+
+              {onRegen && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(26,26,46,0.08)", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  <RegenBox loading={regenKey === `scene:${i}`} onRegen={(notes) => onRegen(i, s, notes)} color="#1A1A2E" />
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -2549,11 +2694,12 @@ function VideoTab({ data, brand }) {
 // ─────────────────────────────────────────────────
 // TAB: STORY (9:16)
 // ─────────────────────────────────────────────────
-function StoryTab({ data, brand }) {
+function StoryTab({ data, brand, originalBrief }) {
   const [lang, setLang] = useState("it");
   const [scOpen, setScOpen] = useState(false);
   const [photoSource, setPhotoSource] = useState(() => defaultPhotoSource() || "unsplash");
   const [videoSource, setVideoSource] = useState("pexels_video");
+  const [regenIdx, setRegenIdx] = useState(null);
 
   const LANGS = [
     { id: "it", label: "Italiano", flag: "🇮🇹" },
@@ -2563,8 +2709,9 @@ function StoryTab({ data, brand }) {
   const ml = (f) => (f && typeof f === "object" ? (f[lang] || f.it || f.en || "") : (f || ""));
   const short = (s, n = 9) => (s || "").split(/\s+/).slice(0, n).join(" ");
 
-  // Frame = da post_composer (preferito) o dallo storyboard video.
-  const frames = (data.post_composer?.length
+  // Frame derivati da post_composer (preferito) o dallo storyboard video, poi
+  // tenuti in stato locale così si possono riformulare senza toccare i post.
+  const derived = useMemo(() => (data.post_composer?.length
     ? data.post_composer.map(p => ({
         caption: ml(p.visual_description) || short(ml(p.captions) || p.caption || ""),
         search_query: p.search_query || "",
@@ -2573,7 +2720,21 @@ function StoryTab({ data, brand }) {
         caption: ml(s.text_overlay) || short(ml(s.description)),
         search_query: s.search_query || "",
       }))
-  ).filter(f => f.search_query).slice(0, STORY_MAX);
+  ).filter(f => f.search_query).slice(0, STORY_MAX),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [data.post_composer, data.video_storytelling, lang]);
+
+  const [frames, setFrames] = useState(derived);
+  useEffect(() => { setFrames(derived); }, [derived]);
+
+  const regenFrame = async (i, notes) => {
+    setRegenIdx(i);
+    try {
+      const obj = await callRegen(REGEN_ROW_PROMPT(frames[i], originalBrief || "", notes, "Instagram Story"));
+      setFrames(p => p.map((f, idx) => idx === i ? { caption: obj.caption || f.caption, search_query: obj.search_query || f.search_query } : f));
+    } catch (e) { console.error("regen story frame:", e); }
+    finally { setRegenIdx(null); }
+  };
 
   const hasTemplate = !!brand?.canvaTemplates?.story;
 
@@ -2591,7 +2752,7 @@ function StoryTab({ data, brand }) {
         ◫ Componi Story su Canva ({frames.length} frame · foto o video)
       </button>
       {!hasTemplate && <div style={{ fontSize: 10.5, color: "#8B7355", marginBottom: 14 }}>Imposta il template <b>Story</b> in Canva Studio per attivarlo.</div>}
-      <StoryComposer frames={frames} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} open={scOpen} onOpenChange={setScOpen} />
+      <StoryComposer frames={frames} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} originalBrief={originalBrief} open={scOpen} onOpenChange={setScOpen} />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", marginTop: 6 }}>
         <div style={{ display: "flex", gap: 4, padding: 3, background: "rgba(26,26,46,0.06)", borderRadius: 14 }}>
@@ -2626,6 +2787,9 @@ function StoryTab({ data, brand }) {
             <SlidePreviewImages query={f.search_query} orientation="portrait" sourceKey={photoSource} />
             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#8B7355", margin: "10px 0 3px" }}>Video suggeriti</div>
             <SceneVideoPlayer query={f.search_query} sourceKey={videoSource} />
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(26,26,46,0.08)", display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <RegenBox loading={regenIdx === i} onRegen={(notes) => regenFrame(i, notes)} color="#E1306C" />
+            </div>
           </div>
         ))}
       </div>
@@ -2763,34 +2927,35 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedSource, setSelectedSource] = useState("unsplash");
   const [imageCache, setImageCache] = useState({});
-  const [regenLoading, setRegenLoading] = useState(null);
+  const [regenKey, setRegenKey] = useState(null); // "slide:2" | "scene:0" in corso
   const onImagesFetched = useCallback((key, imgs) => setImageCache(prev => ({ ...prev, [key]: imgs })), []);
 
-  const handleRegenSlide = async (index, slide) => {
-    setRegenLoading(index);
+  // Riformula UN elemento: `kind` = "slide" (post_composer) | "scene"
+  // (video_storytelling). `notes` = indicazioni specifiche (vuoto = versione nuova).
+  const regenItem = async (kind, index, item, notes) => {
+    setRegenKey(`${kind}:${index}`);
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system: "You are a creative marketing copywriter. Generate a single post_composer slide as a JSON object. Respond ONLY with the JSON object, no markdown fences.",
-          messages: [{ role: "user", content: REGEN_SLIDE_PROMPT(slide, originalBrief || "") }],
-        }),
-      });
-      const result = await res.json();
-      const raw = result.content?.map(b => b.type === "text" ? b.text : "").filter(Boolean).join("");
-      if (raw) {
-        const newSlide = parseJsonResponse(raw);
-        newSlide.slide_number = slide.slide_number;
-        const updated = { ...data };
+      const prompt = kind === "scene"
+        ? REGEN_SCENE_PROMPT(item, originalBrief || "", notes)
+        : REGEN_SLIDE_PROMPT(item, originalBrief || "", notes);
+      const obj = await callRegen(prompt);
+      const updated = { ...data };
+      if (kind === "scene") {
+        obj.scene_number = item.scene_number;
+        if (!obj.duration) obj.duration = item.duration;
+        const scenes = [...(data.video_storytelling?.scenes || [])];
+        scenes[index] = obj;
+        updated.video_storytelling = { ...data.video_storytelling, scenes };
+      } else {
+        obj.slide_number = item.slide_number;
         updated.post_composer = [...data.post_composer];
-        updated.post_composer[index] = newSlide;
-        onUpdateData(updated);
+        updated.post_composer[index] = obj;
       }
+      onUpdateData(updated);
     } catch (err) {
-      console.error("Regen failed:", err);
+      console.error("regen failed:", err);
     } finally {
-      setRegenLoading(null);
+      setRegenKey(null);
     }
   };
 
@@ -2816,9 +2981,9 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
 
       { activeTab === "strategy" && <StrategyTab data={data} selectedSource={selectedSource} setSelectedSource={setSelectedSource} imageCache={imageCache} onImagesFetched={onImagesFetched} />}
       { activeTab === "piano" && <EditorialTab data={data} />}
-      { activeTab === "posts" && <PostsTab data={data} onRegenSlide={handleRegenSlide} regenLoading={regenLoading} brand={brand} />}
-      { activeTab === "story" && <StoryTab data={data} brand={brand} />}
-      { activeTab === "video" && <VideoTab data={data} brand={brand} />}
+      { activeTab === "posts" && <PostsTab data={data} onRegen={(i, item, notes) => regenItem("slide", i, item, notes)} regenKey={regenKey} brand={brand} originalBrief={originalBrief} />}
+      { activeTab === "story" && <StoryTab data={data} brand={brand} originalBrief={originalBrief} />}
+      { activeTab === "video" && <VideoTab data={data} brand={brand} onRegen={(i, item, notes) => regenItem("scene", i, item, notes)} regenKey={regenKey} originalBrief={originalBrief} />}
       { activeTab === "sponsor" && <SponsorTab data={data} />}
 
       <details style={{ marginTop: 18 }}>
