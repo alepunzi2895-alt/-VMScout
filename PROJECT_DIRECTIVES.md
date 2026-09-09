@@ -95,6 +95,9 @@ Canva ha **rimosso** il vecchio `POST /v1/designs/templates/{id}/autofill` (→ 
 - **Foto**: frontend `CarouselComposer` (tab Post) → `carouselTemplateId`, `CAROUSEL_MAX_PAGES = 6`.
 - **Video**: frontend `VideoCarouselComposer` (tab Video Storytelling) → `media: "video"`. Una pagina per scena. Editor di ritaglio per scena (`VideoTrimmer`): anteprima + due maniglie per scegliere `[trimStart,trimEnd]` (default `0 → scene.duration`). Cap client 6 min.
 
+### Story = una story per frame (dal 2026-09-09)
+Le Story su Instagram sono card separate → NON un multi-pagina. Tab **Story** (`StoryTab`): deriva N frame da `post_composer` (o storyboard), suggerisce foto **e** video per ogni frame. `StoryComposer` → loop `POST /api/canva-create` `format:"story"` per frame (template Story `EAHUiDPEzhU`, 1 pagina, `Immagine_Sfondo`/`Testo_Post`) → lista di link. Toggle foto/video per frame; video ritagliati a `STORY_CLIP_SEC`=5s con `recordVideoSegment` → `canva-create` con `assetId`.
+
 ### Anteprima e ritaglio video nel browser (dal 2026-09-09)
 - **Proxy** `GET /api/canva-upload?src=<url>` (Pexels/Pixabay bloccano l'hotlink cross-origin col header `Origin`). Serve il `Range` a **finestre di 2MB**, `Cache-Control: no-store` (la CDN di Vercel non varia per `Range` → serviva 200+Content-Range e bloccava il tag `<video>`). NIENTE streaming/`pipe` (su Vercel non arriva mai al `<video>`).
 - **`getVideoBlob(url)`** (App.jsx): scarica l'intera rendition una volta (`fetchProxiedFull`, loop di finestre da 2MB) → `Blob` → `blob:` URL, in cache. Il `<video>` fa seeking/play in locale, zero rete. Usato da `VideoTrimmer`, `HoverVideoThumb` (poster `<img>` + play-on-click) e dal ritaglio.
