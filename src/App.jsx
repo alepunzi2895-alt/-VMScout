@@ -1081,7 +1081,7 @@ const VIDEO_SOURCE_KEYS = Object.keys(VIDEO_SOURCES);
 const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split("_")[0]]);
 
 // I video di Pexels ecc. non si possono hotlinkare dal browser → passa dal proxy.
-const proxiedVideo = (url) => url && /^https?:\/\//i.test(url) ? `/api/canva-upload?src=${encodeURIComponent(url)}` : url;
+const proxiedVideo = (url) => url && /^https?:\/\//i.test(url) ? `/api/canva-upload?pv=2&src=${encodeURIComponent(url)}` : url;
 
 // Miniatura video: mostra il POSTER (immagine, carica sempre) e monta il <video>
 // (via proxy, pesante) SOLO al click. Evita di aprire decine di stream verso la
@@ -1131,7 +1131,7 @@ function loadFFmpeg() {
 // Scarica un video dal proxy a finestre di 2MB (il proxy limita ogni risposta
 // per non sforare il payload della serverless function) e ricompone i byte.
 async function fetchProxiedFull(url) {
-  const proxy = `/api/canva-upload?src=${encodeURIComponent(url)}`;
+  const proxy = `/api/canva-upload?pv=2&src=${encodeURIComponent(url)}`;
   const parts = [];
   let offset = 0, total = Infinity;
   while (offset < total) {

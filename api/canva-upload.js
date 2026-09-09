@@ -60,7 +60,10 @@ export default async function handler(req, res) {
 
       res.setHeader("Content-Type", up.headers.get("content-type") || "video/mp4");
       res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Cache-Control", "public, max-age=3600");
+      // NIENTE cache CDN: la CDN di Vercel non varia per `Range` e finiva col
+      // servire una risposta 200 + Content-Range (contraddittoria) a tutte le
+      // richieste di range → il tag <video> restava in stallo (rs=0).
+      res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Length", String(body.length));
 
       const cr = up.headers.get("content-range");
