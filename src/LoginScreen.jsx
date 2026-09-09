@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth, LANGS } from "./AuthContext.jsx";
+import Flag from "./Flag.jsx";
 
 const GOLD = "#C9A96E";
 
@@ -17,8 +18,6 @@ const T = {
   de: { tagline: "Visuelle Strategie. Null Kompromisse.", login: "Anmelden", register: "Registrieren", nickname: "Nickname", password: "Passwort", have: "Schon ein Konto?", noacc: "Noch kein Konto?", go: "Los", create: "Konto erstellen", wait: "Einen Moment…",
     e_INVALID_NICKNAME: "Ungültiger Nickname (2–32 Zeichen).", e_INVALID_PASSWORD: "Das Passwort muss mindestens 6 Zeichen haben.", e_NICKNAME_TAKEN: "Nickname bereits vergeben.", e_BAD_CREDENTIALS: "Falscher Nickname oder falsches Passwort.", e_BAD_ORIGIN: "Anfrage blockiert.", e_generic: "Etwas ist schiefgelaufen. Bitte erneut versuchen." },
 };
-const FLAGS = { it: "🇮🇹", en: "🇬🇧", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪" };
-
 export default function LoginScreen() {
   const { lang, setLang, login, register } = useAuth();
   const t = T[lang] || T.it;
@@ -57,11 +56,11 @@ export default function LoginScreen() {
           <div style={{ fontSize: 13, color: "#8B7355", marginTop: 8, fontFamily: "'Space Grotesk', sans-serif" }}>{t.tagline}</div>
         </div>
 
-        <div style={{ display: "flex", gap: 4, justifyContent: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 16 }}>
           {LANGS.map(l => (
-            <button key={l} type="button" onClick={() => setLang(l)}
-              style={{ padding: "4px 8px", borderRadius: 9, border: `1px solid ${lang === l ? GOLD + "55" : "#262626"}`, background: lang === l ? GOLD + "14" : "transparent", cursor: "pointer", fontSize: 13 }}>
-              {FLAGS[l]}
+            <button key={l} type="button" onClick={() => setLang(l)} title={l.toUpperCase()}
+              style={{ display: "flex", alignItems: "center", padding: "5px 7px", borderRadius: 9, border: `1px solid ${lang === l ? GOLD + "77" : "#262626"}`, background: lang === l ? GOLD + "1c" : "transparent", cursor: "pointer" }}>
+              <Flag code={l} size={20} />
             </button>
           ))}
         </div>

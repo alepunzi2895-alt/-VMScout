@@ -9,9 +9,9 @@ import CanvaStudio from "./CanvaStudio.jsx";
 import Dashboard from "./Dashboard.jsx";
 import CanvaMark from "./CanvaMark.jsx";
 import BrandAvatar from "./BrandAvatar.jsx";
+import Flag from "./Flag.jsx";
 
 const GOLD = "#C9A96E";
-const FLAGS = { it: "🇮🇹", en: "🇬🇧", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪" };
 
 const TABS = [
   { id: "home", label: "Home", icon: "◈" },
@@ -144,19 +144,19 @@ function UserMenu() {
   return (
     <div ref={ref} style={{ position: "relative", marginRight: 12, flexShrink: 0 }}>
       <button onClick={() => setOpen(v => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 20,
+        style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 9px", borderRadius: 20,
           border: `1px solid ${open ? GOLD + "45" : "rgba(201,169,110,0.18)"}`, background: open ? `${GOLD}08` : "transparent", cursor: "pointer" }}>
-        <span style={{ fontSize: 12 }}>{FLAGS[lang]}</span>
+        <Flag code={lang} size={16} />
         <span style={{ fontSize: 11, color: "#A0988E", fontFamily: "'Space Grotesk', sans-serif", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.nickname}</span>
         <span style={{ fontSize: 8, color: "#555" }}>▾</span>
       </button>
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#0E0E0E", border: "1px solid #1E1E1E", borderRadius: 16, padding: 8, minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.55)", zIndex: 1001 }}>
-          <div style={{ display: "flex", gap: 4, padding: "4px 4px 8px", flexWrap: "wrap" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#0E0E0E", border: "1px solid #1E1E1E", borderRadius: 16, padding: 8, minWidth: 168, boxShadow: "0 8px 32px rgba(0,0,0,0.55)", zIndex: 1001 }}>
+          <div style={{ display: "flex", gap: 5, padding: "4px 4px 8px", flexWrap: "wrap" }}>
             {LANGS.map(l => (
-              <button key={l} onClick={() => setLang(l)}
-                style={{ padding: "4px 7px", borderRadius: 9, border: `1px solid ${lang === l ? GOLD + "55" : "#262626"}`, background: lang === l ? GOLD + "14" : "transparent", cursor: "pointer", fontSize: 13 }}>
-                {FLAGS[l]}
+              <button key={l} onClick={() => setLang(l)} title={l.toUpperCase()}
+                style={{ display: "flex", alignItems: "center", padding: "5px 7px", borderRadius: 9, border: `1px solid ${lang === l ? GOLD + "77" : "#262626"}`, background: lang === l ? GOLD + "1c" : "transparent", cursor: "pointer" }}>
+                <Flag code={l} size={18} />
               </button>
             ))}
           </div>
