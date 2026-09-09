@@ -41,10 +41,13 @@ export default async function handler(req, res) {
       const up = await fetch(src, { headers: h });
       if (!up.ok && up.status !== 206) return res.status(502).json({ error: `sorgente ${up.status}` });
       res.status(up.status);
-      for (const k of ["content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
+      for (const k of ["content-type", "content-length", "content-range", "last-modified", "etag"]) {
         const v = up.headers.get(k);
         if (v) res.setHeader(k, v);
       }
+      // il browser abilita il seeking del <video> solo se vede Accept-Ranges;
+      // Pexels non sempre lo manda ma onora comunque il Range (risponde 206).
+      res.setHeader("Accept-Ranges", up.headers.get("accept-ranges") || "bytes");
       res.setHeader("Cache-Control", "public, max-age=3600");
       if (!up.body) return res.end(Buffer.from(await up.arrayBuffer()));
       Readable.fromWeb(up.body).pipe(res);

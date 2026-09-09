@@ -1083,6 +1083,28 @@ const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split
 // I video di Pexels ecc. non si possono hotlinkare dal browser → passa dal proxy.
 const proxiedVideo = (url) => url && /^https?:\/\//i.test(url) ? `/api/canva-upload?src=${encodeURIComponent(url)}` : url;
 
+// Miniatura video: mostra il POSTER (immagine, carica sempre) e monta il <video>
+// (via proxy, pesante) SOLO al click. Evita di aprire decine di stream verso la
+// nostra serverless function quando in pagina ci sono molte griglie di anteprime.
+function HoverVideoThumb({ poster, videoUrl, style, children }) {
+  const [play, setPlay] = useState(false);
+  return (
+    <div style={{ position: "relative", background: "#000", ...style }}>
+      {play ? (
+        <video src={proxiedVideo(videoUrl)} autoPlay loop muted playsInline controls
+          style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <button type="button" onClick={() => setPlay(true)}
+          style={{ position: "absolute", inset: 0, border: 0, padding: 0, cursor: "pointer", background: "#000" }}>
+          {poster && <img src={poster} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.82 }} />}
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff", textShadow: "0 1px 4px #000" }}>▶</span>
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}
+
 // ─── ffmpeg.wasm (caricato da CDN solo quando serve il ritaglio) ───
 let _ffmpegPromise = null;
 function loadFFmpeg() {
@@ -1201,7 +1223,7 @@ function VideoTrimmer({ url, start, end, targetDur, onChange }) {
           target scena: {targetDur}s
         </span>
       </div>
-      <video ref={vidRef} src={proxiedVideo(url)} muted playsInline preload="auto" onLoadedMetadata={onMeta}
+      <video ref={vidRef} src={proxiedVideo(url)} muted playsInline preload="metadata" onLoadedMetadata={onMeta}
         style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, background: "#000", display: "block", marginBottom: 8 }} />
       <div ref={trackRef} style={{ position: "relative", height: 26, background: "#1A1A1A", borderRadius: 6, touchAction: "none" }}>
         <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(start), width: `calc(${pct(end)} - ${pct(start)})`, background: "rgba(0,196,204,0.22)", borderLeft: "2px solid #00C4CC", borderRight: "2px solid #00C4CC" }} />
@@ -1587,10 +1609,10 @@ function VideoQueryCard({ query, sourceKey }) {
         ) : videos && videos.length > 0 ? (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 8, paddingBottom: 2 }}>
             {videos.slice(0, 3).map(v => (
-              <div key={v.id} style={{ width: 110, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
-                <video src={proxiedVideo(v.videoUrl)} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+              <HoverVideoThumb key={v.id} poster={v.image} videoUrl={v.videoUrl}
+                style={{ width: 110, flexShrink: 0, borderRadius: 12, overflow: "hidden", aspectRatio: "9/16" }}>
                 <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 10 }}>↗</a>
-              </div>
+              </HoverVideoThumb>
             ))}
           </div>
         ) : (
@@ -2048,11 +2070,11 @@ function SceneVideoPlayer({ query, sourceKey }) {
       ) : videos && videos.length > 0 ? (
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {videos.slice(0,3).map(v => (
-            <div key={v.id} style={{ width: 140, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: "#000", position: "relative", aspectRatio: "9/16" }}>
-              <video src={proxiedVideo(v.videoUrl)} autoPlay loop muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace" }}>{v.author || "Creator"}</div>
+            <HoverVideoThumb key={v.id} poster={v.image} videoUrl={v.videoUrl}
+              style={{ width: 140, flexShrink: 0, borderRadius: 12, overflow: "hidden", aspectRatio: "9/16" }}>
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 6px 4px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 8, color: "#fff", fontFamily: "'JetBrains Mono', monospace", pointerEvents: "none" }}>{v.author || "Creator"}</div>
               <a href={v.link} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "rgba(0,0,0,0.5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", textDecoration: "none", fontSize: 12 }}>↗</a>
-            </div>
+            </HoverVideoThumb>
           ))}
         </div>
       ) : (
