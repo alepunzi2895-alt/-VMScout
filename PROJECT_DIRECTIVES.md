@@ -6,7 +6,11 @@ Queste direttive devono essere lette prima di ogni operazione sul progetto e agg
 
 ## 1. Obiettivo e Visione
 
-**VMScout** (Visual Marketing Scout) è un'applicazione "Anti-stock, anti-AI. Solo autenticità". Aiuta i marketer a generare strategie visive, storyboard video, piani editoriali (soprattutto per Social IG/FB) e suggerimenti per post cross-platform. Tema scuro coerente in tutte le sezioni (`#0D0D0D`/`#080808`, accenti gold `#C9A96E`). Supporta più progetti/brand in parallelo (vedi `BrandContext.jsx`), ognuno con il proprio storico di richieste AI e una propria "memoria" accumulata (vedi §5).
+**VMScout** (Visual Marketing Scout) è un'applicazione "Anti-stock, anti-AI. Solo autenticità". Aiuta i marketer a generare strategie visive, storyboard video, piani editoriali (soprattutto per Social IG/FB) e suggerimenti per post cross-platform. Tema scuro coerente in tutte le sezioni (`#0D0D0D`/`#080808`, accenti gold `#C9A96E`).
+
+**Multi-utente (dal 2026-09-09).** Login obbligatorio con **nickname + password** (nessuna email). Ogni utente vede/gestisce SOLO i propri progetti e la propria connessione Canva/Facebook. Il primo utente registrato ha ereditato i progetti + i token OAuth legacy esistenti. Ogni progetto ha il proprio storico di richieste AI e una "memoria" accumulata (vedi §5). Auth: helper in `api/db.js`, endpoint come `?action=auth_*` in `api/history.js`, gate lato client in `src/AuthContext.jsx` + `src/AppRouter.jsx` + `src/LoginScreen.jsx`.
+
+**Multilingua (dal 2026-09-09).** UI in **IT · EN · ES · FR · DE**, selettore lingua (bandierine SVG — `src/Flag.jsx` — le flag-emoji non si vedono su Windows) nella nav e nel login; la lingua è salvata sull'account (`vms_users.lang`) e in `localStorage["vms_lang"]` pre-login. Infrastruttura: `src/i18n/index.jsx` (`LangProvider`, `useT()`, `fmtDate/fmtDateTime/weekdaysShort`) + catalogo `src/i18n/strings.js` (chiavi a punti, `{var}` interpolati). I CONTENUTI generati dall'AI restano multilingua a parte (captions/cta in it/en/es dal modello). **Copertura i18n:** completa su nav, login, Home, Dashboard, Canva Studio e la shell di Visual Scout (hero, input, tab, pulsanti compositori, Riformula) + sezioni/StatCard/pulsanti di Analytics. **Da tradurre ancora (coda lunga):** sotto-intestazioni dentro i tab risultato di Visual Scout (`StrategyTab`/`PostsTab`/`EditorialTab`/`SponsorTab`), micro-copy profonda di `InstagramAnalytics.jsx`, tooltip SVG di `AnalyticsCharts.jsx`. Nuove stringhe UI → sempre via `t("chiave")`, mai hard-coded.
 
 ---
 
@@ -34,9 +38,12 @@ Tutte le tabelle vengono create in modo **lazy** (`CREATE TABLE IF NOT EXISTS`) 
   La "memoria" del progetto. `directives` = brief operativo per-progetto (markdown), letto prima di **ogni** studio/analisi e riscritto dall'AI in background alla fine di ognuno — vedi **`docs/PROJECT_LEARNING_LOOP.md`**. `tips`/`strengths`/`weaknesses`/`calendar` crescono a ogni analisi Instagram (§5).
 - **`canva_designs`**: `id`, `project_id`, `kind` (`design` | `carousel`), `format`, `title`, `design_url`, `thumb_url` (foto principale usata), `slides`, `created_at`
   Storico dei design Canva creati dall'app. Il frontend chiama `save_design` dopo ogni `/api/canva-create` / `/api/canva-carousel` riuscito (helper in `src/canvaDesigns.js`). Renderizzato nella galleria "Design creati" di Canva Studio (`CreatedDesignsPanel`) e riusabile come pagina nel `CarouselComposer` (via `thumb_url`).
-- **`canva_auth`**: `id` (fisso a 1), `access_token`, `refresh_token`, `expires_in`, `created_at` — token OAuth Canva.
+- **`vms_users`**: `id` (UUID), `nickname`, `nickname_lower` (UNIQUE, per lookup case-insensitive), `pass_hash` (`scrypt$N$r$p$salt$hash`, node crypto), `lang`, `created_at`. ⚠️ nome `vms_` perché sul DB Turso esiste già una tabella `users`.
+- **`vms_sessions`**: `token_hash` (PK, sha256 del token — il raw sta solo nel cookie `vms_sess` HttpOnly/Secure/SameSite=Lax, 400gg), `user_id`, `expires_at`, `user_agent`.
+- **`canva_auth_u`** / **`fb_auth_u`**: token OAuth **per-utente** (`user_id` PK). Le vecchie `canva_auth`/`fb_auth` a riga unica (`id=1`) restano solo per la migrazione one-shot fatta all'atto della registrazione del primo utente.
+- **`user_id`** aggiunto (ALTER lazy) a `projects` / `requests` / `canva_designs` / `project_insights` — ogni action di `history.js` filtra/scrive per utente della sessione (`getSessionUser` + `assertOwnsProject` in `api/db.js`). `getCanvaToken(db, userId)` / `getFbToken(db, userId)` in `canva-lib.js`/`instagram.js`; ogni `canva-*`/`instagram.js` risolve la sessione dal cookie; l'OAuth callback porta l'user id in uno `state` firmato HMAC.
 
-*Vedi `api/history.js` per lo schema completo delle prime tre tabelle e `api/db.js` (`ensureCanvaAuthTable`) per la quarta.*
+*Vedi `api/history.js` (schema + auth actions) e `api/db.js` (`ensureAuthTables`, helper scrypt/cookie/sessione).*
 
 ---
 
