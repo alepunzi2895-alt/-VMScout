@@ -108,13 +108,13 @@ export default async function handler(req, res) {
       if (!/^[\p{L}\p{N}_.\- ]{2,32}$/u.test(nickname)) return res.status(400).json({ error: "INVALID_NICKNAME" });
       if (password.length < 6 || password.length > 200) return res.status(400).json({ error: "INVALID_PASSWORD" });
       const nickLower = nickname.toLowerCase();
-      const dup = await db.execute({ sql: "SELECT 1 FROM users WHERE nickname_lower=?", args: [nickLower] });
+      const dup = await db.execute({ sql: "SELECT 1 FROM vms_users WHERE nickname_lower=?", args: [nickLower] });
       if (dup.rows.length) return res.status(409).json({ error: "NICKNAME_TAKEN" });
 
-      const first = Number((await db.execute("SELECT COUNT(*) AS n FROM users")).rows[0].n) === 0;
+      const first = Number((await db.execute("SELECT COUNT(*) AS n FROM vms_users")).rows[0].n) === 0;
       const uid = crypto.randomUUID();
       const stmts = [{
-        sql: "INSERT INTO users (id, nickname, nickname_lower, pass_hash, lang) VALUES (?,?,?,?,?)",
+        sql: "INSERT INTO vms_users (id, nickname, nickname_lower, pass_hash, lang) VALUES (?,?,?,?,?)",
         args: [uid, nickname, nickLower, hashPassword(password), lang],
       }];
       if (first) {
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       const nickname = String(req.body?.nickname || "").trim().normalize("NFKC");
       const password = String(req.body?.password || "");
       const r = await db.execute({
-        sql: "SELECT id, nickname, pass_hash, lang FROM users WHERE nickname_lower=?",
+        sql: "SELECT id, nickname, pass_hash, lang FROM vms_users WHERE nickname_lower=?",
         args: [nickname.toLowerCase()],
       });
       const row = r.rows[0];
@@ -156,8 +156,8 @@ export default async function handler(req, res) {
       const raw = await createSession(db, row.id, req);
       res.setHeader("Set-Cookie", sessionSetCookie(raw));
       db.execute({
-        sql: `DELETE FROM sessions WHERE user_id=? AND token_hash NOT IN
-              (SELECT token_hash FROM sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 10)`,
+        sql: `DELETE FROM vms_sessions WHERE user_id=? AND token_hash NOT IN
+              (SELECT token_hash FROM vms_sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 10)`,
         args: [row.id, row.id],
       }).catch(() => {});
       return res.status(200).json({ ok: true, user: { id: row.id, nickname: row.nickname, lang: normLang(row.lang) } });
@@ -181,7 +181,7 @@ export default async function handler(req, res) {
     if (action === "auth_set_lang" && req.method === "POST") {
       if (badOrigin(req)) return res.status(403).json({ error: "BAD_ORIGIN" });
       const lang = normLang(req.body?.lang);
-      await db.execute({ sql: "UPDATE users SET lang=? WHERE id=?", args: [lang, me.id] });
+      await db.execute({ sql: "UPDATE vms_users SET lang=? WHERE id=?", args: [lang, me.id] });
       return res.status(200).json({ ok: true, lang });
     }
 

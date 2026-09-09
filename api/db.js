@@ -61,7 +61,7 @@ export async function ensureAuthTables(db) {
   await ensureCanvaAuthTable(db).catch(() => {});
   await ensureFbAuthTable(db).catch(() => {});
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (
+    `CREATE TABLE IF NOT EXISTS vms_users (
       id             TEXT PRIMARY KEY,
       nickname       TEXT NOT NULL,
       nickname_lower TEXT NOT NULL UNIQUE,
@@ -69,7 +69,7 @@ export async function ensureAuthTables(db) {
       lang           TEXT NOT NULL DEFAULT 'it',
       created_at     TEXT DEFAULT (datetime('now'))
     )`,
-    `CREATE TABLE IF NOT EXISTS sessions (
+    `CREATE TABLE IF NOT EXISTS vms_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id    TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
@@ -89,7 +89,7 @@ export async function ensureAuthTables(db) {
       expires_in   INTEGER,
       created_at   TEXT DEFAULT (datetime('now'))
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_user ON vms_sessions(user_id)`,
   ], "write");
   ensureAuthTables._ready = true;
 }
@@ -146,12 +146,12 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 export async function createSession(db, userId, req) {
   const raw = crypto.randomBytes(32).toString("base64url");
   await db.execute({
-    sql: `INSERT INTO sessions (token_hash, user_id, expires_at, user_agent)
+    sql: `INSERT INTO vms_sessions (token_hash, user_id, expires_at, user_agent)
           VALUES (?, ?, datetime('now','+400 days'), ?)`,
     args: [sha256(raw), userId, String(req.headers["user-agent"] || "").slice(0, 200)],
   });
   // pulizia opportunistica delle sessioni scadute di questo utente
-  db.execute({ sql: `DELETE FROM sessions WHERE user_id=? AND expires_at < datetime('now')`, args: [userId] }).catch(() => {});
+  db.execute({ sql: `DELETE FROM vms_sessions WHERE user_id=? AND expires_at < datetime('now')`, args: [userId] }).catch(() => {});
   return raw;
 }
 export const sessionSetCookie = (raw) =>
@@ -161,7 +161,7 @@ export const sessionClearCookie = () =>
 
 export async function destroySession(db, req) {
   const raw = parseCookies(req)[SESSION_COOKIE];
-  if (raw) await db.execute({ sql: "DELETE FROM sessions WHERE token_hash=?", args: [sha256(raw)] });
+  if (raw) await db.execute({ sql: "DELETE FROM vms_sessions WHERE token_hash=?", args: [sha256(raw)] });
 }
 
 // `{ id, nickname, lang }` | null
@@ -172,13 +172,13 @@ export async function getSessionUser(db, req) {
   const h = sha256(raw);
   const r = await db.execute({
     sql: `SELECT u.id, u.nickname, u.lang, s.expires_at
-          FROM sessions s JOIN users u ON u.id = s.user_id
+          FROM vms_sessions s JOIN vms_users u ON u.id = s.user_id
           WHERE s.token_hash = ?`,
     args: [h],
   });
   if (!r.rows.length) return null;
   if (new Date(r.rows[0].expires_at.replace(" ", "T") + "Z").getTime() < Date.now()) {
-    db.execute({ sql: "DELETE FROM sessions WHERE token_hash=?", args: [h] }).catch(() => {});
+    db.execute({ sql: "DELETE FROM vms_sessions WHERE token_hash=?", args: [h] }).catch(() => {});
     return null;
   }
   return { id: r.rows[0].id, nickname: r.rows[0].nickname, lang: normLang(r.rows[0].lang) };
