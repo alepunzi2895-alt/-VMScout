@@ -49,15 +49,32 @@ async function fetchPostInsights(token, post) {
     ? "reach,saved,likes,comments,shares,total_interactions,views,profile_visits,follows"
     : "reach,saved,likes,comments,shares,total_interactions,profile_visits,follows";
   const minimal = isVideo ? "reach,saved,views" : "reach,saved";
+  let m = null;
   for (const metric of [extended, minimal]) {
     const ins = await igCall(token, `${post.id}/insights`, { metric });
     if (Array.isArray(ins.data)) {
-      const m = {};
+      m = {};
       ins.data.forEach(x => { m[x.name] = x.values?.[0]?.value ?? x.total_value?.value ?? 0; });
-      return m;
+      break;
     }
   }
-  return {};
+  if (!m) return {};
+
+  // Reach per tipo di pubblico (follower / non-follower) — è l'UNICO breakdown
+  // demografico che Instagram espone a livello di singolo post. Best-effort.
+  try {
+    const rb = await igCall(token, `${post.id}/insights`, { metric: "reach", breakdown: "follow_type", metric_type: "total_value" });
+    const results = rb?.data?.[0]?.total_value?.breakdowns?.[0]?.results;
+    if (Array.isArray(results)) {
+      for (const r of results) {
+        const k = String(r.dimension_values?.[0] || "").toUpperCase();
+        if (k.includes("NON")) m.reach_non_follower = r.value || 0;
+        else if (k.includes("FOLLOW")) m.reach_follower = r.value || 0;
+      }
+    }
+  } catch { /* breakdown non disponibile per questo post/token */ }
+
+  return m;
 }
 
 // Panoramica account + (best-effort) insight aggregati e demografia follower.
@@ -484,14 +501,50 @@ const POST_METRIC_COLS = [
   { key: "follows", label: "Nuovi follow" },
 ];
 
+function ReachSplitBar({ post }) {
+  const t = useT();
+  const f = post.insights?.reach_follower;
+  const nf = post.insights?.reach_non_follower;
+  if (f == null && nf == null) {
+    return <div style={{ fontSize: 10.5, color: "#555", paddingLeft: 62, paddingTop: 4 }}>{t("an.aud.postNA")}</div>;
+  }
+  const fv = f || 0, nfv = nf || 0, tot = fv + nfv || 1;
+  const discovery = Math.round((nfv / tot) * 100);
+  const rows = [
+    { label: t("an.aud.followers"), value: fv, color: GOLD },
+    { label: t("an.aud.nonFollowers"), value: nfv, color: IG_PINK },
+  ];
+  return (
+    <div style={{ paddingLeft: 62, paddingTop: 6 }}>
+      <div style={{ fontSize: 9.5, color: WARM_GREY, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+        {t("an.aud.postTitle")} · {t("an.aud.discovery", { pct: discovery })}
+      </div>
+      {rows.map(r => (
+        <div key={r.label} style={{ marginBottom: 5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: OFF_WHITE, marginBottom: 2 }}>
+            <span>{r.label}</span>
+            <span style={{ color: r.color, fontWeight: 700 }}>{fmtNum(r.value)} · {Math.round((r.value / tot) * 100)}%</span>
+          </div>
+          <div style={{ height: 4, background: "#2a2a2a", borderRadius: 2 }}>
+            <div style={{ height: "100%", width: `${(r.value / tot) * 100}%`, background: r.color, borderRadius: 2 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AllPostsRow({ post }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const isVideo = post.media_type === "VIDEO";
   const thumb = post.thumbnail_url || post.media_url;
   const cols = POST_METRIC_COLS.filter(c => !c.videoOnly || isVideo);
+  const hasSplit = post.insights?.reach_follower != null || post.insights?.reach_non_follower != null;
   return (
     <div style={{ padding: "12px 0", borderBottom: "1px solid rgba(201,169,110,0.08)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, cursor: "pointer" }}>
+        <span style={{ fontSize: 9, color: hasSplit ? GOLD : "#444", width: 10, flexShrink: 0 }}>{open ? "▾" : "▸"}</span>
         {thumb ? (
           <img src={thumb} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 9, border: "1px solid rgba(201,169,110,0.15)", flexShrink: 0 }} />
         ) : (
@@ -513,11 +566,11 @@ function AllPostsRow({ post }) {
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, fontFamily: "'Space Grotesk', sans-serif" }}>{engRate(post).toFixed(1)}%</div>
           {post.permalink && (
-            <a href={post.permalink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: IG_PINK, textDecoration: "none" }}>apri ↗</a>
+            <a href={post.permalink} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 9, color: IG_PINK, textDecoration: "none" }}>apri ↗</a>
           )}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols.length}, 1fr)`, gap: 4, paddingLeft: 52 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols.length}, 1fr)`, gap: 4, paddingLeft: 62 }}>
         {cols.map(c => {
           const v = metric(post, c.key);
           return (
@@ -528,6 +581,7 @@ function AllPostsRow({ post }) {
           );
         })}
       </div>
+      {open && <ReachSplitBar post={post} />}
     </div>
   );
 }
@@ -620,6 +674,90 @@ function AccountOverviewPanel({ account }) {
         </div>
       ) : (
         <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>Demografia follower non disponibile (richiede &gt;100 follower o permessi insights).</div>
+      )}
+    </div>
+  );
+}
+
+// ── Pubblico raggiunto / coinvolto — demografia (età/genere/paese) ────────────
+// Instagram NON dà questi breakdown per singolo post: solo aggregati a livello
+// account su una finestra temporale (reached_audience / engaged_audience).
+const AUD_TIMEFRAMES = ["last_14_days", "last_30_days", "last_90_days"];
+
+function ReachedAudiencePanel({ token, accountId }) {
+  const t = useT();
+  const [tf, setTf] = useState("last_30_days");
+  const [state, setState] = useState("loading"); // loading | ok | empty
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    if (!token || !accountId) return;
+    let alive = true;
+    setState("loading");
+    (async () => {
+      const bd = r => r?.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? null;
+      const get = (metric, breakdown) => igCall(token, `${accountId}/insights`, {
+        metric, period: "lifetime", metric_type: "total_value", timeframe: tf, breakdown,
+      }).catch(() => null);
+      const [rc, ra, rg, ec, ea, eg] = await Promise.all([
+        get("reached_audience_demographics", "country"),
+        get("reached_audience_demographics", "age"),
+        get("reached_audience_demographics", "gender"),
+        get("engaged_audience_demographics", "country"),
+        get("engaged_audience_demographics", "age"),
+        get("engaged_audience_demographics", "gender"),
+      ]);
+      if (!alive) return;
+      const reached = { country: bd(rc), age: bd(ra), gender: bd(rg) };
+      const engaged = { country: bd(ec), age: bd(ea), gender: bd(eg) };
+      const any = [...Object.values(reached), ...Object.values(engaged)].some(x => x?.length);
+      setData({ reached, engaged });
+      setState(any ? "ok" : "empty");
+    })();
+    return () => { alive = false; };
+  }, [token, accountId, tf]);
+
+  if (!token || !accountId) return null;
+  const gLabel = g => ({ M: t("an.aud.g.M"), F: t("an.aud.g.F"), U: t("an.aud.g.U") }[g] || g);
+  const cLabel = c => COUNTRY_NAMES[c] || c;
+  const hasEngaged = data && [data.engaged.country, data.engaged.age, data.engaged.gender].some(x => x?.length);
+
+  return (
+    <div style={{ ...card, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div style={{ ...label, marginBottom: 0 }}>🌍 {t("an.aud.title")}</div>
+        <div style={{ display: "flex", gap: 4 }}>
+          {AUD_TIMEFRAMES.map(x => (
+            <button key={x} onClick={() => setTf(x)}
+              style={{ padding: "4px 9px", borderRadius: 9, border: `1px solid ${tf === x ? GOLD : "#2a2a2a"}`, background: tf === x ? `${GOLD}18` : "transparent", color: tf === x ? GOLD : WARM_GREY, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
+              {t(`an.aud.tf.${x}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {state === "loading" && <div style={{ fontSize: 11, color: WARM_GREY }}>{t("an.loading")}</div>}
+      {state === "empty" && <div style={{ fontSize: 10.5, color: "#555" }}>{t("an.aud.empty")}</div>}
+      {state === "ok" && data && (
+        <>
+          <div style={{ fontSize: 10, color: OFF_WHITE, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{t("an.aud.reached")}</div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: hasEngaged ? 18 : 0 }}>
+            <DemographicBars title={t("an.aud.country")} results={data.reached.country} mapLabel={cLabel} />
+            <DemographicBars title={t("an.aud.age")} results={data.reached.age} />
+            <DemographicBars title={t("an.aud.gender")} results={data.reached.gender} mapLabel={gLabel} />
+          </div>
+          {hasEngaged && (
+            <>
+              <div style={{ fontSize: 10, color: OFF_WHITE, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{t("an.aud.engaged")}</div>
+              <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                <DemographicBars title={t("an.aud.country")} results={data.engaged.country} mapLabel={cLabel} />
+                <DemographicBars title={t("an.aud.age")} results={data.engaged.age} />
+                <DemographicBars title={t("an.aud.gender")} results={data.engaged.gender} mapLabel={gLabel} />
+              </div>
+            </>
+          )}
+          <div style={{ fontSize: 9.5, color: "#555", marginTop: 12, lineHeight: 1.5 }}>{t("an.aud.note")}</div>
+        </>
       )}
     </div>
   );
@@ -1762,6 +1900,7 @@ REGOLE FERREE:
           </div>
 
           <AccountOverviewPanel account={account} />
+          <ReachedAudiencePanel token={token} accountId={accountId} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
             {/* Top posts */}
