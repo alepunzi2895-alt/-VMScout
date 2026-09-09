@@ -1,7 +1,10 @@
 import { useT, useLang, weekdaysShort } from "./i18n/index.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "./AuthContext.jsx";
-import { userLS } from "./userStorage.js";
+import { userLS, migrateLegacyKeys } from "./userStorage.js";
+
+const IG_LEGACY_KEYS = ["ig_token", "ig_account_id", "ig_username", "ig_profile_pic", "ig_analysis_json", "ig_posts", "ig_account"];
+const FB_ADS_LEGACY_KEYS = ["fb_ad_account", "fb_ads_list", "fb_ads_fetched_at", "fb_ads_date", "fb_ads_analysis"];
 import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
 import { MARKETING_TOOLKIT_BRIEF } from "./marketingFrameworks";
 import { directivesBlock, refineProjectDirectives } from "./projectDirectives";
@@ -808,6 +811,7 @@ function AdsPanel({ brand, igAccountId, igUsername }) {
   const t = useT();
   const { user } = useAuth();
   const uls = useMemo(() => userLS(user?.id), [user?.id]);
+  useMemo(() => migrateLegacyKeys(user?.id, FB_ADS_LEGACY_KEYS), [user?.id]);
   const [status, setStatus] = useState(null); // null=checking, {connected,...}
   const [accounts, setAccounts] = useState(null);
   const [acctId, setAcctId] = useState(() => uls.get("fb_ad_account"));
@@ -1341,6 +1345,7 @@ export default function InstagramAnalytics({ brand, onSuggestBrief }) {
   const { lang } = useLang();
   const { user } = useAuth();
   const uls = useMemo(() => userLS(user?.id), [user?.id]);
+  useMemo(() => migrateLegacyKeys(user?.id, IG_LEGACY_KEYS), [user?.id]);
   const defaultHandle = brand?.instagramHandle || "";
   const [token,      setToken]      = useState(() => uls.get("ig_token"));
   const [accountId,  setAccountId]  = useState(() => uls.get("ig_account_id"));

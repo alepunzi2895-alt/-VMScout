@@ -47,15 +47,10 @@ export function userLS(uid) {
   };
 }
 
-// Chiavi legacy (pre-multiutente) non namespacizzate: vanno ripulite al logout
-// perché altrimenti il prossimo utente le erediterebbe.
-const LEGACY_KEYS = [
-  "ig_token", "ig_account_id", "ig_username", "ig_profile_pic",
-  "ig_analysis_json", "ig_posts", "ig_account",
-  "fb_ad_account", "fb_ads_list", "fb_ads_fetched_at", "fb_ads_date", "fb_ads_analysis",
-];
-
-// Azzera tutto lo spazio di un utente + le chiavi legacy condivise.
+// Azzera SOLO lo spazio namespacizzato di un utente (al logout).
+// Le chiavi legacy NON namespacizzate non si toccano qui: le adotta
+// `migrateLegacyKeys()` al primo mount del pannello, così un utente che
+// aggiorna l'app non perde la connessione Analytics già attiva.
 userLS.clearFor = function clearFor(uid) {
   try {
     const p = prefix(uid);
@@ -65,6 +60,22 @@ userLS.clearFor = function clearFor(uid) {
       if (k && k.startsWith(p)) toRemove.push(k);
     }
     toRemove.forEach((k) => localStorage.removeItem(k));
-    LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
   } catch { /* ignore */ }
 };
+
+// Migrazione una-tantum: le vecchie chiavi non namespacizzate (`ig_token`,
+// `fb_ads_list`, …) create prima del multiutente vengono SPOSTATE nello spazio
+// dell'utente corrente (copiate in `u_<uid>_<k>` e poi rimosse dalla chiave
+// nuda). Idempotente: dopo il primo giro non c'è più nulla da spostare.
+// Va chiamata PRIMA di leggere lo stato (initializer di useState).
+export function migrateLegacyKeys(uid, keys) {
+  try {
+    const p = prefix(uid);
+    for (const k of keys) {
+      const bare = localStorage.getItem(k);
+      if (bare == null) continue;
+      if (localStorage.getItem(p + k) == null) localStorage.setItem(p + k, bare);
+      localStorage.removeItem(k);
+    }
+  } catch { /* ignore */ }
+}
