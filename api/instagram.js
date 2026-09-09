@@ -16,7 +16,7 @@ function graphHostFor(token) {
   return /^IGAA/i.test(token) ? "https://graph.instagram.com/v20.0" : "https://graph.facebook.com/v20.0";
 }
 
-import { getDb, ensureFbAuthTable } from "./db.js";
+import { getDb, ensureAuthTables, getSessionUser, signValue, verifySignedValue, parseCookies } from "./db.js";
 
 const FB_GRAPH   = "https://graph.facebook.com/v20.0";
 const fbAppId    = process.env.FB_APP_ID     || process.env.VITE_FB_APP_ID     || "";
@@ -32,9 +32,10 @@ function sanitizeToken(raw) {
   return (raw || "").replace(INVISIBLE, "");
 }
 
-async function getFbToken(db) {
-  await ensureFbAuthTable(db);
-  const r = await db.execute("SELECT access_token, created_at, expires_in FROM fb_auth WHERE id=1");
+async function getFbToken(db, userId) {
+  await ensureAuthTables(db);
+  if (!userId) { const e = new Error("AUTH_REQUIRED"); e.code = "AUTH_REQUIRED"; throw e; }
+  const r = await db.execute({ sql: "SELECT access_token, created_at, expires_in FROM fb_auth_u WHERE user_id=?", args: [userId] });
   if (!r.rows.length) { const e = new Error("FB_NOT_CONNECTED"); e.code = "FB_NOT_CONNECTED"; throw e; }
   return r.rows[0].access_token;
 }
@@ -78,8 +79,9 @@ export default async function handler(req, res) {
     if (action === "fb_status") {
       try {
         const db = getDb();
-        await ensureFbAuthTable(db);
-        const r = await db.execute("SELECT created_at, expires_in FROM fb_auth WHERE id=1");
+        const me = await getSessionUser(db, req);
+        if (!me) return res.status(200).json({ connected: false });
+        const r = await db.execute({ sql: "SELECT created_at, expires_in FROM fb_auth_u WHERE user_id=?", args: [me.id] });
         if (!r.rows.length) return res.status(200).json({ connected: false });
         const ageDays = (Date.now() - new Date(r.rows[0].created_at + "Z").getTime()) / 86400000;
         const leftDays = Math.max(0, Math.round((r.rows[0].expires_in || 5184000) / 86400 - ageDays));
@@ -88,14 +90,20 @@ export default async function handler(req, res) {
     }
 
     if (action === "fb_logout") {
-      try { const db = getDb(); await db.execute("DELETE FROM fb_auth WHERE id=1"); } catch {}
+      try {
+        const db = getDb();
+        const me = await getSessionUser(db, req);
+        if (me) await db.execute({ sql: "DELETE FROM fb_auth_u WHERE user_id=?", args: [me.id] });
+      } catch { /* ignore */ }
       res.setHeader("Set-Cookie", "fb_oauth_state=; HttpOnly; Max-Age=0; Path=/");
       return res.status(200).json({ ok: true });
     }
 
     if (action === "fb_login") {
       if (!fbAppId) return res.status(500).json({ error: "FB_APP_ID non configurato su Vercel" });
-      const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const me = await getSessionUser(getDb(), req);
+      if (!me) return res.status(401).send(page("Accedi a VMScout", "Effettua il login prima di collegare Facebook.", "#E88"));
+      const state = signValue(`${me.id}:${Math.random().toString(36).slice(2)}`);
       res.setHeader("Set-Cookie", `fb_oauth_state=${state}; HttpOnly; Secure; SameSite=Lax; Max-Age=600; Path=/`);
       const url = new URL("https://www.facebook.com/v20.0/dialog/oauth");
       url.searchParams.set("client_id", fbAppId);
@@ -108,11 +116,15 @@ export default async function handler(req, res) {
 
     // Callback OAuth: Facebook rimanda a fbRedirect con ?code&state
     if (code) {
-      const cookies = req.headers.cookie || "";
-      const m = cookies.match(/fb_oauth_state=([^;]+)/);
-      if (!m || m[1] !== req.query.state) {
+      const cookies = parseCookies(req);
+      if (!cookies.fb_oauth_state || cookies.fb_oauth_state !== req.query.state) {
         return res.status(400).send(page("Sessione scaduta", "Riprova il collegamento da VMScout.", "#E88"));
       }
+      let userId = null;
+      const v = verifySignedValue(req.query.state);
+      if (v) userId = v.split(":")[0];
+      if (!userId) { const me = await getSessionUser(getDb(), req); userId = me?.id || null; }
+      if (!userId) return res.status(400).send(page("Sessione VMScout scaduta", "Riprova dall'app.", "#E88"));
       try {
         // 1. code → token breve
         const short = await fbGraph("", "oauth/access_token", {
@@ -130,11 +142,11 @@ export default async function handler(req, res) {
         const expires = long.data?.expires_in || 5184000;
 
         const db = getDb();
-        await ensureFbAuthTable(db);
+        await ensureAuthTables(db);
         await db.execute({
-          sql: `INSERT INTO fb_auth (id, access_token, expires_in) VALUES (1, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token, expires_in=excluded.expires_in, created_at=datetime('now')`,
-          args: [finalToken, expires],
+          sql: `INSERT INTO fb_auth_u (user_id, access_token, expires_in) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET access_token=excluded.access_token, expires_in=excluded.expires_in, created_at=datetime('now')`,
+          args: [userId, finalToken, expires],
         });
         res.setHeader("Set-Cookie", "fb_oauth_state=; HttpOnly; Max-Age=0; Path=/");
         return res.status(200).send(page("✓ Facebook collegato", "Puoi chiudere questa finestra e tornare a VMScout."));
@@ -152,6 +164,9 @@ export default async function handler(req, res) {
   const body = req.body || {};
 
   if (body.fb_action) {
+    const me = await getSessionUser(getDb(), req);
+    if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
+
     // Collegamento via token incollato (fallback all'OAuth): scambia per un
     // long-lived e lo salva come farebbe il callback.
     if (body.fb_action === "connect_token") {
@@ -171,11 +186,11 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: check.data?.error?.message || "Token non valido o senza permesso ads_read." });
         }
         const db = getDb();
-        await ensureFbAuthTable(db);
+        await ensureAuthTables(db);
         await db.execute({
-          sql: `INSERT INTO fb_auth (id, access_token, expires_in) VALUES (1, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token, expires_in=excluded.expires_in, created_at=datetime('now')`,
-          args: [finalToken, expires],
+          sql: `INSERT INTO fb_auth_u (user_id, access_token, expires_in) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET access_token=excluded.access_token, expires_in=excluded.expires_in, created_at=datetime('now')`,
+          args: [me.id, finalToken, expires],
         });
         return res.status(200).json({ ok: true, long_lived: expires != null, expires_in: expires });
       } catch (e) {
@@ -184,7 +199,7 @@ export default async function handler(req, res) {
     }
 
     let token;
-    try { token = await getFbToken(getDb()); }
+    try { token = await getFbToken(getDb(), me.id); }
     catch (e) { return res.status(401).json({ error: e.code || "FB_NOT_CONNECTED", message: "Collega Facebook per le sponsorizzate." }); }
 
     try {

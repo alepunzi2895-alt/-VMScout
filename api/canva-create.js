@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import { getCanvaToken, runAutofill, uploadUrlAsset, uploadVideoUrlAsset } from "./canva-lib.js";
 
 const PEXELS_KEY = process.env.VITE_PEXELS_KEY || "";
@@ -99,9 +99,11 @@ export default async function handler(req, res) {
   }
 
   const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
   let token;
   try {
-    token = await getCanvaToken(db);
+    token = await getCanvaToken(db, me.id);
   } catch (e) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }

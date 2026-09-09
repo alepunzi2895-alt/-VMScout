@@ -17,7 +17,7 @@
 //   upload   → carica gli N media (foto: binario; video: url-asset-uploads)
 //   autofill → un job autofill sul template
 //
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import {
   getCanvaToken, runAutofill, trimTrailingPages,
   startImageUpload, checkImageUpload, uploadVideoUrlAsset,
@@ -125,9 +125,11 @@ export default async function handler(req, res) {
   }
 
   const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
   let token;
   try {
-    token = await getCanvaToken(db);
+    token = await getCanvaToken(db, me.id);
   } catch (e) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }

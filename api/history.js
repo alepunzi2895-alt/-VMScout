@@ -5,7 +5,11 @@
 // post) che si arricchisce a ogni analisi Instagram — la base del loop di
 // auto-apprendimento: ogni nuova strategia/analisi la legge prima di generare.
 
-import { getDb } from "./db.js";
+import {
+  getDb, ensureAuthTables, hashPassword, verifyPassword, DUMMY_HASH,
+  createSession, sessionSetCookie, sessionClearCookie, destroySession,
+  getSessionUser, assertOwnsProject, normLang, badOrigin,
+} from "./db.js";
 import crypto from "crypto";
 
 async function ensureTables(db) {
@@ -50,9 +54,23 @@ async function ensureTables(db) {
 
   // Colonne aggiunte dopo la creazione iniziale della tabella: ALTER lazy,
   // idempotente (SQLite lancia "duplicate column name" se già presente).
-  for (const col of ["logo TEXT"]) {
-    try { await db.execute(`ALTER TABLE projects ADD COLUMN ${col}`); } catch { /* già presente */ }
+  const ALTERS = [
+    ["projects", "logo TEXT"],
+    ["projects", "user_id TEXT"],
+    ["requests", "user_id TEXT"],
+    ["canva_designs", "user_id TEXT"],
+    ["project_insights", "user_id TEXT"],
+  ];
+  for (const [t, col] of ALTERS) {
+    try { await db.execute(`ALTER TABLE ${t} ADD COLUMN ${col}`); } catch { /* già presente */ }
   }
+  for (const ix of [
+    "CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_designs_user ON canva_designs(user_id)",
+  ]) { try { await db.execute(ix); } catch { /* ok */ } }
+
+  await ensureAuthTables(db);
 }
 
 const EMPTY_INSIGHTS = { tips: [], strengths: [], weaknesses: [], calendar: [], directives: "", directives_updated_at: null, strategy: null, ad_strategy: null };
@@ -81,24 +99,119 @@ export default async function handler(req, res) {
   try {
     await ensureTables(db);
 
+    // ═══ AUTH — pubbliche (nessuna sessione richiesta) ══════════
+    if (action === "auth_register" && req.method === "POST") {
+      if (badOrigin(req)) return res.status(403).json({ error: "BAD_ORIGIN" });
+      const nickname = String(req.body?.nickname || "").trim().normalize("NFKC");
+      const password = String(req.body?.password || "");
+      const lang = normLang(req.body?.lang);
+      if (!/^[\p{L}\p{N}_.\- ]{2,32}$/u.test(nickname)) return res.status(400).json({ error: "INVALID_NICKNAME" });
+      if (password.length < 6 || password.length > 200) return res.status(400).json({ error: "INVALID_PASSWORD" });
+      const nickLower = nickname.toLowerCase();
+      const dup = await db.execute({ sql: "SELECT 1 FROM users WHERE nickname_lower=?", args: [nickLower] });
+      if (dup.rows.length) return res.status(409).json({ error: "NICKNAME_TAKEN" });
+
+      const first = Number((await db.execute("SELECT COUNT(*) AS n FROM users")).rows[0].n) === 0;
+      const uid = crypto.randomUUID();
+      const stmts = [{
+        sql: "INSERT INTO users (id, nickname, nickname_lower, pass_hash, lang) VALUES (?,?,?,?,?)",
+        args: [uid, nickname, nickLower, hashPassword(password), lang],
+      }];
+      if (first) {
+        for (const t of ["projects", "requests", "canva_designs", "project_insights"]) {
+          stmts.push({ sql: `UPDATE ${t} SET user_id=? WHERE user_id IS NULL`, args: [uid] });
+        }
+        stmts.push(
+          { sql: `INSERT INTO canva_auth_u (user_id, access_token, refresh_token, expires_in, created_at)
+                  SELECT ?, access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1
+                  ON CONFLICT(user_id) DO NOTHING`, args: [uid] },
+          { sql: "DELETE FROM canva_auth WHERE id=1", args: [] },
+          { sql: `INSERT INTO fb_auth_u (user_id, access_token, expires_in, created_at)
+                  SELECT ?, access_token, expires_in, created_at FROM fb_auth WHERE id=1
+                  ON CONFLICT(user_id) DO NOTHING`, args: [uid] },
+          { sql: "DELETE FROM fb_auth WHERE id=1", args: [] },
+        );
+      }
+      try { await db.batch(stmts, "write"); }
+      catch (e) {
+        if (/UNIQUE|nickname_lower/.test(String(e.message))) return res.status(409).json({ error: "NICKNAME_TAKEN" });
+        throw e;
+      }
+      const raw = await createSession(db, uid, req);
+      res.setHeader("Set-Cookie", sessionSetCookie(raw));
+      return res.status(200).json({ ok: true, user: { id: uid, nickname, lang }, adopted: first });
+    }
+
+    if (action === "auth_login" && req.method === "POST") {
+      if (badOrigin(req)) return res.status(403).json({ error: "BAD_ORIGIN" });
+      const nickname = String(req.body?.nickname || "").trim().normalize("NFKC");
+      const password = String(req.body?.password || "");
+      const r = await db.execute({
+        sql: "SELECT id, nickname, pass_hash, lang FROM users WHERE nickname_lower=?",
+        args: [nickname.toLowerCase()],
+      });
+      const row = r.rows[0];
+      const ok = verifyPassword(password, row ? row.pass_hash : DUMMY_HASH);
+      if (!row || !ok) return res.status(401).json({ error: "BAD_CREDENTIALS" });
+      const raw = await createSession(db, row.id, req);
+      res.setHeader("Set-Cookie", sessionSetCookie(raw));
+      db.execute({
+        sql: `DELETE FROM sessions WHERE user_id=? AND token_hash NOT IN
+              (SELECT token_hash FROM sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 10)`,
+        args: [row.id, row.id],
+      }).catch(() => {});
+      return res.status(200).json({ ok: true, user: { id: row.id, nickname: row.nickname, lang: normLang(row.lang) } });
+    }
+
+    if (action === "auth_logout" && req.method === "POST") {
+      await destroySession(db, req).catch(() => {});
+      res.setHeader("Set-Cookie", sessionClearCookie());
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === "auth_me" && req.method === "GET") {
+      const u = await getSessionUser(db, req);
+      return res.status(200).json({ ok: true, user: u });
+    }
+
+    // ═══ Tutto il resto richiede una sessione ══════════════════
+    const me = await getSessionUser(db, req);
+    if (!me) return res.status(401).json({ error: "AUTH_REQUIRED" });
+
+    if (action === "auth_set_lang" && req.method === "POST") {
+      if (badOrigin(req)) return res.status(403).json({ error: "BAD_ORIGIN" });
+      const lang = normLang(req.body?.lang);
+      await db.execute({ sql: "UPDATE users SET lang=? WHERE id=?", args: [lang, me.id] });
+      return res.status(200).json({ ok: true, lang });
+    }
+
+    const own = async (projectId, opts) => {
+      try { await assertOwnsProject(db, me.id, projectId, opts); return null; }
+      catch (e) { res.status(e.status || 500).json({ error: e.message }); return e; }
+    };
+
     // ─── PROJECTS ──────────────────────────────────────────────
     if (action === "projects" && req.method === "GET") {
-      const rows = await db.execute("SELECT * FROM projects ORDER BY updated_at DESC");
+      const rows = await db.execute({ sql: "SELECT * FROM projects WHERE user_id=? ORDER BY updated_at DESC", args: [me.id] });
       return res.status(200).json({ ok: true, data: rows.rows });
     }
 
     if (action === "save_project" && req.method === "POST") {
       const { id, name, sector, description, tone, instagramHandle, hashtags, logo, canvaTemplates } = req.body;
       if (!id || !name) return res.status(400).json({ error: "Mancano id o name" });
+      const existing = await db.execute({ sql: "SELECT user_id FROM projects WHERE id=?", args: [id] });
+      if (existing.rows.length && existing.rows[0].user_id && existing.rows[0].user_id !== me.id) {
+        return res.status(403).json({ error: "FORBIDDEN" });
+      }
       await db.execute({
-        sql: `INSERT INTO projects (id, name, sector, description, tone, instagram_handle, hashtags, logo, canva_templates, updated_at)
-              VALUES (?,?,?,?,?,?,?,?,?, datetime('now'))
+        sql: `INSERT INTO projects (id, user_id, name, sector, description, tone, instagram_handle, hashtags, logo, canva_templates, updated_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?, datetime('now'))
               ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, sector=excluded.sector, description=excluded.description,
                 tone=excluded.tone, instagram_handle=excluded.instagram_handle,
                 hashtags=excluded.hashtags, logo=excluded.logo, canva_templates=excluded.canva_templates,
                 updated_at=excluded.updated_at`,
-        args: [id, name, sector || "", description || "", tone || "", instagramHandle || "", hashtags || "", logo || "", JSON.stringify(canvaTemplates || {})],
+        args: [id, me.id, name, sector || "", description || "", tone || "", instagramHandle || "", hashtags || "", logo || "", JSON.stringify(canvaTemplates || {})],
       });
       return res.status(200).json({ ok: true });
     }
@@ -106,9 +219,11 @@ export default async function handler(req, res) {
     if (action === "delete_project" && req.method === "DELETE") {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: "Manca id" });
-      await db.execute({ sql: "DELETE FROM projects WHERE id=?", args: [id] });
-      await db.execute({ sql: "DELETE FROM requests WHERE project_id=?", args: [id] });
-      await db.execute({ sql: "DELETE FROM canva_designs WHERE project_id=?", args: [id] });
+      if (await own(id, { allowMissing: true })) return;
+      await db.execute({ sql: "DELETE FROM projects WHERE id=? AND user_id=?", args: [id, me.id] });
+      await db.execute({ sql: "DELETE FROM requests WHERE project_id=? AND user_id=?", args: [id, me.id] });
+      await db.execute({ sql: "DELETE FROM canva_designs WHERE project_id=? AND user_id=?", args: [id, me.id] });
+      await db.execute({ sql: "DELETE FROM project_insights WHERE project_id=? AND user_id=?", args: [id, me.id] });
       return res.status(200).json({ ok: true });
     }
 
@@ -116,9 +231,10 @@ export default async function handler(req, res) {
     // vuoti, nessun template Canva valorizzato e nessun dato associato
     // (richieste AI / insight / design). Provabilmente sicuro.
     if (action === "cleanup_empty_projects" && req.method === "POST") {
-      const r = await db.execute(`
+      const r = await db.execute({ args: [me.id], sql: `
         DELETE FROM projects
-        WHERE (name IS NULL OR name = '' OR name = 'Il Mio Brand')
+        WHERE user_id = ?
+          AND (name IS NULL OR name = '' OR name = 'Il Mio Brand')
           AND COALESCE(sector,'') = '' AND COALESCE(description,'') = ''
           AND COALESCE(tone,'') = '' AND COALESCE(instagram_handle,'') = ''
           AND COALESCE(hashtags,'') = '' AND COALESCE(logo,'') = ''
@@ -129,7 +245,7 @@ export default async function handler(req, res) {
           AND id NOT IN (SELECT DISTINCT project_id FROM requests WHERE project_id IS NOT NULL)
           AND id NOT IN (SELECT project_id FROM project_insights)
           AND id NOT IN (SELECT DISTINCT project_id FROM canva_designs WHERE project_id IS NOT NULL)
-      `);
+      ` });
       return res.status(200).json({ ok: true, deleted: Number(r.rowsAffected || 0) });
     }
 
@@ -137,21 +253,21 @@ export default async function handler(req, res) {
     if (action === "save_request" && req.method === "POST") {
       const { project_id, type, prompt, result_json } = req.body;
       if (!type || !prompt) return res.status(400).json({ error: "Mancano type o prompt" });
+      if (await own(project_id, { allowMissing: true })) return;
       const result = await db.execute({
-        sql: "INSERT INTO requests (project_id, type, prompt, result_json) VALUES (?,?,?,?)",
-        args: [project_id || null, type, prompt, JSON.stringify(result_json ?? null)],
+        sql: "INSERT INTO requests (project_id, user_id, type, prompt, result_json) VALUES (?,?,?,?,?)",
+        args: [project_id || null, me.id, type, prompt, JSON.stringify(result_json ?? null)],
       });
       return res.status(200).json({ ok: true, id: Number(result.lastInsertRowid) });
     }
 
     if (action === "history" && req.method === "GET") {
       const { project_id, type, limit } = req.query;
-      let sql = "SELECT * FROM requests";
-      const where = [];
-      const args = [];
+      const where = ["user_id = ?"];
+      const args = [me.id];
       if (project_id) { where.push("project_id = ?"); args.push(project_id); }
       if (type) { where.push("type = ?"); args.push(type); }
-      if (where.length) sql += " WHERE " + where.join(" AND ");
+      let sql = "SELECT * FROM requests WHERE " + where.join(" AND ");
       sql += " ORDER BY created_at DESC LIMIT ?";
       args.push(Number(limit) || 50);
       const rows = await db.execute({ sql, args });
@@ -161,7 +277,7 @@ export default async function handler(req, res) {
     if (action === "delete_request" && req.method === "DELETE") {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: "Manca id" });
-      await db.execute({ sql: "DELETE FROM requests WHERE id=?", args: [id] });
+      await db.execute({ sql: "DELETE FROM requests WHERE id=? AND user_id=?", args: [id, me.id] });
       return res.status(200).json({ ok: true });
     }
 
@@ -169,18 +285,19 @@ export default async function handler(req, res) {
     if (action === "save_design" && req.method === "POST") {
       const { project_id, kind, format, title, design_url, thumb_url, slides } = req.body;
       if (!design_url) return res.status(400).json({ error: "Manca design_url" });
+      if (await own(project_id, { allowMissing: true })) return;
       const result = await db.execute({
-        sql: "INSERT INTO canva_designs (project_id, kind, format, title, design_url, thumb_url, slides) VALUES (?,?,?,?,?,?,?)",
-        args: [project_id || null, kind || "design", format || null, title || null, design_url, thumb_url || null, slides != null ? Number(slides) : null],
+        sql: "INSERT INTO canva_designs (project_id, user_id, kind, format, title, design_url, thumb_url, slides) VALUES (?,?,?,?,?,?,?,?)",
+        args: [project_id || null, me.id, kind || "design", format || null, title || null, design_url, thumb_url || null, slides != null ? Number(slides) : null],
       });
       return res.status(200).json({ ok: true, id: Number(result.lastInsertRowid) });
     }
 
     if (action === "designs" && req.method === "GET") {
       const { project_id, limit } = req.query;
-      let sql = "SELECT * FROM canva_designs";
-      const args = [];
-      if (project_id) { sql += " WHERE project_id = ?"; args.push(project_id); }
+      let sql = "SELECT * FROM canva_designs WHERE user_id = ?";
+      const args = [me.id];
+      if (project_id) { sql += " AND project_id = ?"; args.push(project_id); }
       sql += " ORDER BY created_at DESC LIMIT ?";
       args.push(Number(limit) || 60);
       const rows = await db.execute({ sql, args });
@@ -190,7 +307,7 @@ export default async function handler(req, res) {
     if (action === "delete_design" && req.method === "DELETE") {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: "Manca id" });
-      await db.execute({ sql: "DELETE FROM canva_designs WHERE id=?", args: [id] });
+      await db.execute({ sql: "DELETE FROM canva_designs WHERE id=? AND user_id=?", args: [id, me.id] });
       return res.status(200).json({ ok: true });
     }
 
@@ -198,7 +315,8 @@ export default async function handler(req, res) {
     if (action === "get_insights" && req.method === "GET") {
       const { project_id } = req.query;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
-      const rows = await db.execute({ sql: "SELECT data, updated_at FROM project_insights WHERE project_id=?", args: [project_id] });
+      if (await own(project_id, { allowMissing: true })) return;
+      const rows = await db.execute({ sql: "SELECT data, updated_at FROM project_insights WHERE project_id=? AND user_id=?", args: [project_id, me.id] });
       if (!rows.rows.length) return res.status(200).json({ ok: true, data: null });
       let data = EMPTY_INSIGHTS;
       try { data = { ...EMPTY_INSIGHTS, ...JSON.parse(rows.rows[0].data) }; } catch {}
@@ -210,7 +328,8 @@ export default async function handler(req, res) {
     if (action === "save_directives" && req.method === "POST") {
       const { project_id, directives } = req.body;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
-      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      if (await own(project_id, { allowMissing: true })) return;
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=? AND user_id=?", args: [project_id, me.id] });
       let current = EMPTY_INSIGHTS;
       if (existing.rows.length) {
         try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
@@ -218,9 +337,9 @@ export default async function handler(req, res) {
       current.directives = String(directives || "").slice(0, MAX_DIRECTIVES_CHARS);
       current.directives_updated_at = new Date().toISOString();
       await db.execute({
-        sql: `INSERT INTO project_insights (project_id, data, updated_at) VALUES (?,?,datetime('now'))
+        sql: `INSERT INTO project_insights (project_id, user_id, data, updated_at) VALUES (?,?,?,datetime('now'))
               ON CONFLICT(project_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
-        args: [project_id, JSON.stringify(current)],
+        args: [project_id, me.id, JSON.stringify(current)],
       });
       return res.status(200).json({ ok: true, data: current });
     }
@@ -228,8 +347,9 @@ export default async function handler(req, res) {
     if (action === "merge_insights" && req.method === "POST") {
       const { project_id, tips, strengths, weaknesses, calendar_entries, directives, strategy, ad_strategy } = req.body;
       if (!project_id) return res.status(400).json({ error: "Manca project_id" });
+      if (await own(project_id, { allowMissing: true })) return;
 
-      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=? AND user_id=?", args: [project_id, me.id] });
       let current = EMPTY_INSIGHTS;
       if (existing.rows.length) {
         try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
@@ -277,9 +397,9 @@ export default async function handler(req, res) {
       }
 
       await db.execute({
-        sql: `INSERT INTO project_insights (project_id, data, updated_at) VALUES (?,?,datetime('now'))
+        sql: `INSERT INTO project_insights (project_id, user_id, data, updated_at) VALUES (?,?,?,datetime('now'))
               ON CONFLICT(project_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
-        args: [project_id, JSON.stringify(current)],
+        args: [project_id, me.id, JSON.stringify(current)],
       });
       return res.status(200).json({ ok: true, data: current });
     }
@@ -287,22 +407,23 @@ export default async function handler(req, res) {
     if (action === "update_calendar_status" && req.method === "POST") {
       const { project_id, entry_id, status } = req.body;
       if (!project_id || !entry_id) return res.status(400).json({ error: "Mancano project_id o entry_id" });
-      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=?", args: [project_id] });
+      if (await own(project_id, { allowMissing: true })) return;
+      const existing = await db.execute({ sql: "SELECT data FROM project_insights WHERE project_id=? AND user_id=?", args: [project_id, me.id] });
       if (!existing.rows.length) return res.status(404).json({ error: "Nessun insight per questo progetto" });
       let current = EMPTY_INSIGHTS;
       try { current = { ...EMPTY_INSIGHTS, ...JSON.parse(existing.rows[0].data) }; } catch {}
       current.calendar = (current.calendar || []).map(e => e.id === entry_id ? { ...e, status: status || "generato" } : e);
       await db.execute({
-        sql: "UPDATE project_insights SET data=?, updated_at=datetime('now') WHERE project_id=?",
-        args: [JSON.stringify(current), project_id],
+        sql: "UPDATE project_insights SET data=?, updated_at=datetime('now') WHERE project_id=? AND user_id=?",
+        args: [JSON.stringify(current), project_id, me.id],
       });
       return res.status(200).json({ ok: true, data: current });
     }
 
     if (action === "stats" && req.method === "GET") {
       const [projCount, reqCount] = await Promise.all([
-        db.execute("SELECT COUNT(*) as n FROM projects"),
-        db.execute("SELECT COUNT(*) as n, MAX(created_at) as last FROM requests"),
+        db.execute({ sql: "SELECT COUNT(*) as n FROM projects WHERE user_id=?", args: [me.id] }),
+        db.execute({ sql: "SELECT COUNT(*) as n, MAX(created_at) as last FROM requests WHERE user_id=?", args: [me.id] }),
       ]);
       return res.status(200).json({
         ok: true,

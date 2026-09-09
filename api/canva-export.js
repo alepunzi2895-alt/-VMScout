@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import { getCanvaToken, runAutofill } from "./canva-lib.js";
 
 async function uploadImageFromUrl(imageUrl, accessToken) {
@@ -40,9 +40,11 @@ export default async function handler(req, res) {
   }
 
   const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
   let accessToken;
   try {
-    accessToken = await getCanvaToken(db);
+    accessToken = await getCanvaToken(db, me.id);
   } catch (e) {
     return res.status(401).json({
       error: e.code || "CANVA_NOT_CONNECTED",

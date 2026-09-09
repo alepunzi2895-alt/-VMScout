@@ -3,7 +3,7 @@
 // prova piccola e riporta ogni risposta grezza di Canva + i tempi, così si vede
 // esattamente dove si blocca ("Il design compare senza sfondo" ecc.).
 
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import { getCanvaToken } from "./canva-lib.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
@@ -15,9 +15,12 @@ export default async function handler(req, res) {
   const log = [];
   const mark = (label, extra = {}) => log.push({ label, t_ms: Date.now() - t0, ...extra });
 
+  const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) { res.status(401).json({ error: "AUTH_REQUIRED" }); return; }
   let token;
   try {
-    token = await getCanvaToken(getDb());
+    token = await getCanvaToken(db, me.id);
     mark("token ok", { preview: token.slice(0, 12) + "…" });
   } catch (e) {
     return res.status(200).json({ ok: false, step: "token", error: e.code || e.message, log });

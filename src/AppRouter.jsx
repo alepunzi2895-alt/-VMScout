@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { BrandProvider, useBrand } from "./BrandContext.jsx";
+import { AuthProvider, useAuth, LANGS } from "./AuthContext.jsx";
+import LoginScreen from "./LoginScreen.jsx";
 import Home from "./Home.jsx";
 import VisualMarketingScout from "./App.jsx";
 import InstagramAnalytics from "./InstagramAnalytics.jsx";
@@ -9,6 +11,7 @@ import CanvaMark from "./CanvaMark.jsx";
 import BrandAvatar from "./BrandAvatar.jsx";
 
 const GOLD = "#C9A96E";
+const FLAGS = { it: "🇮🇹", en: "🇬🇧", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪" };
 
 const TABS = [
   { id: "home", label: "Home", icon: "◈" },
@@ -122,6 +125,47 @@ function Nav({ activeApp, setActiveApp }) {
           )}
         </div>
       )}
+
+      <UserMenu />
+    </div>
+  );
+}
+
+function UserMenu() {
+  const { user, lang, setLang, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    function h(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  if (!user) return null;
+  return (
+    <div ref={ref} style={{ position: "relative", marginRight: 12, flexShrink: 0 }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 20,
+          border: `1px solid ${open ? GOLD + "45" : "rgba(201,169,110,0.18)"}`, background: open ? `${GOLD}08` : "transparent", cursor: "pointer" }}>
+        <span style={{ fontSize: 12 }}>{FLAGS[lang]}</span>
+        <span style={{ fontSize: 11, color: "#A0988E", fontFamily: "'Space Grotesk', sans-serif", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.nickname}</span>
+        <span style={{ fontSize: 8, color: "#555" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#0E0E0E", border: "1px solid #1E1E1E", borderRadius: 16, padding: 8, minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.55)", zIndex: 1001 }}>
+          <div style={{ display: "flex", gap: 4, padding: "4px 4px 8px", flexWrap: "wrap" }}>
+            {LANGS.map(l => (
+              <button key={l} onClick={() => setLang(l)}
+                style={{ padding: "4px 7px", borderRadius: 9, border: `1px solid ${lang === l ? GOLD + "55" : "#262626"}`, background: lang === l ? GOLD + "14" : "transparent", cursor: "pointer", fontSize: 13 }}>
+                {FLAGS[l]}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => { setOpen(false); logout(); }}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "none", background: "transparent", color: "#C4704F", cursor: "pointer", textAlign: "left", fontSize: 12, fontFamily: "'Space Grotesk', sans-serif" }}>
+            ↩ Esci
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -154,10 +198,27 @@ function AppContent() {
   );
 }
 
-export default function AppRouter() {
+function Gate() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A0A0A", color: GOLD, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: "0.3em", fontSize: 11 }}>
+        ◈ VMSCOUT
+      </div>
+    );
+  }
+  if (!user) return <LoginScreen />;
   return (
     <BrandProvider>
       <AppContent />
     </BrandProvider>
+  );
+}
+
+export default function AppRouter() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   );
 }

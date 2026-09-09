@@ -7,7 +7,7 @@
 //   GET  /v1/autofills/{jobId}    → polling finché status = "success"
 // e richiede un ID di **Brand Template** (non l'ID di un design).
 
-import { ensureCanvaAuthTable } from "./db.js";
+import { ensureAuthTables } from "./db.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
 
@@ -49,11 +49,13 @@ async function canvaGet(token, path) {
 //
 // (Sta in canva-lib.js e non in un file suo per non superare il limite di
 // Serverless Functions del deploy: ogni file in api/ conta come funzione.)
-export async function getCanvaToken(db) {
-  await ensureCanvaAuthTable(db);
-  const r = await db.execute(
-    "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth WHERE id=1"
-  );
+export async function getCanvaToken(db, userId) {
+  await ensureAuthTables(db);
+  if (!userId) { const e = new Error("AUTH_REQUIRED"); e.code = "AUTH_REQUIRED"; throw e; }
+  const r = await db.execute({
+    sql: "SELECT access_token, refresh_token, expires_in, created_at FROM canva_auth_u WHERE user_id=?",
+    args: [userId],
+  });
   if (!r.rows.length) {
     const e = new Error("CANVA_NOT_CONNECTED"); e.code = "CANVA_NOT_CONNECTED"; throw e;
   }
@@ -90,8 +92,8 @@ export async function getCanvaToken(db) {
   }
 
   await db.execute({
-    sql: "UPDATE canva_auth SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE id=1",
-    args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600],
+    sql: "UPDATE canva_auth_u SET access_token=?, refresh_token=?, expires_in=?, created_at=datetime('now') WHERE user_id=?",
+    args: [td.access_token, td.refresh_token || row.refresh_token, td.expires_in || 3600, userId],
   });
   return td.access_token;
 }

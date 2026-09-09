@@ -4,7 +4,7 @@
 // il link, aggiunge foto/testo e li collega ai campi Autofill (quel passaggio
 // è editor-only, l'API di Canva non lo espone).
 
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import { getCanvaToken } from "./canva-lib.js";
 
 const CANVA_API = "https://api.canva.com/rest/v1";
@@ -20,9 +20,11 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
 
   const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
   let token;
   try {
-    token = await getCanvaToken(db);
+    token = await getCanvaToken(db, me.id);
   } catch (e) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }

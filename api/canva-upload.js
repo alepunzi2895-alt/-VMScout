@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb, getSessionUser } from "./db.js";
 import { getCanvaToken, bustedUrl, startBytesUpload, checkImageUpload } from "./canva-lib.js";
 
 const CANVA_API_BASE = "https://api.canva.com/rest/v1";
@@ -100,9 +100,11 @@ export default async function handler(req, res) {
   if (!url && !b64) return res.status(400).json({ error: "Manca url o b64" });
 
   const db = getDb();
+  const me = await getSessionUser(db, req);
+  if (!me) return res.status(401).json({ error: "AUTH_REQUIRED", message: "Accedi a VMScout." });
   let token;
   try {
-    token = await getCanvaToken(db);
+    token = await getCanvaToken(db, me.id);
   } catch (e) {
     return res.status(401).json({ error: e.code || "AUTH_ERROR", message: "Canva non connesso o sessione scaduta. Disconnetti e riconnetti Canva." });
   }
