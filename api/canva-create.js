@@ -88,6 +88,7 @@ export default async function handler(req, res) {
   const {
     caption, search_query, format = "post", cta,
     templateId, imageUrl: bodyImageUrl, videoUrl: bodyVideoUrl, mediaType, resume,
+    assetId: bodyAssetId, // asset Canva già caricato dal client (es. clip video ritagliata)
   } = req.body || {};
   if (!caption) return res.status(400).json({ error: "Manca caption" });
   if (!templateId) {
@@ -138,6 +139,15 @@ export default async function handler(req, res) {
         assetId: up.assetId, assetKind: resume.assetKind || "image",
         mediaUrl: resume.mediaUrl,
         mediaWarning: up.assetId ? null : (up.error || `${isVid ? "Video" : "Immagine"} non caricato su Canva.`),
+        deadline,
+      });
+    }
+
+    // ── Fresh: asset già caricato dal client (clip ritagliata) ────
+    if (bodyAssetId) {
+      return await runAutofillPhase({
+        res, token, templateId, caption, cta,
+        assetId: bodyAssetId, assetKind: mediaType === "video" ? "video" : "image",
         deadline,
       });
     }

@@ -1651,19 +1651,21 @@ function StoryPhotoPicker({ query, imgUrl, source, onPick, onSourceChange }) {
   );
 }
 
-// Modale: da post_composer / storyboard → UN design Story a N pagine 9:16.
-// Ogni frame è foto O video (suggerimenti per entrambi), sul template Story.
+// Modale: da post_composer / storyboard → N story 9:16 sul template Story.
+// Le Story su Instagram sono frame separati → una story (un design) per frame.
+// Ogni frame è foto O video (suggerimenti per entrambi); i video ritagliati a
+// STORY_CLIP_SEC nel browser (MediaRecorder).
 function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }) {
   const templateId = canvaTemplates?.story || "";
   const [rows, setRows] = useState([]);
   const [state, setState] = useState("idle");
-  const [url, setUrl] = useState(null);
+  const [results, setResults] = useState([]);
   const [errMsg, setErrMsg] = useState("");
   const [progress, setProgress] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setState("idle"); setUrl(null); setErrMsg(""); setProgress("");
+    setState("idle"); setResults([]); setErrMsg(""); setProgress("");
     setRows((frames || []).slice(0, STORY_MAX).map(f => ({
       caption: f.caption || "",
       search_query: f.search_query || "",
@@ -1683,82 +1685,88 @@ function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }
   const setTrim = (i, a, b) => setRows(p => p.map((r, idx) => idx === i ? { ...r, trimStart: a, trimEnd: b } : r));
   const setVidSource = (i, s) => setRows(p => p.map((r, idx) => idx === i ? { ...r, vid_source: s, video_url: null, trimStart: 0, trimEnd: STORY_CLIP_SEC } : r));
 
+  // Una clip video ritagliata [a,b] → asset Canva (o null se non applicabile).
+  async function trimUpload(r, i, warnings) {
+    if (!r.video_url) return null;
+    const a = r.trimStart || 0;
+    const b = Math.max(a + 0.3, r.trimEnd || STORY_CLIP_SEC);
+    try {
+      setProgress(`Frame ${i + 1}/${rows.length} · registro la clip (${(b - a).toFixed(1)}s)…`);
+      const { blob } = await recordVideoSegment(r.video_url, a, b);
+      if (blob.size > 3.8 * 1024 * 1024) {
+        warnings.push(`Frame ${i + 1}: clip troppo grande (${(blob.size / 1048576).toFixed(1)}MB) — uso il video intero.`);
+        return null;
+      }
+      setProgress(`Frame ${i + 1}/${rows.length} · carico la clip su Canva…`);
+      const up = await fetch("/api/canva-upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-story-${i + 1}.mp4` }),
+      }).then(x => x.json());
+      if (up.assetId) return up.assetId;
+      warnings.push(`Frame ${i + 1}: ${up.message || "upload clip fallito"} — uso il video intero.`);
+      return null;
+    } catch (e) {
+      warnings.push(`Frame ${i + 1}: ritaglio non applicato (${e.message || "errore"}) — uso il video intero.`);
+      return null;
+    }
+  }
+
   async function handleCreate() {
-    setState("loading"); setErrMsg(""); setProgress("Preparazione…");
+    setState("loading"); setErrMsg(""); setResults([]); setProgress("Preparazione…");
     const warnings = [];
-    const prepared = [];
+    const out = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const base = { caption: r.caption, search_query: r.search_query, media_kind: r.media_kind };
-      if (r.media_kind === "image") {
-        prepared.push({ ...base, image_url: r.img_url || undefined });
-        continue;
-      }
-      // video: se scelto, ritaglia [trimStart,trimEnd] nel browser e carica
-      if (!r.video_url) { prepared.push({ ...base, video_source: r.vid_source }); continue; }
-      const a = r.trimStart || 0;
-      const b = Math.max(a + 0.3, r.trimEnd || STORY_CLIP_SEC);
+      const isVideo = r.media_kind === "video";
+      const assetId = isVideo ? await trimUpload(r, i, warnings) : null;
+      const body = {
+        caption: (r.caption || "").trim() || r.search_query || "Story", // il backend richiede una caption
+        search_query: r.search_query,
+        format: "story",
+        templateId,
+        mediaType: isVideo ? "video" : "image",
+        ...(assetId ? { assetId } : {}),
+        ...(!isVideo && r.img_url ? { imageUrl: r.img_url } : {}),
+        ...(isVideo && !assetId && r.video_url ? { videoUrl: r.video_url } : {}),
+      };
+      setProgress(`Frame ${i + 1}/${rows.length} · creo la story su Canva…`);
+      const giveUpAt = Date.now() + 4 * 60_000;
+      let resume, frameUrl = null, frameErr = null;
       try {
-        setProgress(`Registro la clip del frame ${i + 1}/${rows.length}… (${(b - a).toFixed(1)}s)`);
-        const { blob, ext } = await recordVideoSegment(r.video_url, a, b);
-        if (blob.size > 3.8 * 1024 * 1024) {
-          warnings.push(`Frame ${i + 1}: clip troppo grande (${(blob.size / 1048576).toFixed(1)}MB), uso il video intero.`);
-          prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
-          continue;
-        }
-        setProgress(`Carico su Canva il frame ${i + 1}/${rows.length}…`);
-        const up = await fetch("/api/canva-upload", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-story-${i + 1}.${ext}` }),
-        }).then(x => x.json());
-        if (up.assetId) prepared.push({ ...base, asset_id: up.assetId });
-        else {
-          warnings.push(`Frame ${i + 1}: ${up.message || "upload fallito"} — uso il video intero.`);
-          prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
-        }
-      } catch (e) {
-        warnings.push(`Frame ${i + 1}: ritaglio non applicato (${e.message || "errore"}) — uso il video intero.`);
-        prepared.push({ ...base, video_url: r.video_url, video_source: r.vid_source });
-      }
-    }
-
-    const baseBody = { slides: prepared, carouselTemplateId: templateId, format: "story" };
-    const giveUpAt = Date.now() + 6 * 60_000;
-    let resume;
-    try {
-      while (true) {
-        const res = await fetch("/api/canva-carousel", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(resume ? { ...baseBody, resume } : baseBody),
-        });
-        const data = await res.json();
-        if (data.pending) {
-          setProgress(data.phase === "autofill" ? "Composizione delle story in Canva…" : "Caricamento media su Canva…");
-          if (Date.now() > giveUpAt) { setErrMsg("Canva ci sta mettendo troppo. Riprova tra qualche minuto."); setState("idle"); break; }
-          resume = data.resume;
-          await new Promise(x => setTimeout(x, 3500));
-          continue;
-        }
-        if (data.ok) {
-          setUrl(data.url); setState("done");
-          const w = [...warnings, data.imageWarning].filter(Boolean);
-          if (w.length) setErrMsg("⚠ " + w.join(" · "));
-          saveCanvaDesign({
-            project_id: projectId || null, kind: "story", format: "story",
-            title: `Story ${rows.length} frame`, design_url: data.url, slides: rows.length,
+        while (true) {
+          const res = await fetch("/api/canva-create", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(resume ? { ...body, resume } : body),
           });
-        } else if (data.error === "CANVA_NOT_CONNECTED") {
-          window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700"); setState("idle");
-        } else if (data.error === "TEMPLATE_NOT_SET") {
-          setErrMsg(data.message); setState("idle");
-        } else {
-          setErrMsg(data.message || "Errore durante la creazione delle story."); setState("idle");
+          const data = await res.json();
+          if (data.pending) {
+            if (Date.now() > giveUpAt) { frameErr = "Canva troppo lento"; break; }
+            resume = data.resume; await new Promise(x => setTimeout(x, 3000)); continue;
+          }
+          if (data.ok) {
+            frameUrl = data.url;
+            if (data.imageWarning) warnings.push(`Frame ${i + 1}: ${data.imageWarning}`);
+          } else if (data.error === "CANVA_NOT_CONNECTED") {
+            window.open("/api/canva-auth?action=login", "_blank", "width=600,height=700");
+            frameErr = "Canva non connesso";
+          } else if (data.error === "TEMPLATE_NOT_SET") {
+            setErrMsg(data.message); setState("idle"); setProgress(""); return;
+          } else {
+            frameErr = data.message || "errore";
+          }
+          break;
         }
-        break;
-      }
-    } catch (e) {
-      setErrMsg(e.message || "Errore di rete."); setState("idle");
-    } finally { setProgress(""); }
+      } catch (e) { frameErr = e.message || "errore di rete"; }
+      out.push({ url: frameUrl, error: frameErr, kind: r.media_kind });
+      setResults([...out]);
+      if (frameUrl) saveCanvaDesign({
+        project_id: projectId || null, kind: "story", format: "story",
+        title: (r.caption || `Story frame ${i + 1}`).slice(0, 60), design_url: frameUrl,
+      });
+    }
+    const w = [...warnings, ...out.map((x, i) => x.error ? `Frame ${i + 1}: ${x.error}` : null).filter(Boolean)];
+    if (w.length) setErrMsg("⚠ " + w.join(" · "));
+    setState("done"); setProgress("");
   }
 
   if (!open) return null;
@@ -1773,7 +1781,7 @@ function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }
           <button onClick={() => onOpenChange(false)} style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
         <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 12 }}>
-          Un frame per pagina, 9:16, sul template Story. Per ogni frame scegli <b style={{ color: "#777" }}>foto o video</b>: i suggerimenti arrivano per entrambi. I video vengono ritagliati nel browser a {STORY_CLIP_SEC}s.
+          Una story (9:16, template Story) per frame — su Instagram le story sono card separate. Per ogni frame scegli <b style={{ color: "#777" }}>foto o video</b>: i suggerimenti arrivano per entrambi. I video vengono ritagliati nel browser a {STORY_CLIP_SEC}s.
         </div>
 
         {!templateId && (
@@ -1820,11 +1828,26 @@ function StoryComposer({ frames, canvaTemplates, projectId, open, onOpenChange }
 
         {errMsg && <div style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(180,60,60,0.1)", border: "1px solid rgba(180,60,60,0.2)", color: "#E47070", fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{errMsg}</div>}
 
-        {state === "done" && url ? (
-          <a href={url} target="_blank" rel="noopener noreferrer"
-            style={{ display: "block", padding: "12px", borderRadius: 12, textAlign: "center", textDecoration: "none", border: "1px solid rgba(90,186,90,0.35)", background: "rgba(90,186,90,0.1)", color: "#5ABA5A", fontSize: 13, fontWeight: 700 }}>
-            ✓ Apri le story in Canva →
-          </a>
+        {results.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+            {results.map((r, i) => r.url ? (
+              <a key={i} href={r.url} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 10, textDecoration: "none", border: "1px solid rgba(90,186,90,0.3)", background: "rgba(90,186,90,0.08)", color: "#5ABA5A", fontSize: 12, fontWeight: 600 }}>
+                ✓ Story {i + 1} ({r.kind === "video" ? "🎬" : "🖼"}) — apri in Canva →
+              </a>
+            ) : (
+              <div key={i} style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(180,60,60,0.2)", background: "rgba(180,60,60,0.08)", color: "#E47070", fontSize: 12 }}>
+                ✗ Story {i + 1}: {r.error || "non creata"}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {state === "done" ? (
+          <button onClick={handleCreate} disabled={!rows.length || !templateId}
+            style={{ width: "100%", padding: "10px", borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "1px solid #333", background: "transparent", color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif" }}>
+            ↻ Ricrea
+          </button>
         ) : (
           <button onClick={handleCreate} disabled={state === "loading" || !rows.length || !templateId}
             style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !rows.length || !templateId ? "not-allowed" : "pointer", border: "1px solid #E1306C45", background: "rgba(225,48,108,0.12)", color: "#E1306C", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !rows.length || !templateId ? 0.5 : 1 }}>
