@@ -21,7 +21,30 @@ function nameWithExt(name, url) {
   return name + ".jpg";
 }
 
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
 export default async function handler(req, res) {
+  // ── GET ?src=<url> → proxy dei byte di un video (Pexels blocca l'hotlink
+  //    dal browser; qui aggiungiamo header "da browser" e li restituiamo). ──
+  if (req.method === "GET") {
+    const src = req.query.src;
+    if (!src || !/^https?:\/\//i.test(src)) return res.status(400).json({ error: "src mancante o non valido" });
+    try {
+      const host = new URL(src).hostname;
+      const ref = host.includes("pexels") ? "https://www.pexels.com/"
+        : host.includes("pixabay") ? "https://pixabay.com/"
+        : undefined;
+      const up = await fetch(src, { headers: { "User-Agent": BROWSER_UA, "Accept": "video/mp4,video/*,*/*", ...(ref ? { Referer: ref } : {}) } });
+      if (!up.ok) return res.status(502).json({ error: `sorgente ${up.status}` });
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.setHeader("Content-Type", up.headers.get("content-type") || "video/mp4");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.status(200).send(buf);
+    } catch (e) {
+      return res.status(502).json({ error: e.message });
+    }
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
   const { url, b64, name = "vmscout-media" } = req.body || {};

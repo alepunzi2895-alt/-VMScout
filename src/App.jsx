@@ -1102,10 +1102,19 @@ function loadFFmpeg() {
 }
 
 // Ritaglia [start,end] dell'URL video → Blob mp4 (keyframe-snapped, veloce).
+// I byte del video passano dal nostro proxy (`/api/canva-upload?src=`) perché
+// Pexels blocca l'hotlink cross-origin dal browser.
 async function trimVideoToBlob(url, start, end) {
   const { ff, fetchFile } = await loadFFmpeg();
   const dur = Math.max(0.3, end - start);
-  ff.FS("writeFile", "in.mp4", await fetchFile(url));
+  const viaProxy = `/api/canva-upload?src=${encodeURIComponent(url)}`;
+  let bytes;
+  try {
+    bytes = await fetchFile(viaProxy);
+  } catch {
+    bytes = await fetchFile(url); // fallback: prova diretto (Pixabay ok)
+  }
+  ff.FS("writeFile", "in.mp4", bytes);
   try {
     await ff.run("-ss", String(start.toFixed(2)), "-i", "in.mp4", "-t", String(dur.toFixed(2)),
       "-c:v", "copy", "-an", "-movflags", "+faststart", "out.mp4");
