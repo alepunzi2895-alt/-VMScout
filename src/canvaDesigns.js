@@ -28,16 +28,21 @@ export async function listCanvaDesigns(projectId) {
   }
 }
 
-export async function deleteCanvaDesign(id) {
+// Elimina il design dallo storico VMScout e (se `alsoCanva`) lo sposta nel
+// Cestino di Canva. Restituisce `{ ok, canva }` dove `canva` è l'esito del
+// tentativo lato Canva (`null` se non applicabile, `{ ok:false, code:"SCOPE" }`
+// se manca il permesso folder:write).
+export async function deleteCanvaDesign(id, { alsoCanva = true } = {}) {
   try {
-    await fetch("/api/history?action=delete_design", {
+    const res = await fetch("/api/history?action=delete_design", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, also_canva: alsoCanva }),
     });
-    return true;
+    const d = await res.json().catch(() => ({}));
+    return { ok: res.ok, canva: d.canva ?? null };
   } catch (e) {
     console.warn("[canvaDesigns] eliminazione fallita:", e.message);
-    return false;
+    return { ok: false, canva: null };
   }
 }

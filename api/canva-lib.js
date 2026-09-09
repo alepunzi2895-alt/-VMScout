@@ -383,6 +383,60 @@ export function cleanTemplateId(raw) {
     .split(/[/?#\s]/)[0];
 }
 
+// Estrae l'ID design da un URL Canva (`canva.com/design/<ID>/edit`).
+export function canvaDesignIdFromUrl(url) {
+  const m = String(url || "").match(/\/design\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : cleanTemplateId(url) || null;
+}
+
+// Sposta un design nel Cestino di Canva.
+//
+// La Canva Connect API NON ha un endpoint "delete design". Il giro valido è:
+//   1. POST /v1/folders               → crea una cartella usa-e-getta
+//   2. POST /v1/folders/move          → sposta il design dentro la cartella
+//   3. DELETE /v1/folders/{id}        → Canva sposta il contenuto nel Cestino
+// Il design finisce nel Cestino di Canva (recuperabile ~30gg, come quando si
+// elimina dall'editor). Richiede lo scope OAuth `folder:write`.
+// Best-effort: `{ ok, trashed }` | `{ ok:false, code, message }`.
+export async function trashCanvaDesign(db, userId, designId) {
+  if (!designId) return { ok: false, code: "NO_ID", message: "ID design mancante." };
+  let token;
+  try { token = await getCanvaToken(db, userId); }
+  catch (e) { return { ok: false, code: e.code || "CANVA_NOT_CONNECTED", message: "Canva non collegato." }; }
+
+  const jsonHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  try {
+    const fr = await fetch(`${CANVA_API}/folders`, {
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ name: `VMScout · eliminati ${Date.now().toString(36)}`, parent_folder_id: "root" }),
+    });
+    if (fr.status === 401 || fr.status === 403) {
+      return { ok: false, code: "SCOPE", message: "Permesso Canva mancante (folder:write). In Impostazioni → Canva disconnetti e riconnetti." };
+    }
+    const fd = await fr.json().catch(() => ({}));
+    const folderId = fd?.folder?.id;
+    if (!folderId) return { ok: false, code: "FOLDER", message: `Canva non ha creato la cartella (HTTP ${fr.status}).` };
+
+    const mr = await fetch(`${CANVA_API}/folders/move`, {
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ to_folder_id: folderId, item_id: designId }),
+    });
+    const moveOk = mr.ok;
+    const moveErr = moveOk ? null : await mr.json().catch(() => ({}));
+
+    // Elimina la cartella comunque: se il move è andato, il design va nel
+    // Cestino; se non è andato, almeno non lasciamo cartelle vuote in giro.
+    await fetch(`${CANVA_API}/folders/${folderId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+
+    if (!moveOk) {
+      return { ok: false, code: "MOVE", message: moveErr?.message || `Canva non ha spostato il design (HTTP ${mr.status}).` };
+    }
+    return { ok: true, trashed: true };
+  } catch (e) {
+    return { ok: false, code: "NET", message: e.message };
+  }
+}
+
 // Il dataset del Brand Template: nomi dei campi di autofill e tipo. Canva
 // RIFIUTA le chiavi non presenti nel dataset, quindi filtriamo `data` prima
 // di inviarlo (il backend manda anche alias tipo Caption/Background).

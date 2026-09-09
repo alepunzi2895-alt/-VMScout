@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     url.searchParams.set("client_id",             clientId);
     url.searchParams.set("response_type",         "code");
     url.searchParams.set("redirect_uri",          redirectUri);
-    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write");
+    url.searchParams.set("scope",                 "design:content:write design:meta:read asset:read asset:write folder:write");
     url.searchParams.set("code_challenge_method", "S256");
     url.searchParams.set("code_challenge",        challenge);
     url.searchParams.set("state",                 state);

@@ -10,6 +10,7 @@ import {
   createSession, sessionSetCookie, sessionClearCookie, destroySession,
   getSessionUser, assertOwnsProject, normLang, badOrigin, getAppConfig,
 } from "./db.js";
+import { trashCanvaDesign, canvaDesignIdFromUrl } from "./canva-lib.js";
 import crypto from "crypto";
 
 async function ensureTables(db) {
@@ -355,8 +356,16 @@ export default async function handler(req, res) {
     if (action === "delete_design" && req.method === "DELETE") {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: "Manca id" });
+      // `also_canva` (default true): sposta anche il design nel Cestino di Canva.
+      const alsoCanva = req.body.also_canva !== false;
+      let canva = null;
+      if (alsoCanva) {
+        const row = await db.execute({ sql: "SELECT design_url FROM canva_designs WHERE id=? AND user_id=?", args: [id, me.id] });
+        const designId = row.rows.length ? canvaDesignIdFromUrl(row.rows[0].design_url) : null;
+        if (designId) canva = await trashCanvaDesign(db, me.id, designId).catch((e) => ({ ok: false, code: "ERR", message: e.message }));
+      }
       await db.execute({ sql: "DELETE FROM canva_designs WHERE id=? AND user_id=?", args: [id, me.id] });
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, canva });
     }
 
     // ─── PROJECT INSIGHTS (memoria di progetto per il loop di auto-apprendimento) ─

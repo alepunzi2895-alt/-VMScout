@@ -252,6 +252,7 @@ function CreatedDesignsPanel({ brand }) {
   const { lang } = useLang();
   const [designs, setDesigns] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [note, setNote] = useState("");
 
   async function load() {
     setDesigns(null);
@@ -263,9 +264,14 @@ function CreatedDesignsPanel({ brand }) {
   async function remove(id) {
     if (!window.confirm(t("canva.designs.removeConfirm"))) return;
     setBusyId(id);
-    await deleteCanvaDesign(id);
+    setNote("");
+    const r = await deleteCanvaDesign(id);
     setDesigns(d => (d || []).filter(x => x.id !== id));
     setBusyId(null);
+    if (r.canva?.ok) setNote(t("canva.designs.trashedOnCanva"));
+    else if (r.canva?.code === "SCOPE") setNote(t("canva.designs.canvaScope"));
+    else if (r.canva && !r.canva.ok) setNote(t("canva.designs.canvaFail"));
+    if (r.canva) setTimeout(() => setNote(""), 6000);
   }
 
   return (
@@ -279,6 +285,12 @@ function CreatedDesignsPanel({ brand }) {
       <div style={{ fontSize: 11, color: "#3A3A3A", marginBottom: 18, lineHeight: 1.6 }}>
         {t("canva.designs.desc")}
       </div>
+
+      {note && (
+        <div style={{ fontSize: 11, color: "#C9BEA8", background: "#141414", border: "1px solid #2A2A2A", borderRadius: 10, padding: "8px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+          {note}
+        </div>
+      )}
 
       {designs === null && <div style={{ fontSize: 12, color: "#555" }}>{t("common.loading")}</div>}
       {designs && !designs.length && (
