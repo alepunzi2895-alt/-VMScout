@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { MARKETING_TOOLKIT } from "./marketingFrameworks";
 import { saveCanvaDesign, listCanvaDesigns } from "./canvaDesigns";
 import { directivesBlock, refineProjectDirectives } from "./projectDirectives";
+import { useT } from "./i18n/index.jsx";
 
 // Claude a volte antepone/pospone del testo al JSON nonostante l'istruzione
 // "solo JSON": invece di assumere che l'intera stringa ripulita sia JSON puro,
@@ -754,6 +755,7 @@ function RowImagePicker({ query, imageUrl, onPick, source: sourceProp, onSourceC
 // una pagina da un design Canva già creato (ne riusa foto + titolo). Un solo
 // autofill del template carosello.
 function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: openProp, onOpenChange, photoSource, originalBrief }) {
+  const tc = useT();
   // Un solo design: il Brand Template carosello ha 6 pagine con campi
   // Immagine_1..6 (sfondo foto) + Testo_1..6, compilati in un unico autofill.
   const templateId = canvaTemplates?.carousel || canvaTemplates?.post || "";
@@ -958,7 +960,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
       {!controlled && (
         <button onClick={() => setOpen(true)}
           style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-          ✦ Componi carosello su Canva ({(initialSlides || []).length} slide)
+          {tc("scout.compose.carousel", { n: (initialSlides || []).length })}
         </button>
       )}
 
@@ -1058,7 +1060,7 @@ function CarouselComposer({ initialSlides, canvaTemplates, projectId, open: open
             ) : (
               <button onClick={handleCreate} disabled={state === "loading" || !pages.length}
                 style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !pages.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !pages.length ? 0.5 : 1 }}>
-                {state === "loading" ? `⏳ ${progress || "Compongo il carosello…"}` : `✦ Crea carosello (${pages.length} pagine)`}
+                {state === "loading" ? `⏳ ${progress || tc("scout.creating.carousel")}` : tc("scout.create.carousel", { n: pages.length })}
               </button>
             )}
           </div>
@@ -1397,6 +1399,7 @@ function RowVideoPicker({ query, videoUrl, source, onPick, onSourceChange }) {
 
 // Carosello di VIDEO su Canva a partire dallo storyboard (tab Video Storytelling).
 function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, originalBrief, open, onOpenChange }) {
+  const tc = useT();
   const templateId = canvaTemplates?.carousel || canvaTemplates?.post || "";
   const [rows, setRows] = useState([]);
   const [state, setState] = useState("idle");
@@ -1611,7 +1614,7 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, origin
         ) : (
           <button onClick={handleCreate} disabled={state === "loading" || !rows.length}
             style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !rows.length ? "not-allowed" : "pointer", border: "1px solid #00C4CC45", background: "rgba(0,196,204,0.12)", color: "#00C4CC", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !rows.length ? 0.5 : 1 }}>
-            {state === "loading" ? `⏳ ${progress || "Compongo il carosello video…"}` : `🎬 Crea carosello video (${rows.length} scene)`}
+            {state === "loading" ? `⏳ ${progress || tc("scout.creating.videoCarousel")}` : tc("scout.create.videoCarousel", { n: rows.length })}
           </button>
         )}
       </div>
@@ -1682,6 +1685,7 @@ function StoryPhotoPicker({ query, imgUrl, source, onPick, onSourceChange }) {
 // Ogni frame è foto O video (suggerimenti per entrambi); i video ritagliati a
 // STORY_CLIP_SEC nel browser (MediaRecorder).
 function StoryComposer({ frames, canvaTemplates, projectId, originalBrief, open, onOpenChange }) {
+  const tc = useT();
   const templateId = canvaTemplates?.story || "";
   const [rows, setRows] = useState([]);
   const [state, setState] = useState("idle");
@@ -1890,7 +1894,7 @@ function StoryComposer({ frames, canvaTemplates, projectId, originalBrief, open,
         ) : (
           <button onClick={handleCreate} disabled={state === "loading" || !rows.length || !templateId}
             style={{ width: "100%", padding: "12px", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: state === "loading" || !rows.length || !templateId ? "not-allowed" : "pointer", border: "1px solid #E1306C45", background: "rgba(225,48,108,0.12)", color: "#E1306C", fontFamily: "'Space Grotesk', sans-serif", opacity: state === "loading" || !rows.length || !templateId ? 0.5 : 1 }}>
-            {state === "loading" ? `⏳ ${progress || "Compongo le story…"}` : `◫ Crea Story su Canva (${rows.length} frame)`}
+            {state === "loading" ? `⏳ ${progress || tc("scout.creating.story")}` : tc("scout.create.story", { n: rows.length })}
           </button>
         )}
       </div>
@@ -2162,12 +2166,14 @@ Respond ONLY with JSON: {"caption":"…","search_query":"…"}. No markdown fenc
 // Pulsante "⟳ Riformula" che si espande in un campo per dare indicazioni
 // specifiche ("più diretto", "togli l'emoji", "parla del prezzo"…). `onRegen`
 // riceve la stringa di indicazioni (vuota = versione nuova a caso).
-function RegenBox({ loading, onRegen, color = "#B46432", label = "Riformula" }) {
+function RegenBox({ loading, onRegen, color = "#B46432", label }) {
+  const t = useT();
+  label = label || t("scout.regen");
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const go = () => { onRegen(notes.trim()); setOpen(false); setNotes(""); };
   if (loading) {
-    return <span style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap", padding: "7px 4px" }}>⟳ Rigenero…</span>;
+    return <span style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "'Space Grotesk', sans-serif", whiteSpace: "nowrap", padding: "7px 4px" }}>{t("scout.regen.working")}</span>;
   }
   if (!open) {
     return (
@@ -2181,11 +2187,11 @@ function RegenBox({ loading, onRegen, color = "#B46432", label = "Riformula" }) 
     <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 200 }}>
       <input value={notes} onChange={e => setNotes(e.target.value)} autoFocus
         onKeyDown={e => { if (e.key === "Enter") go(); if (e.key === "Escape") { setOpen(false); setNotes(""); } }}
-        placeholder="Cosa cambiare? (opzionale — es. più diretto, cita il prezzo)"
+        placeholder={t("scout.regen.placeholder")}
         style={{ flex: 1, minWidth: 160, background: "rgba(139,115,85,0.06)", border: `1px solid ${color}33`, borderRadius: 10, padding: "6px 10px", color: "#3D3225", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif" }} />
       <button type="button" onClick={go}
         style={{ padding: "6px 12px", borderRadius: 10, border: "none", background: color, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-        ⟳ Vai
+        {t("scout.regen.go")}
       </button>
       <button type="button" onClick={() => { setOpen(false); setNotes(""); }}
         style={{ background: "none", border: "none", color: "#999", fontSize: 15, cursor: "pointer", lineHeight: 1 }}>×</button>
@@ -2195,15 +2201,16 @@ function RegenBox({ loading, onRegen, color = "#B46432", label = "Riformula" }) 
 
 // Variante scura per i modali compositore (carosello / story).
 function RegenBoxDark({ loading, onRegen, color = "#00C4CC" }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const go = () => { onRegen(notes.trim()); setOpen(false); setNotes(""); };
-  if (loading) return <span style={{ fontSize: 10, color, fontFamily: "'Space Grotesk', sans-serif" }}>⟳ Rigenero…</span>;
+  if (loading) return <span style={{ fontSize: 10, color, fontFamily: "'Space Grotesk', sans-serif" }}>{t("scout.regen.working")}</span>;
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
         style={{ padding: "3px 9px", borderRadius: 8, border: `1px solid ${color}44`, background: "transparent", color, fontSize: 9.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}>
-        ⟳ Riformula
+        ⟳ {t("scout.regen")}
       </button>
     );
   }
@@ -2211,9 +2218,9 @@ function RegenBoxDark({ loading, onRegen, color = "#00C4CC" }) {
     <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1, minWidth: 180, marginTop: 4 }}>
       <input value={notes} onChange={e => setNotes(e.target.value)} autoFocus
         onKeyDown={e => { if (e.key === "Enter") go(); if (e.key === "Escape") { setOpen(false); setNotes(""); } }}
-        placeholder="Cosa cambiare? (opzionale)"
+        placeholder={t("scout.regen.placeholder")}
         style={{ flex: 1, minWidth: 120, background: "#141414", border: "1px solid #262626", borderRadius: 8, padding: "5px 8px", color: "#F0EBE3", fontSize: 10.5, fontFamily: "'Space Grotesk', sans-serif" }} />
-      <button type="button" onClick={go} style={{ padding: "5px 9px", borderRadius: 8, border: "none", background: color, color: "#001", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Vai</button>
+      <button type="button" onClick={go} style={{ padding: "5px 9px", borderRadius: 8, border: "none", background: color, color: "#001", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>{t("scout.regen.go").replace("⟳ ", "")}</button>
       <button type="button" onClick={() => { setOpen(false); setNotes(""); }} style={{ background: "none", border: "none", color: "#666", fontSize: 13, cursor: "pointer" }}>×</button>
     </div>
   );
@@ -2315,6 +2322,7 @@ function SlidePreviewImages({ query, orientation, sourceKey }) {
 }
 
 function PostsTab({ data, onRegen, regenKey, brand, originalBrief }) {
+  const tt = useT();
   const { post_composer, orientation } = data;
   const [lang, setLang] = useState("it");
   const [platform, setPlatform] = useState("instagram");
@@ -2367,7 +2375,7 @@ function PostsTab({ data, onRegen, regenKey, brand, originalBrief }) {
       {(brand?.canvaTemplates?.post || brand?.canvaTemplates?.carousel) && post_composer.length > 1 && (
         <button onClick={() => setCarouselOpen(true)}
           style={{ width: "100%", padding: "11px 16px", marginBottom: 16, borderRadius: 14, border: "1px solid rgba(0,196,204,0.35)", background: "linear-gradient(135deg, rgba(0,196,204,0.14), rgba(0,196,204,0.06))", color: "#00C4CC", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          🖼 Componi carosello su Canva ({post_composer.length} slide, foto suggerite già caricate)
+          {tt("scout.compose.carouselLoaded", { n: post_composer.length })}
         </button>
       )}
 
@@ -2494,7 +2502,7 @@ function PostsTab({ data, onRegen, regenKey, brand, originalBrief }) {
         {(brand?.canvaTemplates?.post || brand?.canvaTemplates?.carousel) ? (
           <button onClick={() => setCarouselOpen(true)}
             style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,196,204,0.3)", background: "rgba(0,196,204,0.07)", color: "#00C4CC", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-            🖼 Componi carosello su Canva ({post_composer.length} slide)
+            {tt("scout.compose.carousel", { n: post_composer.length })}
           </button>
         ) : (
           <span title='Configura il "Template Post" in Canva Studio (sfondo Immagine_Sfondo + testo Testo_Post/Caption)'
@@ -2569,6 +2577,7 @@ function SceneVideoPlayer({ query, sourceKey }) {
 }
 
 function VideoTab({ data, brand, onRegen, regenKey, originalBrief }) {
+  const tt = useT();
   const vs = data.video_storytelling;
   const [lang, setLang] = useState("it");
   const [videoSource, setVideoSource] = useState("pexels_video");
@@ -2602,7 +2611,7 @@ function VideoTab({ data, brand, onRegen, regenKey, originalBrief }) {
       {(brand?.canvaTemplates?.carousel || brand?.canvaTemplates?.post) && vs.scenes.length > 1 && (
         <button onClick={() => setVcOpen(true)}
           style={{ width: "100%", padding: "11px 16px", marginBottom: 16, borderRadius: 14, border: "1px solid rgba(0,196,204,0.35)", background: "linear-gradient(135deg, rgba(0,196,204,0.14), rgba(0,196,204,0.06))", color: "#00C4CC", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          🎬 Componi carosello video su Canva ({vs.scenes.length} scene · video già caricati)
+          {tt("scout.compose.videoCarousel", { n: vs.scenes.length })}
         </button>
       )}
       <VideoCarouselComposer scenes={vs.scenes} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} lang={lang} originalBrief={originalBrief} open={vcOpen} onOpenChange={setVcOpen} />
@@ -2695,6 +2704,7 @@ function VideoTab({ data, brand, onRegen, regenKey, originalBrief }) {
 // TAB: STORY (9:16)
 // ─────────────────────────────────────────────────
 function StoryTab({ data, brand, originalBrief }) {
+  const tt = useT();
   const [lang, setLang] = useState("it");
   const [scOpen, setScOpen] = useState(false);
   const [photoSource, setPhotoSource] = useState(() => defaultPhotoSource() || "unsplash");
@@ -2749,7 +2759,7 @@ function StoryTab({ data, brand, originalBrief }) {
 
       <button onClick={() => setScOpen(true)} disabled={!hasTemplate}
         style={{ width: "100%", padding: "11px 16px", marginBottom: 8, borderRadius: 14, border: "1px solid rgba(225,48,108,0.35)", background: "linear-gradient(135deg, rgba(225,48,108,0.14), rgba(225,48,108,0.06))", color: "#E1306C", fontSize: 12.5, fontWeight: 700, cursor: hasTemplate ? "pointer" : "not-allowed", opacity: hasTemplate ? 1 : 0.5, fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-        ◫ Componi Story su Canva ({frames.length} frame · foto o video)
+        {tt("scout.compose.story", { n: frames.length })}
       </button>
       {!hasTemplate && <div style={{ fontSize: 10.5, color: "#8B7355", marginBottom: 14 }}>Imposta il template <b>Story</b> in Canva Studio per attivarlo.</div>}
       <StoryComposer frames={frames} canvaTemplates={brand?.canvaTemplates} projectId={brand?.id} originalBrief={originalBrief} open={scOpen} onOpenChange={setScOpen} />
@@ -2924,6 +2934,7 @@ function SponsorTab({ data }) {
 // STRATEGY MESSAGE (MAIN WRAPPER)
 // ─────────────────────────────────────────────────
 function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
+  const t = useT();
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedSource, setSelectedSource] = useState("unsplash");
   const [imageCache, setImageCache] = useState({});
@@ -2960,12 +2971,12 @@ function StrategyMessage({ data, onUpdateData, originalBrief, brand }) {
   };
 
   const tabs = [
-    { id: "strategy", label: "Strategia", icon: "◈" },
-    { id: "piano", label: "Piano", icon: "📅", show: !!data.editorial_plan },
-    { id: "posts", label: "Post", icon: "◻", show: data.post_composer?.length > 0 },
-    { id: "story", label: "Story", icon: "◫", show: data.post_composer?.length > 0 || !!data.video_storytelling?.scenes },
-    { id: "video", label: "Video", icon: "▶", show: !!data.video_storytelling?.scenes },
-    { id: "sponsor", label: "Sponsor", icon: "🎯", show: !!data.ad_targeting },
+    { id: "strategy", label: t("scout.tab.strategy"), icon: "◈" },
+    { id: "piano", label: t("scout.tab.plan"), icon: "📅", show: !!data.editorial_plan },
+    { id: "posts", label: t("scout.tab.posts"), icon: "◻", show: data.post_composer?.length > 0 },
+    { id: "story", label: t("scout.tab.story"), icon: "◫", show: data.post_composer?.length > 0 || !!data.video_storytelling?.scenes },
+    { id: "video", label: t("scout.tab.video"), icon: "▶", show: !!data.video_storytelling?.scenes },
+    { id: "sponsor", label: t("scout.tab.sponsor"), icon: "🎯", show: !!data.ad_targeting },
   ].filter(t => t.show !== false);
 
   return (
@@ -3016,6 +3027,7 @@ async function saveToHistory({ project_id, type, prompt, result_json }) {
 }
 
 export default function VisualMarketingScout({ brand, initialBrief, onConsumeInitialBrief }) {
+  const t = useT();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3168,20 +3180,20 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
             <div style={{ fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>◈ Visual Marketing Scout</div>
             <button onClick={() => setShowApiSetup(!showApiSetup)}
               style={{ fontSize: 9, padding: "3px 10px", borderRadius: 9, border: "1px solid rgba(139,115,85,.3)", background: anyKey ? "rgba(90,186,90,.1)" : "rgba(139,115,85,.1)", color: anyKey ? "#5ABA5A" : "#B5A88A", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
-              {anyKey ? "● API" : "○ API Setup"}
+              {anyKey ? t("scout.apiOn") : t("scout.apiOff")}
             </button>
           </div>
           <h1 style={{ fontSize: messages.length ? 28 : 42, fontWeight: 400, color: "#F0EBE3", margin: 0, lineHeight: 1.15, transition: "font-size .4s ease" }}>
-            Trova l'immagine giusta.<br /><em style={{ fontStyle: "italic", color: "#8B7355" }}>Quella vera.</em>
+            {t("scout.hero1")}<br /><em style={{ fontStyle: "italic", color: "#8B7355" }}>{t("scout.hero2")}</em>
           </h1>
           {!messages.length && <p style={{ fontSize: 14, color: "#8B7355", marginTop: 16, fontFamily: "'Space Grotesk', sans-serif", maxWidth: 500, margin: "16px auto 0", lineHeight: 1.6 }}>
-            Descrivi il tuo obiettivo di marketing. Riceverai strategia visiva, caption pronte per i post, storyboard video e query per Unsplash, Pexels e Pixabay.
+            {t("scout.heroSub")}
           </p>}
         </header>
 
         {(insights?.strategy || insights?.directives?.trim()) && (
           <div style={{ margin: "0 auto 20px", maxWidth: 520, padding: "8px 14px", borderRadius: 12, background: "rgba(0,196,204,0.07)", border: "1px solid rgba(0,196,204,0.2)", color: "#7FD8DC", fontSize: 11, lineHeight: 1.5, textAlign: "center", fontFamily: "'Space Grotesk', sans-serif" }}>
-            ↳ Sto usando la memoria di {brand?.name || "questo progetto"}
+            {t("scout.usingMemory", { name: brand?.name || t("scout.thisProject") })}
             {insights?.strategy?.winning_formats?.length ? ` · formati: ${insights.strategy.winning_formats.slice(0, 3).join(", ")}` : ""}
             {insights?.strategy?.content_pillars?.length ? ` · pilastri: ${insights.strategy.content_pillars.slice(0, 3).join(", ")}` : ""}
             {insights?.strategy?.best_slot ? ` · orario: ${insights.strategy.best_slot}` : ""}
@@ -3190,9 +3202,9 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
 
         {showApiSetup && (
           <div style={{ animation: "fadeSlideUp .3s ease-out", margin: "0 0 24px", padding: 18, background: "#FBF8F3", borderRadius: 18, border: "1px solid rgba(139,115,85,.15)", fontFamily: "'Space Grotesk', sans-serif" }}>
-            <SectionLabel>🔑 API Keys — Anteprima Immagini</SectionLabel>
+            <SectionLabel>{t("scout.apiTitle")}</SectionLabel>
             <p style={{ fontSize: 12, color: "#6B5B45", marginBottom: 14, lineHeight: 1.5, marginTop: 0 }}>
-              Senza keys l'app funziona comunque — i link aprono le ricerche sui siti. Con le keys attivi le anteprime inline delle foto.
+              {t("scout.apiDesc")}
             </p>
             {[
               { key: "unsplash", label: "Unsplash Access Key", url: "https://unsplash.com/developers" },
@@ -3202,14 +3214,14 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "#3D3225" }}>{label}</label>
-                  <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#8B7355" }}>Ottieni key ↗</a>
+                  <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#8B7355" }}>{t("scout.apiGetKey")}</a>
                 </div>
-                <input type="password" placeholder={`Incolla ${label}...`} defaultValue={API_KEYS[key]}
+                <input type="password" placeholder={t("scout.apiPaste", { label })} defaultValue={API_KEYS[key]}
                   onChange={e => { API_KEYS[key] = e.target.value; }}
                   style={{ width: "100%", padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(139,115,85,.2)", background: "#F5F0E8", fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#3D3225" }} />
               </div>
             ))}
-            <div style={{ fontSize: 10, color: "#999", marginTop: 8, lineHeight: 1.4 }}>Le keys restano solo nel browser e non vengono salvate su nessun server.</div>
+            <div style={{ fontSize: 10, color: "#999", marginTop: 8, lineHeight: 1.4 }}>{t("scout.apiPrivacy")}</div>
           </div>
         )}
 
@@ -3241,9 +3253,9 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
                       {a.requestId != null && (
-                        <button onClick={() => deleteExchange(ex.assistantIdx)} title="Elimina questa domanda e risposta"
+                        <button onClick={() => deleteExchange(ex.assistantIdx)} title={t("scout.deleteExchange")}
                           style={{ fontSize: 10, color: "#B45050", background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", fontFamily: "'JetBrains Mono', monospace" }}>
-                          🗑 Elimina
+                          🗑 {t("common.delete")}
                         </button>
                       )}
                     </div>
@@ -3259,7 +3271,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "#8B7355", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>◈ Scout</div>
                     <div style={{ display: "inline-block", padding: "14px 20px", borderRadius: "4px 18px 18px 18px", background: "#FFFCF5", border: "1px solid rgba(139,115,85,.12)" }}>
                       <TypingDots />
-                      <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif", marginTop: 4 }}>Strategia, caption e storyboard in arrivo...</div>
+                      <div style={{ fontSize: 11, color: "#8B7355", fontFamily: "'Space Grotesk', sans-serif", marginTop: 4 }}>{t("scout.incoming")}</div>
                     </div>
                   </div>
                 )}
@@ -3273,7 +3285,7 @@ export default function VisualMarketingScout({ brand, initialBrief, onConsumeIni
           <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea className="vms-input" value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Descrivi il tuo obiettivo di marketing..." rows={1} disabled={loading}
+              placeholder={t("scout.inputPlaceholder")} rows={1} disabled={loading}
               style={{ flex: 1, padding: "14px 18px", borderRadius: 20, border: "1.5px solid rgba(139,115,85,.2)", background: "#FFFCF5", fontSize: 14, fontFamily: "'Space Grotesk', sans-serif", color: "#2C2418", resize: "none", lineHeight: 1.5 }}
               onInput={e => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
             <button onClick={() => sendMessage()} disabled={loading || !input.trim()}
