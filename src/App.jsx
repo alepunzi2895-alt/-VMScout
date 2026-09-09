@@ -1080,24 +1080,73 @@ const fmtT = (sec) => {
 const VIDEO_SOURCE_KEYS = Object.keys(VIDEO_SOURCES);
 const videoSourceHasApi = (k) => !!(VIDEO_SOURCES[k]?.apiUrl && API_KEYS[k.split("_")[0]]);
 
-// I video di Pexels ecc. non si possono hotlinkare dal browser → passa dal proxy.
-const proxiedVideo = (url) => url && /^https?:\/\//i.test(url) ? `/api/canva-upload?pv=2&src=${encodeURIComponent(url)}` : url;
+// I video di Pexels ecc. non si possono hotlinkare dal browser (403 con Origin).
+// Il proxy serverless NON regge il seeking del tag <video> (una riproduzione =
+// decine di richieste di range → 503). Perciò: scarichiamo UNA volta l'intera
+// rendition (piccola) a finestre di 2MB, ne facciamo un Blob e usiamo il
+// blob: URL — che il <video> può cercare/riprodurre in locale senza rete.
+const _videoBlobCache = new Map(); // url originale → Promise<{ bytes, blobUrl }>
 
-// Miniatura video: mostra il POSTER (immagine, carica sempre) e monta il <video>
-// (via proxy, pesante) SOLO al click. Evita di aprire decine di stream verso la
-// nostra serverless function quando in pagina ci sono molte griglie di anteprime.
+async function fetchProxiedFull(url) {
+  const proxy = `/api/canva-upload?pv=2&src=${encodeURIComponent(url)}`;
+  const parts = [];
+  let offset = 0, total = Infinity;
+  while (offset < total) {
+    const r = await fetch(proxy, { headers: { Range: `bytes=${offset}-` } });
+    if (!r.ok && r.status !== 206 && r.status !== 200) throw new Error(`proxy ${r.status}`);
+    const cr = r.headers.get("content-range");
+    if (cr) { const t = Number(cr.split("/")[1]); if (Number.isFinite(t)) total = t; }
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (!buf.length) break;
+    parts.push(buf);
+    offset += buf.length;
+    if (!cr && r.status === 200) break; // risposta intera
+  }
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let p = 0; for (const b of parts) { out.set(b, p); p += b.length; }
+  return out;
+}
+
+function getVideoBlob(url) {
+  if (!url) return Promise.reject(new Error("no url"));
+  if (!_videoBlobCache.has(url)) {
+    _videoBlobCache.set(url, fetchProxiedFull(url).then(bytes => ({
+      bytes,
+      blobUrl: URL.createObjectURL(new Blob([bytes], { type: "video/mp4" })),
+    })).catch(e => { _videoBlobCache.delete(url); throw e; }));
+  }
+  return _videoBlobCache.get(url);
+}
+
+// Hook: da un URL remoto → blob: URL locale (scarica una volta, poi cache).
+function useVideoBlobUrl(url) {
+  const [state, setState] = useState({ loading: !!url, blobUrl: null, error: null });
+  useEffect(() => {
+    if (!url) { setState({ loading: false, blobUrl: null, error: null }); return; }
+    let alive = true;
+    setState({ loading: true, blobUrl: null, error: null });
+    getVideoBlob(url).then(({ blobUrl }) => { if (alive) setState({ loading: false, blobUrl, error: null }); })
+      .catch(e => { if (alive) setState({ loading: false, blobUrl: null, error: e.message || "errore" }); });
+    return () => { alive = false; };
+  }, [url]);
+  return state;
+}
+
+// Miniatura video: mostra il POSTER (immagine, carica sempre) e scarica il video
+// (via proxy, una volta) SOLO al click.
 function HoverVideoThumb({ poster, videoUrl, style, children }) {
   const [play, setPlay] = useState(false);
+  const { loading, blobUrl, error } = useVideoBlobUrl(play ? videoUrl : null);
   return (
     <div style={{ position: "relative", background: "#000", ...style }}>
-      {play ? (
-        <video src={proxiedVideo(videoUrl)} autoPlay loop muted playsInline controls
+      {play && blobUrl ? (
+        <video src={blobUrl} autoPlay loop muted playsInline controls
           style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
-        <button type="button" onClick={() => setPlay(true)}
-          style={{ position: "absolute", inset: 0, border: 0, padding: 0, cursor: "pointer", background: "#000" }}>
+        <button type="button" onClick={() => setPlay(true)} disabled={loading}
+          style={{ position: "absolute", inset: 0, border: 0, padding: 0, cursor: loading ? "wait" : "pointer", background: "#000" }}>
           {poster && <img src={poster} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.82 }} />}
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff", textShadow: "0 1px 4px #000" }}>▶</span>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff", textShadow: "0 1px 4px #000" }}>{error ? "⚠" : loading ? "…" : "▶"}</span>
         </button>
       )}
       {children}
@@ -1128,37 +1177,14 @@ function loadFFmpeg() {
   return _ffmpegPromise;
 }
 
-// Scarica un video dal proxy a finestre di 2MB (il proxy limita ogni risposta
-// per non sforare il payload della serverless function) e ricompone i byte.
-async function fetchProxiedFull(url) {
-  const proxy = `/api/canva-upload?pv=2&src=${encodeURIComponent(url)}`;
-  const parts = [];
-  let offset = 0, total = Infinity;
-  while (offset < total) {
-    const r = await fetch(proxy, { headers: { Range: `bytes=${offset}-` } });
-    if (!r.ok && r.status !== 206 && r.status !== 200) throw new Error(`proxy ${r.status}`);
-    const cr = r.headers.get("content-range");
-    if (cr) { const t = Number(cr.split("/")[1]); if (Number.isFinite(t)) total = t; }
-    const buf = new Uint8Array(await r.arrayBuffer());
-    if (!buf.length) break;
-    parts.push(buf);
-    offset += buf.length;
-    if (!cr && r.status === 200) break; // risposta intera
-  }
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let p = 0; for (const b of parts) { out.set(b, p); p += b.length; }
-  return out;
-}
-
 // Ritaglia [start,end] dell'URL video → Blob mp4 (keyframe-snapped, veloce).
-// I byte del video passano dal nostro proxy (`/api/canva-upload?src=`) perché
-// Pexels blocca l'hotlink cross-origin dal browser.
+// I byte arrivano da `getVideoBlob` (scarica una volta via proxy, poi cache).
 async function trimVideoToBlob(url, start, end) {
   const { ff, fetchFile } = await loadFFmpeg();
   const dur = Math.max(0.3, end - start);
   let bytes;
   try {
-    bytes = await fetchProxiedFull(url);
+    ({ bytes } = await getVideoBlob(url));
   } catch {
     bytes = await fetchFile(url); // fallback: prova diretto (Pixabay ok)
   }
@@ -1189,6 +1215,7 @@ function VideoTrimmer({ url, start, end, targetDur, onChange }) {
   const [playing, setPlaying] = useState(false);
   const [cur, setCur] = useState(start);
   const dragRef = useRef(null);
+  const { loading: vLoading, blobUrl, error: vError } = useVideoBlobUrl(url);
 
   const onMeta = () => {
     const d = vidRef.current?.duration || 0;
@@ -1244,8 +1271,15 @@ function VideoTrimmer({ url, start, end, targetDur, onChange }) {
           target scena: {targetDur}s
         </span>
       </div>
-      <video ref={vidRef} src={proxiedVideo(url)} muted playsInline preload="metadata" onLoadedMetadata={onMeta}
-        style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, background: "#000", display: "block", marginBottom: 8 }} />
+      <div style={{ position: "relative", marginBottom: 8 }}>
+        <video ref={vidRef} src={blobUrl || undefined} muted playsInline preload="auto" onLoadedMetadata={onMeta}
+          style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, background: "#000", display: "block" }} />
+        {(vLoading || vError) && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: vError ? "#C4704F" : "#8B7355", fontFamily: "'JetBrains Mono', monospace" }}>
+            {vError ? "video non caricato" : "carico l'anteprima…"}
+          </div>
+        )}
+      </div>
       <div ref={trackRef} style={{ position: "relative", height: 26, background: "#1A1A1A", borderRadius: 6, touchAction: "none" }}>
         <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(start), width: `calc(${pct(end)} - ${pct(start)})`, background: "rgba(0,196,204,0.22)", borderLeft: "2px solid #00C4CC", borderRight: "2px solid #00C4CC" }} />
         <div style={{ position: "absolute", top: 0, bottom: 0, left: pct(cur), width: 2, background: "#fff" }} />
