@@ -141,7 +141,7 @@ const VIDEO_SOURCES = {
     parse: (d) => (d.videos || []).map(v => {
       const files = (v.video_files || []).filter(f => f.file_type === "video/mp4").sort((a, b) => (a.width || 0) - (b.width || 0));
       // rendition ~540-960px: nitida a sufficienza per uno sfondo carosello ma
-      // leggera per anteprima + ritaglio nel browser (ffmpeg.wasm / upload b64).
+      // leggera per anteprima + ritaglio nel browser (MediaRecorder / upload b64).
       const pick = files.find(f => (f.width || 0) >= 540 && (f.width || 0) <= 1000) || files.find(f => (f.width || 0) >= 540) || files[0];
       return { id: v.id, videoUrl: pick?.link, image: v.image, author: v.user?.name, link: v.url };
     }),
@@ -1154,49 +1154,69 @@ function HoverVideoThumb({ poster, videoUrl, style, children }) {
   );
 }
 
-// ─── ffmpeg.wasm (caricato da CDN solo quando serve il ritaglio) ───
-let _ffmpegPromise = null;
-function loadFFmpeg() {
-  if (_ffmpegPromise) return _ffmpegPromise;
-  _ffmpegPromise = new Promise((resolve, reject) => {
-    if (window.FFmpeg?.createFFmpeg) return finish();
-    const sc = document.createElement("script");
-    sc.src = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
-    sc.onload = finish;
-    sc.onerror = () => { _ffmpegPromise = null; reject(new Error("Impossibile caricare ffmpeg")); };
-    document.head.appendChild(sc);
-    async function finish() {
-      try {
-        const { createFFmpeg, fetchFile } = window.FFmpeg;
-        const ff = createFFmpeg({ log: false, corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js" });
-        if (!ff.isLoaded()) await ff.load();
-        resolve({ ff, fetchFile });
-      } catch (e) { _ffmpegPromise = null; reject(e); }
-    }
-  });
-  return _ffmpegPromise;
+// ─── Ritaglio video nel browser via MediaRecorder ───
+// Niente ffmpeg.wasm (richiede SharedArrayBuffer → header COOP/COEP su tutta
+// l'app). Riproduciamo la rendition (blob: URL locale) dal secondo `start` al
+// secondo `end` e ri-registriamo lo stream in MP4 (o WebM di ripiego).
+// In tempo reale e ri-codificato, ma zero download e output accettato da Canva.
+function pickRecorderMime() {
+  const cands = [
+    "video/mp4;codecs=avc1",
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+  ];
+  for (const c of cands) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return "";
 }
 
-// Ritaglia [start,end] dell'URL video → Blob mp4 (keyframe-snapped, veloce).
-// I byte arrivano da `getVideoBlob` (scarica una volta via proxy, poi cache).
-async function trimVideoToBlob(url, start, end) {
-  const { ff, fetchFile } = await loadFFmpeg();
-  const dur = Math.max(0.3, end - start);
-  let bytes;
+// [start,end] dell'URL video → { blob, ext }. `blobUrl` opzionale = anteprima
+// gia' scaricata (evita un secondo fetch).
+async function recordVideoSegment(url, start, end, blobUrl) {
+  const mime = pickRecorderMime();
+  if (!mime) throw new Error("MediaRecorder non supportato");
+  const src = blobUrl || (await getVideoBlob(url)).blobUrl;
+  const v = document.createElement("video");
+  v.src = src; v.muted = true; v.playsInline = true; v.preload = "auto";
+  v.style.cssText = "position:fixed;left:-9999px;width:320px;height:auto";
+  document.body.appendChild(v);
+  const clean = () => { try { v.pause(); } catch { /* */ } v.remove(); };
   try {
-    ({ bytes } = await getVideoBlob(url));
-  } catch {
-    bytes = await fetchFile(url); // fallback: prova diretto (Pixabay ok)
-  }
-  ff.FS("writeFile", "in.mp4", bytes);
-  try {
-    await ff.run("-ss", String(start.toFixed(2)), "-i", "in.mp4", "-t", String(dur.toFixed(2)),
-      "-c:v", "copy", "-an", "-movflags", "+faststart", "out.mp4");
-    const data = ff.FS("readFile", "out.mp4");
-    return new Blob([data.buffer], { type: "video/mp4" });
+    await new Promise((res, rej) => {
+      const to = setTimeout(() => rej(new Error("timeout metadati video")), 20000);
+      v.onloadeddata = () => { clearTimeout(to); res(); };
+      v.onerror = () => { clearTimeout(to); rej(new Error("video non caricato")); };
+    });
+    const from = Math.max(0, Math.min(start, (v.duration || start) - 0.1));
+    const to = Math.max(from + 0.3, Math.min(end, v.duration || end));
+    await new Promise((res) => {
+      const done = () => { v.removeEventListener("seeked", done); res(); };
+      v.addEventListener("seeked", done);
+      v.currentTime = from;
+    });
+    const stream = (v.captureStream || v.mozCaptureStream).call(v);
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4_000_000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((res) => { rec.onstop = res; });
+    rec.start(200);
+    await v.play();
+    await new Promise((res) => {
+      const guard = setTimeout(res, (to - from) * 1000 + 4000);
+      const tick = () => {
+        if (v.currentTime >= to || v.ended) { clearTimeout(guard); v.removeEventListener("timeupdate", tick); res(); }
+      };
+      v.addEventListener("timeupdate", tick);
+    });
+    if (rec.state !== "inactive") rec.stop();
+    await stopped;
+    const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+    return { blob: new Blob(chunks, { type: mime.split(";")[0] }), ext };
   } finally {
-    try { ff.FS("unlink", "in.mp4"); } catch { /* */ }
-    try { ff.FS("unlink", "out.mp4"); } catch { /* */ }
+    clean();
   }
 }
 
@@ -1432,16 +1452,18 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
     setState("loading"); setErrMsg(""); setProgress("Preparazione…");
     const warnings = [];
 
-    // 1) ritaglia ogni clip nel browser (ffmpeg.wasm) e caricala su Canva
+    // 1) ritaglia ogni clip nel browser (MediaRecorder) e caricala su Canva
     const prepared = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const base = { caption: r.caption, search_query: r.search_query, video_source: r.source };
       if (!r.video_url) { prepared.push(base); continue; }
+      const a = r.trimStart || 0;
+      const b = Math.max(a + 0.3, r.trimEnd || r.sceneDur);
       try {
-        setProgress(`Ritaglio video scena ${i + 1}/${rows.length}…`);
-        const blob = await trimVideoToBlob(r.video_url, r.trimStart || 0, r.trimEnd || r.sceneDur);
-        if (blob.size > 3 * 1024 * 1024) {
+        setProgress(`Registro il segmento della scena ${i + 1}/${rows.length}… (${(b - a).toFixed(1)}s)`);
+        const { blob, ext } = await recordVideoSegment(r.video_url, a, b);
+        if (blob.size > 3.8 * 1024 * 1024) {
           warnings.push(`Scena ${i + 1}: clip ritagliata troppo grande (${(blob.size / 1048576).toFixed(1)}MB), uso il video intero.`);
           prepared.push({ ...base, video_url: r.video_url });
           continue;
@@ -1449,7 +1471,7 @@ function VideoCarouselComposer({ scenes, canvaTemplates, projectId, lang, open, 
         setProgress(`Carico su Canva la scena ${i + 1}/${rows.length}…`);
         const up = await fetch("/api/canva-upload", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-scena-${i + 1}` }),
+          body: JSON.stringify({ b64: await blobToB64(blob), name: `vmscout-scena-${i + 1}.${ext}` }),
         }).then(x => x.json());
         if (up.assetId) prepared.push({ ...base, asset_id: up.assetId });
         else {

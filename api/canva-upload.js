@@ -114,7 +114,8 @@ export default async function handler(req, res) {
       try {
         bytes = Buffer.from(String(b64).replace(/^data:[^,]+,/, ""), "base64");
       } catch { return res.status(400).json({ error: true, message: "b64 non valido" }); }
-      const start = await startBytesUpload({ token, bytes, name: String(name).endsWith(".mp4") ? name : name + ".mp4" });
+      const safeName = /\.(mp4|webm|mov|m4v)$/i.test(String(name)) ? name : name + ".mp4";
+      const start = await startBytesUpload({ token, bytes, name: safeName });
       if (start.assetId) return res.status(200).json({ ok: true, assetId: start.assetId });
       if (start.error) return res.status(start.stop ? 401 : 500).json({ error: true, message: start.error });
       // poll del job binario
