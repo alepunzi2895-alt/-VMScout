@@ -1,3 +1,4 @@
+import { useT, useLang, weekdaysShort } from "./i18n/index.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { EngagementTrendChart, MiniBarChart, FORMAT_COLORS } from "./AnalyticsCharts.jsx";
 import { MARKETING_TOOLKIT_BRIEF } from "./marketingFrameworks";
@@ -441,7 +442,7 @@ function PostRow({ post, rank }) {
           {new Date(post.timestamp).getHours()}:00
         </div>
         <div style={{ fontSize: 12, color: OFF_WHITE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-          {post.caption ? post.caption.substring(0, 100) : <span style={{ color: WARM_GREY, fontStyle: "italic" }}>Nessuna caption</span>}
+          {post.caption ? post.caption.substring(0, 100) : <span style={{ color: WARM_GREY, fontStyle: "italic" }}>{t("an.noCaption")}</span>}
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -499,7 +500,7 @@ function AllPostsRow({ post }) {
             {" "}{String(new Date(post.timestamp).getHours()).padStart(2, "0")}:{String(new Date(post.timestamp).getMinutes()).padStart(2, "0")}
           </div>
           <div style={{ fontSize: 11.5, color: OFF_WHITE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {post.caption ? post.caption.slice(0, 90) : <span style={{ color: WARM_GREY, fontStyle: "italic" }}>Nessuna caption</span>}
+            {post.caption ? post.caption.slice(0, 90) : <span style={{ color: WARM_GREY, fontStyle: "italic" }}>{t("an.noCaption")}</span>}
           </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -1173,7 +1174,9 @@ function AdsAnalysis({ data }) {
   );
 }
 
-function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Claude" }) {
+function AnalysisPanel({ data, onSuggestBrief, title }) {
+  const t = useT();
+  title = title || t("an.strategicAnalysis");
   if (!data) return null;
   const { patterns, timing, content_pillars, visual_storytelling: vs, corrections, next_posts } = data;
 
@@ -1183,44 +1186,44 @@ function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Cl
 
       {data._visualUnavailable && (
         <div style={{ fontSize: 11, color: "#E4A050", background: "#E4A05012", border: "1px solid #E4A05030", borderRadius: 12, padding: "8px 12px", marginBottom: 20 }}>
-          ⚠ Analisi visiva non disponibile questa volta (il resto dell'analisi è comunque completo) — riprova più tardi.
+          {t("an.visualUnavailable")}
         </div>
       )}
 
       {patterns?.summary && (
-        <AnalysisSection title="📊 Pattern Vincenti">
+        <AnalysisSection title={t("an.sec.patterns")}>
           <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{patterns.summary}</p>
           <ChipList items={patterns.winning_formats} />
         </AnalysisSection>
       )}
 
       {timing?.summary && (
-        <AnalysisSection title="⏰ Timing Ottimale">
+        <AnalysisSection title={t("an.sec.timing")}>
           <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: 0, opacity: 0.9 }}>{timing.summary}</p>
           {timing.best_slot && <div style={{ marginTop: 8, display: "inline-block", fontSize: 12, fontWeight: 700, color: GOLD, background: `${GOLD}15`, padding: "4px 12px", borderRadius: 9 }}>{timing.best_slot}</div>}
         </AnalysisSection>
       )}
 
       {content_pillars?.length > 0 && (
-        <AnalysisSection title="🎯 Content Pillars">
+        <AnalysisSection title={t("an.sec.pillars")}>
           <ChipList items={content_pillars} color="#C9A96E" />
         </AnalysisSection>
       )}
 
       {vs && (vs.style_description || vs.storytelling_pattern) && (
-        <AnalysisSection title="🖼 Analisi Visiva & Storytelling">
+        <AnalysisSection title={t("an.sec.visual")}>
           {vs.style_description && <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: "0 0 8px", opacity: 0.9 }}>{vs.style_description}</p>}
           {vs.storytelling_pattern && <p style={{ fontSize: 13, color: OFF_WHITE, lineHeight: 1.7, margin: "0 0 8px", opacity: 0.9, fontStyle: "italic" }}>{vs.storytelling_pattern}</p>}
           <ChipList items={vs.recurring_elements} color="#8A8070" />
           {vs.strengths?.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#5ABA5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>✓ Punti di forza</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#5ABA5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{t("an.strengths")}</div>
               {vs.strengths.map((s, i) => <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.85, padding: "3px 0" }}>• {s}</div>)}
             </div>
           )}
           {vs.weaknesses?.length > 0 && (
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#E4A050", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>⚠ Da migliorare</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#E4A050", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{t("an.weaknesses")}</div>
               {vs.weaknesses.map((s, i) => <div key={i} style={{ fontSize: 12, color: OFF_WHITE, opacity: 0.85, padding: "3px 0" }}>• {s}</div>)}
             </div>
           )}
@@ -1228,13 +1231,13 @@ function AnalysisPanel({ data, onSuggestBrief, title = "Analisi Strategica · Cl
       )}
 
       {corrections?.length > 0 && (
-        <AnalysisSection title="⚠️ Cosa Correggere">
+        <AnalysisSection title={t("an.sec.corrections")}>
           {corrections.map((c, i) => <div key={i} style={{ fontSize: 12, color: "#E49E9E", opacity: 0.9, padding: "3px 0" }}>• {c}</div>)}
         </AnalysisSection>
       )}
 
       {next_posts?.length > 0 && onSuggestBrief && (
-        <AnalysisSection title="🚀 Prossimi Post — Idee Pronte">
+        <AnalysisSection title={t("an.sec.nextPosts")}>
           {next_posts.map((p, i) => <NextPostCard key={i} post={p} onSuggestBrief={onSuggestBrief} />)}
         </AnalysisSection>
       )}
@@ -1333,6 +1336,8 @@ function readJsonLS(key, fallback) {
 }
 
 export default function InstagramAnalytics({ brand, onSuggestBrief }) {
+  const t = useT();
+  const { lang } = useLang();
   const defaultHandle = brand?.instagramHandle || "";
   const [token,      setToken]      = useState(() => localStorage.getItem("ig_token") || "");
   const [accountId,  setAccountId]  = useState(() => localStorage.getItem("ig_account_id") || "");
@@ -1666,7 +1671,7 @@ REGOLE FERREE:
     [posts, mediaTypeCounts]);
 
   const weekdayData = useMemo(() => {
-    const WD_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+    const WD_LABELS = weekdaysShort(lang);
     const acc = WD_LABELS.map(label => ({ label, total: 0, count: 0 }));
     posts.forEach(p => {
       const idx = (new Date(p.timestamp).getDay() + 6) % 7; // 0=Lun..6=Dom
@@ -1722,7 +1727,7 @@ REGOLE FERREE:
               disabled={analyzing}
               style={{ ...goldBtn(analyzing), background: analyzing ? "#2a2a2a" : `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: analyzing ? WARM_GREY : "#fff", fontSize: 10 }}
             >
-              {analyzing ? "Analisi in corso…" : "Analizza con Claude"}
+              {analyzing ? t("an.analyzing") : t("an.analyzeClaude")}
             </button>
           )}
           <button
@@ -1747,7 +1752,7 @@ REGOLE FERREE:
       {!posts.length && !loading && (
         <div style={{ ...card, textAlign: "center", padding: "60px 24px" }}>
           <div style={{ fontSize: 36, marginBottom: 16 }}>📊</div>
-          <div style={{ fontSize: 15, color: OFF_WHITE, marginBottom: 8 }}>Nessun dato caricato</div>
+          <div style={{ fontSize: 15, color: OFF_WHITE, marginBottom: 8 }}>{t("an.noData")}</div>
           <div style={{ fontSize: 12, color: WARM_GREY }}>Clicca "Carica Post" per recuperare gli ultimi 30 post di @{username}</div>
         </div>
       )}
@@ -1756,10 +1761,10 @@ REGOLE FERREE:
       {posts.length > 0 && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
-            <StatCard label="Engagement Medio" value={`${avgEng}%`} sub="interazioni totali / reach" />
-            <StatCard label="Formato Vincente" value={mediaLabel(bestType)} sub="per engagement medio" />
-            <StatCard label="Ora Migliore" value={hourBest || "—"} sub="engagement più alto" />
-            <StatCard label="Reach Medio" value={avgReach ? avgReach.toLocaleString("it-IT") : "—"} sub="per post" />
+            <StatCard label={t("an.stat.engagement")} value={`${avgEng}%`} sub={t("an.stat.engagementSub")} />
+            <StatCard label={t("an.stat.format")} value={mediaLabel(bestType)} sub={t("an.stat.formatSub")} />
+            <StatCard label={t("an.stat.hour")} value={hourBest || "—"} sub={t("an.stat.hourSub")} />
+            <StatCard label={t("an.stat.reach")} value={avgReach ? fmtNum(avgReach, lang) : "—"} sub={t("an.stat.reachSub")} />
           </div>
 
           <AccountOverviewPanel account={account} />
@@ -1834,7 +1839,7 @@ REGOLE FERREE:
                 onClick={analyze}
                 style={{ ...goldBtn(false), background: `linear-gradient(135deg, ${IG_PINK}, #c0254e)`, color: "#fff" }}
               >
-                Analizza con Claude
+                {t("an.analyzeClaude")}
               </button>
             </div>
           )}
